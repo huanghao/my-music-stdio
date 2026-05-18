@@ -38,6 +38,8 @@ class Player:
         self._pause_event.set()  # not paused initially
         self._current_file: str | None = None
         self._started_at: float | None = None  # monotonic time of first note
+        self._paused_at: float | None = None
+        self._total_paused: float = 0.0
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
@@ -79,6 +81,17 @@ class Player:
                 self._current_file = None
                 self._started_at = None
 
+    def set_soundfont(self, path: str) -> None:
+        path = str(Path(path).expanduser())
+        if path == str(Path(self._soundfont).expanduser()):
+            return
+        self._soundfont = path
+        if self._fs is not None:
+            self.stop()
+            if self._sfid is not None:
+                self._fs.sfunload(self._sfid, reset_presets=True)
+            self._sfid = self._fs.sfload(path)
+
     def play(self, midi_file: str) -> None:
         self.stop()
         self._ensure_synth()
@@ -87,6 +100,8 @@ class Player:
         with self._lock:
             self._current_file = midi_file
             self._started_at = None
+            self._paused_at = None
+            self._total_paused = 0.0
         self._thread = threading.Thread(
             target=self._playback_loop, args=(midi_file,), daemon=True
         )
@@ -102,11 +117,19 @@ class Player:
         with self._lock:
             self._current_file = None
             self._started_at = None
+            self._paused_at = None
+            self._total_paused = 0.0
 
     def pause(self) -> None:
         self._pause_event.clear()
+        with self._lock:
+            self._paused_at = _time.monotonic()
 
     def resume(self) -> None:
+        with self._lock:
+            if self._paused_at is not None:
+                self._total_paused += _time.monotonic() - self._paused_at
+                self._paused_at = None
         self._pause_event.set()
 
     def status(self) -> dict:
@@ -117,7 +140,15 @@ class Player:
         with self._lock:
             f = self._current_file
             started = self._started_at
-        elapsed = round(_time.monotonic() - started, 3) if (playing and started) else None
+            total_paused = self._total_paused
+            paused_at = self._paused_at
+        if playing and started:
+            raw = _time.monotonic() - started - total_paused
+            if paused_at is not None:
+                raw -= _time.monotonic() - paused_at
+            elapsed = round(max(0.0, raw), 3)
+        else:
+            elapsed = None
         return {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed}
 
     def close(self) -> None:

@@ -21,6 +21,8 @@ REPEATS = 4
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
+ENHARMONIC = {"Db": "C#", "Eb": "D#", "Fb": "E", "Gb": "F#", "Ab": "G#", "Bb": "A#", "Cb": "B"}
+
 QUALITY_INTERVALS: dict[str, list[int]] = {
     "":     [0, 4, 7],        # major
     "m":    [0, 3, 7],        # minor
@@ -46,6 +48,7 @@ def parse_chord(symbol: str) -> tuple[int, str]:
     """Parse 'Am7' -> (root_midi, quality). Root is voiced around C4 (midi 60)."""
     for length in (2, 1):
         root_name = symbol[:length]
+        root_name = ENHARMONIC.get(root_name, root_name)
         if root_name in NOTE_NAMES:
             quality = symbol[length:]
             if quality in QUALITY_INTERVALS:

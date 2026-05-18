@@ -1,7 +1,6 @@
 import json
 import re
 import shutil
-import tempfile
 import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -139,7 +138,9 @@ def api_play(song: dict):
         out_dir.mkdir(parents=True, exist_ok=True)
         midi_path = str(out_dir / "accompaniment.mid")
     else:
-        midi_path = str(Path(tempfile.mktemp(suffix=".mid")))
+        tmp_dir = Path("/tmp/my-music-stdio")
+        tmp_dir.mkdir(exist_ok=True)
+        midi_path = str(tmp_dir / "jam_accompaniment.mid")
 
     original_repeats = gen.REPEATS
     gen.REPEATS = loops
@@ -153,7 +154,7 @@ def api_play(song: dict):
     sec_per_bar = 4 * 60 / bpm
     duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
 
-    _player._soundfont = soundfont
+    _player.set_soundfont(soundfont)
     _play_meta.clear()
     _play_meta.update({
         "duration_sec": duration_sec,

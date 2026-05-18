@@ -14,6 +14,7 @@ const state = {
   modal: { _onConfirm: null },
   playback: { polling: null },
   jamMode: 'chart',  // 'chart' | 'vamp'
+  prefs: { bars_per_row: 4 },
 };
 
 // ── Connection indicator ──
@@ -47,6 +48,7 @@ async function loadApp() {
   renderPrefsForm();
   applyStyle(document.getElementById('jam-style')?.value || 'pop', 'jam');
   const p = await api('/api/prefs');
+  state.prefs = p;
   document.getElementById('status-sf').textContent = (p.soundfont_path || '').split('/').pop();
 }
 
@@ -138,12 +140,13 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
   });
   wrap.appendChild(toolbar);
 
-  const BARS_PER_ROW = 4;
+  const BARS_PER_ROW = state.prefs.bars_per_row || 4;
   const totalRows = Math.ceil(Math.max(bars.length, 1) / BARS_PER_ROW);
 
   for (let rowStart = 0; rowStart < totalRows * BARS_PER_ROW; rowStart += BARS_PER_ROW) {
     const row = document.createElement('div');
     row.className = 'chart-row';
+    row.style.gridTemplateColumns = `32px repeat(${BARS_PER_ROW}, 1fr)`;
 
     const tsig = document.createElement('div');
     tsig.className = 'chart-timesig';
@@ -534,19 +537,22 @@ function clearBarHighlight() {
   document.querySelectorAll('.chart-bar.active').forEach(el => el.classList.remove('active'));
 }
 
-function highlightBar(barIndex, totalBars) {
+function highlightBar(barIndex) {
   clearBarHighlight();
-  // bars are rendered as .chart-bar elements in DOM order
-  const bars = document.querySelectorAll('.chart-bar');
+  const activePage = document.querySelector('.page.active');
+  if (!activePage) return;
+  const bars = activePage.querySelectorAll('.chart-bar');
   if (bars[barIndex]) bars[barIndex].classList.add('active');
 }
 
 function startPolling(prefix) {
   stopPolling();
   const panelPrefix = prefix === 'ed' ? 'editor' : prefix;
+  let failCount = 0;
   state.playback.polling = setInterval(async () => {
     try {
       const s = await api('/api/status');
+      failCount = 0;
       if (!s.playing) {
         stopPolling();
         setPlaybackUI(prefix, 'stopped');
@@ -571,9 +577,16 @@ function startPolling(prefix) {
       if (s.elapsed_sec != null && s.duration_sec && s.bars && s.loops) {
         const secPerBar = s.duration_sec / (s.bars * s.loops);
         const currentBar = Math.floor(s.elapsed_sec / secPerBar) % s.bars;
-        highlightBar(currentBar, s.bars);
+        highlightBar(currentBar);
       }
-    } catch(_) {}
+    } catch(_) {
+      failCount++;
+      if (failCount >= 5) {
+        stopPolling();
+        setPlaybackUI(prefix, 'stopped');
+        setStatus('Server unreachable');
+      }
+    }
   }, 250);
 }
 
@@ -871,10 +884,12 @@ async function savePrefs() {
     songs_dir: document.getElementById('pref-songs-dir').value.trim(),
   };
   await api('/api/prefs', 'PUT', updates);
+  state.prefs = { ...state.prefs, ...updates };
   const msg = document.getElementById('prefs-saved-msg');
   if (msg) { msg.style.display = ''; setTimeout(() => msg.style.display = 'none', 1500); }
   document.getElementById('status-sf').textContent = updates.soundfont_path.split('/').pop();
   setStatus('Preferences saved');
+  renderJamChart();
 }
 
 // ── Start ──

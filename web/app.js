@@ -410,7 +410,7 @@ function renderVampControls() {
         </div>
         <div class="field"><label>BPM</label>
           <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
-            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromLoops('vamp')">
+            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp')">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:52px"
@@ -470,7 +470,7 @@ function renderJamControls() {
           <select id="jam-key">${keyOptions(state.jam.key)}</select>
         </div>
         <div class="field"><label>BPM</label>
-          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromLoops('jam')">
+          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromDuration('jam')">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:52px"
@@ -790,7 +790,7 @@ function renderEditorControls() {
           <select id="ed-key">${keyOptions(s.key)}</select>
         </div>
         <div class="field"><label>BPM</label>
-          <input type="number" id="ed-bpm" value="${s.bpm}" min="40" max="240" oninput="updateEditorDuration()">
+          <input type="number" id="ed-bpm" value="${s.bpm}" min="40" max="240" oninput="syncFromDuration('ed')">
         </div>
         <div class="field"><label>Style</label>
           <select id="ed-style">

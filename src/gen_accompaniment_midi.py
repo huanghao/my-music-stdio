@@ -95,6 +95,62 @@ def _drum(t: int, note: int, vel: int, dur: int = PPQ // 4) -> list[tuple]:
     ]
 
 
+def _fill_snare_roll(bar_offset: int) -> list[tuple]:
+    """Snare 16th crescendo over last beat."""
+    events = []
+    for i in range(4):
+        t = bar_offset + PPQ * 3 + i * PPQ // 4
+        events += _drum(t, SNARE, 75 + i * 8, PPQ // 8)
+    return events
+
+
+def _fill_tom_cascade(bar_offset: int) -> list[tuple]:
+    """High tom → low tom descending over last 2 beats."""
+    events = []
+    pattern = [TOM_HI, TOM_HI, TOM_LO, TOM_LO, TOM_LO, SNARE, SNARE, CRASH]
+    for i, note in enumerate(pattern):
+        t = bar_offset + PPQ * 2 + i * PPQ // 4
+        vel = 80 + i * 4
+        dur = PPQ // 8 if note != CRASH else PPQ // 2
+        events += _drum(t, note, min(vel, 120), dur)
+    return events
+
+
+def _fill_snare_tom_mix(bar_offset: int) -> list[tuple]:
+    """Snare + toms mixed, last 2 beats."""
+    events = []
+    pattern = [(SNARE, 85), (TOM_HI, 80), (SNARE, 90), (TOM_LO, 78),
+               (SNARE, 88), (SNARE, 92), (TOM_LO, 85), (CRASH, 100)]
+    for i, (note, vel) in enumerate(pattern):
+        t = bar_offset + PPQ * 2 + i * PPQ // 4
+        dur = PPQ // 8 if note != CRASH else PPQ // 2
+        events += _drum(t, note, vel, dur)
+    return events
+
+
+def _fill_half(bar_offset: int) -> list[tuple]:
+    """Minimal fill: two snare hits on last beat."""
+    events = []
+    events += _drum(bar_offset + PPQ * 3 + PPQ // 2, SNARE, 88, PPQ // 8)
+    events += _drum(bar_offset + PPQ * 3 + PPQ * 3 // 4, SNARE, 100, PPQ // 8)
+    return events
+
+
+def _pick_fill(style: str, bar_offset: int) -> list[tuple]:
+    """Choose fill variant by style, with randomisation."""
+    r = random.random()
+    if style in ('rock', 'metal'):
+        return _fill_tom_cascade(bar_offset) if r < 0.6 else _fill_snare_roll(bar_offset)
+    if style in ('funk', 'rnb'):
+        return _fill_snare_tom_mix(bar_offset) if r < 0.6 else _fill_half(bar_offset)
+    if style in ('ballad',):
+        return _fill_half(bar_offset)
+    if style in ('shuffle', 'blues'):
+        return _fill_snare_tom_mix(bar_offset) if r < 0.4 else _fill_snare_roll(bar_offset)
+    # pop, bossa, default
+    return _fill_snare_roll(bar_offset) if r < 0.6 else _fill_half(bar_offset)
+
+
 def groove_pop(bar_offset: int, is_fill: bool) -> list[tuple]:
     events = []
     # hihat: every 8th note
@@ -106,11 +162,6 @@ def groove_pop(bar_offset: int, is_fill: bool) -> list[tuple]:
     for beat, note, vel in [(0, KICK, 100), (PPQ, SNARE, 90),
                              (PPQ*2, KICK, 95), (PPQ*3, SNARE, 88)]:
         events += _drum(bar_offset + beat, note, vel)
-    if is_fill:
-        # replace last beat hihat with snare roll
-        for e in range(4):
-            t = bar_offset + PPQ * 3 + e * PPQ // 4
-            events += _drum(t, SNARE, 80 + e * 5, PPQ // 8)
     return events
 
 
@@ -125,10 +176,6 @@ def groove_shuffle(bar_offset: int, is_fill: bool) -> list[tuple]:
     for beat, note, vel in [(0, KICK, 100), (PPQ, SNARE, 88),
                              (PPQ*2, KICK, 95), (PPQ*3, SNARE, 85)]:
         events += _drum(bar_offset + beat, note, vel)
-    if is_fill:
-        for e in range(4):
-            t = bar_offset + PPQ * 3 + e * PPQ // 4
-            events += _drum(t, TOM_HI if e < 2 else TOM_LO, 85)
     return events
 
 
@@ -142,8 +189,6 @@ def groove_ballad(bar_offset: int, is_fill: bool) -> list[tuple]:
     for beat, note, vel in [(0, KICK, 90), (PPQ, SNARE, 75),
                              (PPQ*2, KICK, 85), (PPQ*3, SNARE, 72)]:
         events += _drum(bar_offset + beat, note, vel)
-    if is_fill:
-        events += _drum(bar_offset + PPQ * 3 + PPQ // 2, SNARE, 80)
     return events
 
 
@@ -164,11 +209,6 @@ def groove_rock(bar_offset: int, is_fill: bool) -> list[tuple]:
         (PPQ * 3,     SNARE,  95),
     ]:
         events += _drum(bar_offset + t, note, vel)
-    if is_fill:
-        for e in range(4):
-            t = bar_offset + PPQ * 3 + e * PPQ // 4
-            events += _drum(t, TOM_HI if e < 2 else TOM_LO, 95 - e * 5)
-        events += _drum(bar_offset + TICKS_PER_BAR - PPQ // 8, CRASH, 100)
     return events
 
 
@@ -184,10 +224,6 @@ def groove_metal(bar_offset: int, is_fill: bool) -> list[tuple]:
         events += _drum(t, KICK, 110, PPQ // 8)
     for beat in [PPQ, PPQ * 3]:
         events += _drum(bar_offset + beat, SNARE, 100)
-    if is_fill:
-        for e in range(8):
-            t = bar_offset + PPQ * 2 + e * PPQ // 4
-            events += _drum(t, SNARE, 100, PPQ // 8)
     return events
 
 
@@ -207,10 +243,6 @@ def groove_rnb(bar_offset: int, is_fill: bool) -> list[tuple]:
     # ghost snare on 16th off-beats
     for s in [2, 6, 10, 14]:
         events += _drum(bar_offset + s * PPQ // 4, SNARE, 28, PPQ // 8)
-    if is_fill:
-        for e in range(4):
-            t = bar_offset + PPQ * 3 + e * PPQ // 4
-            events += _drum(t, SNARE, 75 + e * 5, PPQ // 8)
     return events
 
 
@@ -229,10 +261,6 @@ def groove_funk(bar_offset: int, is_fill: bool) -> list[tuple]:
         events += _drum(bar_offset + beat, SNARE, 95)
     for s in [3, 7, 11]:
         events += _drum(bar_offset + s * PPQ // 4, SNARE, 25, PPQ // 8)
-    if is_fill:
-        for e in range(6):
-            t = bar_offset + PPQ * 3 - PPQ // 4 + e * PPQ // 8
-            events += _drum(t, SNARE, 80, PPQ // 8)
     return events
 
 
@@ -248,8 +276,6 @@ def groove_bossa(bar_offset: int, is_fill: bool) -> list[tuple]:
     # hi-hat on beat 2 & 4
     for beat in [PPQ, PPQ * 3]:
         events += _drum(bar_offset + beat, HIHAT, 50)
-    if is_fill:
-        events += _drum(bar_offset + PPQ * 3 + PPQ // 2, RIM, 80)
     return events
 
 
@@ -292,21 +318,42 @@ def humanize(tick: int, velocity: int, tick_jitter: int = 8, vel_jitter: int = 8
 
 # --- event builders ---
 
-def piano_bar_events(chord: str, bar_offset: int) -> list[tuple[int, mido.Message]]:
-    """Comping pattern: beat 2, beat 3-and, giving a push-pull feel."""
-    events = []
+def piano_bar_events(chord: str, bar_offset: int, style: str = "pop") -> list[tuple[int, mido.Message]]:
     notes = chord_midi_notes(chord)
-    # Two hits per bar: beat 2 (strong) and beat 3-and (offbeat, softer)
-    hits = [
-        (PPQ,           82),   # beat 2
-        (PPQ * 2 + PPQ // 2, 68),   # beat 3-and
-    ]
-    dur = PPQ - 20  # staccato-ish, released before next hit
-    for beat_tick, base_vel in hits:
-        t, v = humanize(bar_offset + beat_tick, base_vel, tick_jitter=6, vel_jitter=8)
+    events = []
+
+    def hit(tick: int, vel: int, dur: int = PPQ - 20) -> None:
+        t, v = humanize(bar_offset + tick, vel, tick_jitter=6, vel_jitter=8)
         for n in notes:
             events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
             events.append((t + dur, mido.Message("note_off", channel=0, note=n, velocity=0)))
+
+    if style in ("funk", "rnb"):
+        # Staccato stabs on offbeats: beat 2-and, beat 4
+        hit(PPQ + PPQ // 2, 88, PPQ // 3)
+        hit(PPQ * 3,        75, PPQ // 3)
+    elif style in ("ballad",):
+        # Sparse: beat 1 long, beat 3 long
+        hit(0,       70, PPQ * 2)
+        hit(PPQ * 2, 65, PPQ * 2)
+    elif style in ("bossa",):
+        # Bossa syncopation: beat 1-and, beat 3, beat 4-and
+        hit(PPQ // 2,           75, PPQ // 2)
+        hit(PPQ * 2,            80, PPQ // 2)
+        hit(PPQ * 3 + PPQ // 2, 68, PPQ // 3)
+    elif style in ("rock", "metal"):
+        # Power chords on every beat, short
+        for beat in range(4):
+            hit(beat * PPQ, 85 if beat % 2 == 0 else 75, PPQ // 2)
+    elif style in ("shuffle", "blues"):
+        # Shuffle comping: beat 2, beat 4 (backbeat emphasis)
+        hit(PPQ,       85, PPQ - 20)
+        hit(PPQ * 3,   80, PPQ - 20)
+    else:
+        # pop default: beat 2 + beat 3-and
+        hit(PPQ,                 82)
+        hit(PPQ * 2 + PPQ // 2,  68)
+
     return events
 
 
@@ -354,8 +401,10 @@ def bass_bar_events(chord: str, bar_offset: int, next_chord: str | None = None) 
     return events
 
 
-def drum_bar_events(groove_fn, bar_offset: int, is_fill: bool) -> list[tuple[int, mido.Message]]:
-    raw = groove_fn(bar_offset, is_fill)
+def drum_bar_events(groove_fn, bar_offset: int, is_fill: bool, style: str = "pop") -> list[tuple[int, mido.Message]]:
+    raw = groove_fn(bar_offset, False)  # groove functions no longer handle fills
+    if is_fill:
+        raw = raw + _pick_fill(style, bar_offset)
     events = []
     for abs_tick, ch, note, vel in raw:
         if vel == 0:
@@ -382,9 +431,9 @@ def build_track(progression: list[str], bpm: int, style: str, fill_every: int = 
         is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
         next_chord = flat[global_bar + 1] if global_bar + 1 < total_bars else None
 
-        all_events += piano_bar_events(chord, bar_offset)
+        all_events += piano_bar_events(chord, bar_offset, style)
         all_events += bass_bar_events(chord, bar_offset, next_chord)
-        all_events += drum_bar_events(groove_fn, bar_offset, is_fill)
+        all_events += drum_bar_events(groove_fn, bar_offset, is_fill, style)
 
     all_events.sort(key=lambda e: e[0])
     prev_tick = 0

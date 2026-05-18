@@ -293,25 +293,64 @@ def humanize(tick: int, velocity: int, tick_jitter: int = 8, vel_jitter: int = 8
 # --- event builders ---
 
 def piano_bar_events(chord: str, bar_offset: int) -> list[tuple[int, mido.Message]]:
+    """Comping pattern: beat 2, beat 3-and, giving a push-pull feel."""
     events = []
     notes = chord_midi_notes(chord)
-    chord_on  = bar_offset
-    chord_off = bar_offset + PPQ * 3 + PPQ // 2
-    for n in notes:
-        t, v = humanize(chord_on, 78)
-        events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
-        events.append((chord_off, mido.Message("note_off", channel=0, note=n, velocity=0)))
+    # Two hits per bar: beat 2 (strong) and beat 3-and (offbeat, softer)
+    hits = [
+        (PPQ,           82),   # beat 2
+        (PPQ * 2 + PPQ // 2, 68),   # beat 3-and
+    ]
+    dur = PPQ - 20  # staccato-ish, released before next hit
+    for beat_tick, base_vel in hits:
+        t, v = humanize(bar_offset + beat_tick, base_vel, tick_jitter=6, vel_jitter=8)
+        for n in notes:
+            events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
+            events.append((t + dur, mido.Message("note_off", channel=0, note=n, velocity=0)))
     return events
 
 
-def bass_bar_events(chord: str, bar_offset: int) -> list[tuple[int, mido.Message]]:
+def bass_bar_events(chord: str, bar_offset: int, next_chord: str | None = None) -> list[tuple[int, mido.Message]]:
+    """Walking bass: root → third → fifth → approach note to next chord."""
     events = []
-    root = bass_root_midi(chord)
+    root, quality = parse_chord(chord)
+    intervals = QUALITY_INTERVALS[quality]
+    third = root + intervals[1]  # minor or major third
     fifth = root + 7
-    for beat_tick, note in [(0, root), (PPQ * 2, fifth)]:
-        t, v = humanize(bar_offset + beat_tick, 88)
+
+    # beat 4 approach: chromatic step toward next chord's root
+    if next_chord:
+        next_root, _ = parse_chord(next_chord)
+        # normalise to same octave region as root
+        while next_root > root + 7:
+            next_root -= 12
+        while next_root < root - 4:
+            next_root += 12
+        diff = next_root - root
+        # approach from semitone below or above
+        approach = next_root - 1 if diff >= 0 else next_root + 1
+    else:
+        approach = root  # no movement, stay on root
+
+    bass_root = bass_root_midi(chord)
+    # map voice-leading notes to bass octave range
+    def to_bass(midi_note: int) -> int:
+        b = (bass_root // 12) * 12 + (midi_note % 12)
+        if b > bass_root + 7:
+            b -= 12
+        return b
+
+    walk = [
+        (0,           bass_root,        95),   # beat 1: root (strong)
+        (PPQ,         to_bass(third),   78),   # beat 2: third
+        (PPQ * 2,     to_bass(fifth),   82),   # beat 3: fifth
+        (PPQ * 3,     to_bass(approach), 72),  # beat 4: approach
+    ]
+    dur = PPQ - 30
+    for beat_tick, note, base_vel in walk:
+        t, v = humanize(bar_offset + beat_tick, base_vel, tick_jitter=4, vel_jitter=7)
         events.append((t, mido.Message("note_on",  channel=1, note=note, velocity=v)))
-        events.append((t + PPQ - 20, mido.Message("note_off", channel=1, note=note, velocity=0)))
+        events.append((t + dur, mido.Message("note_off", channel=1, note=note, velocity=0)))
     return events
 
 
@@ -337,15 +376,15 @@ def build_track(progression: list[str], bpm: int, style: str, fill_every: int = 
 
     all_events: list[tuple[int, mido.Message]] = []
     total_bars = REPEATS * len(progression)
-    for repeat in range(REPEATS):
-        for bar_i, chord in enumerate(progression):
-            global_bar = repeat * len(progression) + bar_i
-            bar_offset = global_bar * TICKS_PER_BAR
-            is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
+    flat = progression * REPEATS  # all bars in order
+    for global_bar, chord in enumerate(flat):
+        bar_offset = global_bar * TICKS_PER_BAR
+        is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
+        next_chord = flat[global_bar + 1] if global_bar + 1 < total_bars else None
 
-            all_events += piano_bar_events(chord, bar_offset)
-            all_events += bass_bar_events(chord, bar_offset)
-            all_events += drum_bar_events(groove_fn, bar_offset, is_fill)
+        all_events += piano_bar_events(chord, bar_offset)
+        all_events += bass_bar_events(chord, bar_offset, next_chord)
+        all_events += drum_bar_events(groove_fn, bar_offset, is_fill)
 
     all_events.sort(key=lambda e: e[0])
     prev_tick = 0

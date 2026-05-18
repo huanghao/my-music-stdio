@@ -1,0 +1,176 @@
+import json
+import re
+import shutil
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+
+import mido
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+
+import src.prefs as prefs
+from src.styles import get_all_styles
+from src.player import Player
+import src.gen_accompaniment_midi as gen
+
+app = FastAPI()
+_player = Player()
+
+
+def _songs_dir() -> Path:
+    d = Path(prefs.load()["songs_dir"]).expanduser()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _song_path(song_id: str) -> Path:
+    return _songs_dir() / song_id
+
+
+def _slugify(title: str) -> str:
+    s = re.sub(r"[^\w一-鿿-]", "-", title.strip())
+    return re.sub(r"-+", "-", s).strip("-") or "song"
+
+
+def _read_song(song_id: str) -> dict:
+    p = _song_path(song_id) / "song.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Song not found")
+    return json.loads(p.read_text())
+
+
+def _write_song(song_id: str, data: dict) -> None:
+    d = _song_path(song_id)
+    d.mkdir(parents=True, exist_ok=True)
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    (d / "song.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ── API ──
+
+@app.get("/api/styles")
+def api_styles():
+    return get_all_styles()
+
+
+@app.get("/api/prefs")
+def api_get_prefs():
+    return prefs.load()
+
+
+@app.put("/api/prefs")
+def api_put_prefs(updates: dict):
+    return prefs.save(updates)
+
+
+@app.get("/api/songs")
+def api_list_songs():
+    songs = []
+    for d in _songs_dir().iterdir():
+        p = d / "song.json"
+        if p.exists():
+            data = json.loads(p.read_text())
+            data["id"] = d.name
+            data["generated"] = (d / "accompaniment.mid").exists()
+            songs.append(data)
+    songs.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+    return songs
+
+
+@app.get("/api/songs/{song_id}")
+def api_get_song(song_id: str):
+    data = _read_song(song_id)
+    data["id"] = song_id
+    data["generated"] = (_song_path(song_id) / "accompaniment.mid").exists()
+    return data
+
+
+@app.post("/api/songs")
+def api_create_song(song: dict):
+    song_id = _slugify(song.get("title", "song"))
+    base = song_id
+    i = 1
+    while _song_path(song_id).exists():
+        song_id = f"{base}-{i}"
+        i += 1
+    _write_song(song_id, song)
+    return {**song, "id": song_id, "generated": False}
+
+
+@app.put("/api/songs/{song_id}")
+def api_update_song(song_id: str, song: dict):
+    _read_song(song_id)  # 404 if not found
+    _write_song(song_id, song)
+    return {**song, "id": song_id}
+
+
+@app.delete("/api/songs/{song_id}")
+def api_delete_song(song_id: str):
+    p = _song_path(song_id)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Song not found")
+    shutil.rmtree(p)
+    return {"ok": True}
+
+
+@app.post("/api/play")
+def api_play(song: dict):
+    p = prefs.load()
+    soundfont = str(Path(p["soundfont_path"]).expanduser())
+
+    progression = []
+    for bar in song.get("bars", []):
+        for chord in bar.get("chords", []):
+            progression.append(chord["name"])
+
+    if not progression:
+        raise HTTPException(status_code=400, detail="No chords in song")
+
+    loops = song.get("loops", 4)
+    bpm = song.get("bpm", 120)
+    style = song.get("style", "pop")
+
+    song_id = song.get("id")
+    if song_id:
+        out_dir = _song_path(song_id)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        midi_path = str(out_dir / "accompaniment.mid")
+    else:
+        midi_path = str(Path(tempfile.mktemp(suffix=".mid")))
+
+    original_repeats = gen.REPEATS
+    gen.REPEATS = loops
+    mid = mido.MidiFile(type=0, ticks_per_beat=gen.PPQ)
+    mid.tracks.append(gen.build_track(progression, bpm, style))
+    mid.save(midi_path)
+    gen.REPEATS = original_repeats
+
+    _player._soundfont = soundfont
+    _player.play(midi_path)
+
+    if song_id:
+        try:
+            data = _read_song(song_id)
+            _write_song(song_id, data)
+        except HTTPException:
+            pass
+
+    return {"playing": True, "file": midi_path}
+
+
+@app.post("/api/stop")
+def api_stop():
+    _player.stop()
+    return {"playing": False}
+
+
+@app.get("/api/status")
+def api_status():
+    return _player.status()
+
+
+# Serve frontend static files
+_web_dir = Path(__file__).parent.parent / "web"
+if _web_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="static")

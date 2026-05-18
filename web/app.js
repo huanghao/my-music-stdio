@@ -12,6 +12,7 @@ const state = {
   jam: { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
   editor: { song: null, bars: [] },
   modal: { _onConfirm: null },
+  playback: { polling: null },  // polling interval id
 };
 
 // ── Init ──
@@ -60,10 +61,46 @@ function beatsForChords(chords) {
   return chords.map(c => ({ ...c, beats: c.beats || 1 }));
 }
 
-function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAddBar, onDeleteChord) {
+const CHORD_TOOLBAR = [
+  ['maj', 'C','D','E','F','G','A','B'],
+  ['min', 'Cm','Dm','Em','Fm','Gm','Am','Bm'],
+  ['dom7', 'C7','D7','E7','F7','G7','A7','B7'],
+  ['maj7', 'Cmaj7','Dmaj7','Fmaj7','Gmaj7','Amaj7'],
+  ['min7', 'Cm7','Dm7','Em7','Fm7','Gm7','Am7','Bm7'],
+  ['#/b', 'C#','Db','D#','Eb','F#','Gb','G#','Ab','A#','Bb'],
+  ['sus', 'Csus2','Csus4','Gsus2','Gsus4'],
+  ['dim/aug', 'Cdim','Ddim','Edim','Caug','Daug'],
+];
+
+function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAddBar, onDeleteChord, onRerender) {
   containerEl.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'chart-wrap';
+
+  // ── chord toolbar ──
+  const toolbar = document.createElement('div');
+  toolbar.className = 'chord-toolbar';
+  CHORD_TOOLBAR.forEach(([label, ...chords]) => {
+    const group = document.createElement('div');
+    group.className = 'chord-toolbar-group';
+    const lbl = document.createElement('span');
+    lbl.className = 'chord-toolbar-label';
+    lbl.textContent = label;
+    group.appendChild(lbl);
+    chords.forEach(c => {
+      const btn = document.createElement('button');
+      btn.className = 'chord-toolbar-btn';
+      btn.textContent = c;
+      btn.addEventListener('click', () => {
+        // insert into focused inline input if one is open
+        const active = containerEl.querySelector('.chord-inline-input');
+        if (active) { active.value = c; active.focus(); }
+      });
+      group.appendChild(btn);
+    });
+    toolbar.appendChild(group);
+  });
+  wrap.appendChild(toolbar);
 
   const BARS_PER_ROW = 4;
   const totalRows = Math.ceil(Math.max(bars.length, 1) / BARS_PER_ROW);
@@ -97,33 +134,68 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
       beatsEl.className = 'bar-beats';
 
       const chordsWithBeats = beatsForChords(bar.chords || []);
+
+      function makeInlineEdit(cell, barIdx, ci, isNew) {
+        const existing = cell.querySelector('.chord-name');
+        const currentVal = isNew ? '' : (existing?.textContent || '');
+        cell.classList.add('editing');
+        const input = document.createElement('input');
+        input.className = 'chord-inline-input';
+        input.value = currentVal;
+        input.autocomplete = 'off';
+        input.spellcheck = false;
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        input.focus();
+        input.select();
+        function commit() {
+          const val = input.value.trim();
+          if (val) {
+            if (isNew) bar.chords.push({ name: val, beats: null });
+            else bar.chords[ci].name = val;
+          } else if (!isNew) {
+            // empty → delete
+            bar.chords.splice(ci, 1);
+          }
+          onRerender();
+        }
+        input.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); commit(); }
+          if (e.key === 'Escape') { onRerender(); }
+        });
+        input.addEventListener('blur', commit);
+      }
+
       if (chordsWithBeats.length === 0) {
         const cell = document.createElement('div');
         cell.className = 'beat-cell empty';
         cell.innerHTML = '<span class="chord-name">+</span>';
-        cell.addEventListener('click', e => { e.stopPropagation(); onChordClick(barIdx, 0, true); });
+        cell.addEventListener('click', e => { e.stopPropagation(); makeInlineEdit(cell, barIdx, 0, true); });
         beatsEl.appendChild(cell);
       } else {
         chordsWithBeats.forEach((chord, ci) => {
-          // ＋ insert-before button between chords
           if (ci > 0) {
             const ins = document.createElement('div');
             ins.className = 'beat-insert';
             ins.innerHTML = '<span>+</span>';
             ins.title = 'Insert chord here';
-            ins.addEventListener('click', e => { e.stopPropagation(); onChordClick(barIdx, ci, true); });
+            ins.addEventListener('click', e => {
+              e.stopPropagation();
+              bar.chords.splice(ci, 0, { name: '', beats: null });
+              onRerender();
+              // after rerender, trigger edit on the new empty cell — handled via empty cell click
+            });
             beatsEl.appendChild(ins);
           }
           const cell = document.createElement('div');
           cell.className = 'beat-cell';
           cell.style.flex = chord.beats;
-          // chord name (click to edit) + × delete button
           cell.innerHTML = `
-            <span class="chord-name" title="Click to edit">${chord.name}</span>
+            <span class="chord-name">${chord.name}</span>
             <button class="chord-del" title="Delete">×</button>
           `;
           cell.querySelector('.chord-name').addEventListener('click', e => {
-            e.stopPropagation(); onChordClick(barIdx, ci, false);
+            e.stopPropagation(); makeInlineEdit(cell, barIdx, ci, false);
           });
           cell.querySelector('.chord-del').addEventListener('click', e => {
             e.stopPropagation();
@@ -132,13 +204,14 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
           cell.addEventListener('contextmenu', e => { e.preventDefault(); onChordCtx(e, barIdx, ci); });
           beatsEl.appendChild(cell);
         });
-        // ＋ append-after button at end of bar
         const appendBtn = document.createElement('div');
         appendBtn.className = 'beat-insert beat-append';
         appendBtn.innerHTML = '<span>+</span>';
         appendBtn.title = 'Add chord';
         appendBtn.addEventListener('click', e => {
-          e.stopPropagation(); onChordClick(barIdx, chordsWithBeats.length, true);
+          e.stopPropagation();
+          bar.chords.push({ name: '', beats: null });
+          onRerender();
         });
         beatsEl.appendChild(appendBtn);
       }
@@ -339,13 +412,13 @@ function updateJamDuration() {
 }
 
 function renderJamChart() {
-  const h = makeChordHandlers(() => state.jam.bars, () => { renderJamChart(); updateJamDuration(); });
+  const rerender = () => { renderJamChart(); updateJamDuration(); };
+  const h = makeChordHandlers(() => state.jam.bars, rerender);
   renderChart(document.getElementById('jam-chart'), state.jam.bars,
-    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord);
+    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
 }
 
 function setPlaybackUI(prefix, state_) {
-  // state_: 'stopped' | 'playing' | 'paused'
   const play    = document.getElementById(`${prefix}-play-btn`);
   const stop    = document.getElementById(`${prefix}-stop-btn`);
   const pause   = document.getElementById(`${prefix}-pause-btn`);
@@ -357,18 +430,67 @@ function setPlaybackUI(prefix, state_) {
   resume.style.display = state_ === 'paused'   ? '' : 'none';
 }
 
+function fmt(sec) {
+  const s = Math.floor(sec);
+  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+}
+
+function startPolling(dotId, labelId) {
+  stopPolling();
+  state.playback.polling = setInterval(async () => {
+    try {
+      const s = await api('/api/status');
+      if (!s.playing) {
+        // playback finished naturally
+        stopPolling();
+        const dot = document.getElementById(dotId);
+        const label = document.getElementById(labelId);
+        if (dot) dot.className = 'gen-dot ready';
+        if (label) label.textContent = 'Done';
+        // figure out which prefix is active and reset buttons
+        const prefix = dotId.startsWith('jam') ? 'jam' : 'ed';
+        setPlaybackUI(prefix, 'stopped');
+        setStatus('Ready');
+        return;
+      }
+      const dot = document.getElementById(dotId);
+      const label = document.getElementById(labelId);
+      if (!dot || !label) return;
+      if (s.paused) {
+        dot.className = 'gen-dot draft';
+        label.textContent = 'Paused';
+        return;
+      }
+      dot.className = 'gen-dot playing';
+      if (s.duration_sec) {
+        const pct = Math.min(100, Math.round(s.elapsed_sec / s.duration_sec * 100));
+        label.textContent = `Loop ${s.current_loop}/${s.loops}  ${fmt(s.elapsed_sec)} / ${fmt(s.duration_sec)}  (${pct}%)`;
+      }
+    } catch(_) {}
+  }, 500);
+}
+
+function stopPolling() {
+  if (state.playback.polling) {
+    clearInterval(state.playback.polling);
+    state.playback.polling = null;
+  }
+}
+
 async function jamPlay() {
   state.jam.bpm = parseInt(document.getElementById('jam-bpm').value) || 120;
-  state.jam.loops = parseInt(document.getElementById('jam-loops').value) || 1;
+  state.jam.loops = parseInt(document.getElementById('jam-loops').value) || 3;
   state.jam.style = document.getElementById('jam-style').value;
   state.jam.key = document.getElementById('jam-key').value;
   setPlaybackUI('jam', 'playing');
   document.getElementById('jam-dot').className = 'gen-dot playing';
-  document.getElementById('jam-label').textContent = 'Generating & playing…';
+  document.getElementById('jam-label').textContent = 'Generating…';
   setStatus('Playing');
   try {
     const r = await api('/api/play', 'POST', state.jam);
     document.getElementById('jam-path').textContent = r.file || '';
+    document.getElementById('jam-label').textContent = `Loop 1/${r.loops}  0:00 / ${fmt(r.duration_sec)}`;
+    startPolling('jam-dot', 'jam-label');
   } catch(e) {
     setStatus('Error: ' + e.message);
     jamStop();
@@ -378,24 +500,22 @@ async function jamPlay() {
 async function jamPause() {
   await api('/api/pause', 'POST');
   setPlaybackUI('jam', 'paused');
-  document.getElementById('jam-dot').className = 'gen-dot draft';
-  document.getElementById('jam-label').textContent = 'Paused';
   setStatus('Paused');
 }
 
 async function jamResume() {
   await api('/api/resume', 'POST');
   setPlaybackUI('jam', 'playing');
-  document.getElementById('jam-dot').className = 'gen-dot playing';
-  document.getElementById('jam-label').textContent = 'Playing…';
   setStatus('Playing');
 }
 
 async function jamStop() {
+  stopPolling();
   await api('/api/stop', 'POST');
   setPlaybackUI('jam', 'stopped');
   document.getElementById('jam-dot').className = 'gen-dot draft';
   document.getElementById('jam-label').textContent = 'Stopped';
+  document.getElementById('jam-path').textContent = '';
   setStatus('Ready');
 }
 
@@ -558,9 +678,10 @@ function renderEditorGenStatus() {
 }
 
 function renderEditorChart() {
-  const h = makeChordHandlers(() => state.editor.bars, () => { renderEditorChart(); updateEditorDuration(); });
+  const rerender = () => { renderEditorChart(); updateEditorDuration(); };
+  const h = makeChordHandlers(() => state.editor.bars, rerender);
   renderChart(document.getElementById('editor-chart'), state.editor.bars,
-    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord);
+    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
 }
 
 async function saveSong() {
@@ -584,32 +705,31 @@ async function editorPlay() {
   const s = state.editor.song;
   setPlaybackUI('ed', 'playing');
   document.getElementById('editor-dot').className = 'gen-dot playing';
-  document.getElementById('editor-label').textContent = 'Generating & playing…';
+  document.getElementById('editor-label').textContent = 'Generating…';
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...s, bars: state.editor.bars });
+    const r = await api('/api/play', 'POST', { ...s, bars: state.editor.bars });
     state.editor.song.generated = true;
-    renderEditorGenStatus();
+    document.getElementById('editor-label').textContent = `Loop 1/${r.loops}  0:00 / ${fmt(r.duration_sec)}`;
+    document.getElementById('editor-path').textContent = r.file || '';
+    startPolling('editor-dot', 'editor-label');
   } catch(e) { setStatus('Error: ' + e.message); editorStop(); }
 }
 
 async function editorPause() {
   await api('/api/pause', 'POST');
   setPlaybackUI('ed', 'paused');
-  document.getElementById('editor-dot').className = 'gen-dot draft';
-  document.getElementById('editor-label').textContent = 'Paused';
   setStatus('Paused');
 }
 
 async function editorResume() {
   await api('/api/resume', 'POST');
   setPlaybackUI('ed', 'playing');
-  document.getElementById('editor-dot').className = 'gen-dot playing';
-  document.getElementById('editor-label').textContent = 'Playing…';
   setStatus('Playing');
 }
 
 async function editorStop() {
+  stopPolling();
   await api('/api/stop', 'POST');
   setPlaybackUI('ed', 'stopped');
   renderEditorGenStatus();

@@ -2,6 +2,7 @@ import json
 import re
 import shutil
 import tempfile
+import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,6 +17,7 @@ import src.gen_accompaniment_midi as gen
 
 app = FastAPI()
 _player = Player()
+_play_meta: dict = {}  # stores duration_sec and loops for the current play session
 
 
 def _songs_dir() -> Path:
@@ -146,7 +148,20 @@ def api_play(song: dict):
     mid.save(midi_path)
     gen.REPEATS = original_repeats
 
+    # compute total duration
+    bars_per_loop = len(song.get("bars", []))
+    sec_per_bar = 4 * 60 / bpm
+    duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
+
     _player._soundfont = soundfont
+    _play_meta.clear()
+    _play_meta.update({
+        "duration_sec": duration_sec,
+        "loops": loops,
+        "bars": bars_per_loop,
+        "bpm": bpm,
+        "started_at": _time.monotonic(),
+    })
     _player.play(midi_path)
 
     if song_id:
@@ -156,7 +171,7 @@ def api_play(song: dict):
         except HTTPException:
             pass
 
-    return {"playing": True, "file": midi_path}
+    return {"playing": True, "file": midi_path, "duration_sec": duration_sec, "loops": loops}
 
 
 @app.post("/api/stop")
@@ -179,7 +194,19 @@ def api_resume():
 
 @app.get("/api/status")
 def api_status():
-    return _player.status()
+    s = _player.status()
+    if s["playing"] and _play_meta:
+        elapsed = _time.monotonic() - _play_meta["started_at"]
+        duration = _play_meta["duration_sec"]
+        s["elapsed_sec"] = round(elapsed, 2)
+        s["duration_sec"] = duration
+        s["loops"] = _play_meta["loops"]
+        s["bars"] = _play_meta["bars"]
+        s["bpm"] = _play_meta["bpm"]
+        # current loop (1-based)
+        sec_per_loop = duration / _play_meta["loops"] if _play_meta["loops"] else duration
+        s["current_loop"] = min(int(elapsed / sec_per_loop) + 1, _play_meta["loops"]) if sec_per_loop > 0 else 1
+    return s
 
 
 @app.get("/api/soundfonts")

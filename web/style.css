@@ -89,6 +89,24 @@ input[type="number"] { width: 64px; text-align: center; }
 .song-status.draft { background: #f5f0e0; color: #8a7030; }
 .song-card-actions { display: flex; gap: 6px; }
 
+/* Chord toolbar */
+.chord-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px 12px;
+  padding: 8px 4px 12px; border-bottom: 1px solid #d8d4c8;
+  margin-bottom: 8px; font-family: sans-serif;
+}
+.chord-toolbar-group { display: flex; align-items: center; gap: 3px; }
+.chord-toolbar-label {
+  font-size: 10px; color: #aaa; text-transform: uppercase;
+  letter-spacing: 0.5px; margin-right: 2px; white-space: nowrap;
+}
+.chord-toolbar-btn {
+  background: #eee; border: 1px solid #d8d4c8; color: #444;
+  border-radius: 3px; padding: 2px 6px; font-size: 12px;
+  cursor: pointer; font-family: Georgia, serif;
+}
+.chord-toolbar-btn:hover { background: #d8ead8; border-color: #b0c8b0; color: #2a2a2a; }
+
 .chart-wrap {
   background: #f5f5f0;
   border: 1px solid #d8d4c8;
@@ -138,6 +156,16 @@ input[type="number"] { width: 64px; text-align: center; }
 .chord-del:hover { color: #c04040; background: rgba(192,64,64,0.08); }
 .beat-cell { position: relative; }
 .beat-cell:hover .chord-del { display: block; }
+
+/* inline chord edit */
+.chord-inline-input {
+  width: 100%; max-width: 80px; text-align: center;
+  font-family: Georgia, serif; font-size: 17px; font-weight: bold;
+  border: none; border-bottom: 2px solid #7a9a7a;
+  background: transparent; color: #2a2a2a; outline: none;
+  padding: 2px 4px;
+}
+.beat-cell.editing { background: rgba(122,154,122,0.08); }
 
 /* + insert between chords */
 .beat-insert {

@@ -92,7 +92,7 @@ class Player:
                         self._pause_event.wait()
                         if self._stop_event.is_set():
                             break
-                        _time.sleep(min(chunk, deadline - _time.monotonic()))
+                        _time.sleep(max(0.0, min(chunk, deadline - _time.monotonic())))
                     if self._stop_event.is_set():
                         break
 

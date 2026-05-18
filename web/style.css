@@ -54,6 +54,16 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
 }
 input[type="number"] { width: 64px; text-align: center; }
 
+/* Jam mode tabs */
+.jam-mode-tabs { display: flex; gap: 2px; background: #f0efe8; border-radius: 6px; padding: 2px; }
+.jam-mode-tab {
+  background: none; border: none; cursor: pointer;
+  padding: 4px 12px; border-radius: 4px; font-size: 13px; color: #666;
+  transition: background 0.1s;
+}
+.jam-mode-tab:hover { background: #e8e4d8; }
+.jam-mode-tab.active { background: #fff; color: #2a2a2a; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
 /* Controls bar — two rows */
 .controls-bar {
   background: #fff; border: 1px solid #ddd; border-radius: 8px;

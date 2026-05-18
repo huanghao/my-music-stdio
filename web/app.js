@@ -12,7 +12,7 @@ const state = {
   jam: { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
   editor: { song: null, bars: [] },
   modal: { _onConfirm: null },
-  playback: { polling: null },  // polling interval id
+  playback: { polling: null },
 };
 
 // ── Init ──
@@ -369,8 +369,13 @@ function renderJamControls() {
           <input type="number" id="jam-bpm" value="120" min="40" max="240" oninput="updateJamDuration()">
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="jam-loops" value="3" min="1" max="20" oninput="updateJamDuration()">
-          <span class="duration-hint" id="jam-duration"></span>
+          <input type="number" id="jam-loops" value="3" min="1" max="99" style="width:52px"
+            oninput="syncFromLoops('jam')">
+        </div>
+        <div class="field"><label>Duration</label>
+          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" style="width:60px"
+            oninput="syncFromDuration('jam')">
+          <span class="duration-hint">min</span>
         </div>
       </div>
       <div class="controls-row">
@@ -402,14 +407,35 @@ function applyStyle(styleId, context) {
   }
 }
 
-function updateJamDuration() {
-  const bpm = parseInt(document.getElementById('jam-bpm')?.value) || 120;
-  const loops = parseInt(document.getElementById('jam-loops')?.value) || 1;
-  const bars = state.jam.bars.length;
-  const sec = Math.round(bars * loops * 4 * 60 / bpm);
-  const el = document.getElementById('jam-duration');
-  if (el) el.textContent = `≈ ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')} min`;
+// ── Loops / Duration shared helpers ──
+
+function secPerLoop(prefix) {
+  const bpm = parseInt(document.getElementById(prefix === 'jam' ? 'jam-bpm' : 'ed-bpm')?.value) || 120;
+  const bars = prefix === 'jam' ? state.jam.bars.length : state.editor.bars.length;
+  return bars * 4 * 60 / bpm;
 }
+
+function syncFromLoops(prefix) {
+  const loops = parseInt(document.getElementById(`${prefix}-loops`)?.value) || 1;
+  const sec = Math.round(loops * secPerLoop(prefix));
+  const durEl = document.getElementById(`${prefix}-dur-min`);
+  if (durEl) durEl.value = (sec / 60).toFixed(1);
+}
+
+function syncFromDuration(prefix) {
+  const min = parseFloat(document.getElementById(`${prefix}-dur-min`)?.value) || 1;
+  const spl = secPerLoop(prefix);
+  const loops = Math.max(1, Math.round((min * 60) / spl));
+  const loopsEl = document.getElementById(`${prefix}-loops`);
+  if (loopsEl) loopsEl.value = loops;
+}
+
+function getLoops(prefix) {
+  return parseInt(document.getElementById(`${prefix}-loops`)?.value) || 1;
+}
+
+function updateJamDuration() { syncFromLoops('jam'); }
+function updateEditorDuration() { syncFromLoops('ed'); }
 
 function renderJamChart() {
   const rerender = () => { renderJamChart(); updateJamDuration(); };
@@ -505,7 +531,7 @@ function stopPolling() {
 
 async function jamPlay() {
   state.jam.bpm = parseInt(document.getElementById('jam-bpm').value) || 120;
-  state.jam.loops = parseInt(document.getElementById('jam-loops').value) || 3;
+  state.jam.loops = getLoops('jam');
   state.jam.style = document.getElementById('jam-style').value;
   state.jam.key = document.getElementById('jam-key').value;
   setPlaybackUI('jam', 'playing');
@@ -654,8 +680,13 @@ function renderEditorControls() {
           </select>
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="ed-loops" value="${s.loops}" min="1" max="20" oninput="updateEditorDuration()">
-          <span class="duration-hint" id="ed-duration"></span>
+          <input type="number" id="ed-loops" value="${s.loops}" min="1" max="99" style="width:52px"
+            oninput="syncFromLoops('ed')">
+        </div>
+        <div class="field"><label>Duration</label>
+          <input type="number" id="ed-dur-min" value="${(s.loops * state.editor.bars.length * 4 * 60 / (s.bpm || 120) / 60).toFixed(1)}"
+            min="0.5" max="120" step="0.5" style="width:60px" oninput="syncFromDuration('ed')">
+          <span class="duration-hint">min</span>
         </div>
       </div>
       <div class="controls-row">
@@ -669,15 +700,6 @@ function renderEditorControls() {
     </div>
   `;
   updateEditorDuration();
-}
-
-function updateEditorDuration() {
-  const bpm = parseInt(document.getElementById('ed-bpm')?.value) || 120;
-  const loops = parseInt(document.getElementById('ed-loops')?.value) || 1;
-  const bars = state.editor.bars.length;
-  const sec = Math.round(bars * loops * 4 * 60 / bpm);
-  const el = document.getElementById('ed-duration');
-  if (el) el.textContent = `≈ ${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')} min`;
 }
 
 function renderEditorGenStatus() {
@@ -699,7 +721,7 @@ async function saveSong() {
     key: document.getElementById('ed-key').value,
     bpm: parseInt(document.getElementById('ed-bpm').value),
     style: document.getElementById('ed-style').value,
-    loops: parseInt(document.getElementById('ed-loops').value),
+    loops: getLoops('ed'),
     bars: state.editor.bars,
   };
   await api(`/api/songs/${s.id}`, 'PUT', updated);

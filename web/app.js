@@ -369,9 +369,9 @@ function renderJamControls() {
             ${state.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
           </select>
         </div>
-        <div class="field"><label>Key</label>
+        ${!isVamp ? `<div class="field"><label>Key</label>
           <select id="jam-key">${keyOptions(state.jam.key)}</select>
-        </div>
+        </div>` : ''}
         <div class="field"><label>BPM</label>
           <input type="number" id="jam-bpm" value="120" min="40" max="240" oninput="syncFromLoops('jam')">
         </div>

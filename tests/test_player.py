@@ -30,7 +30,11 @@ def _make_mid(path, duration_ticks=480):
 
 
 def test_initial_state_is_stopped(player):
-    assert player.status() == {"playing": False, "paused": False, "file": None}
+    s = player.status()
+    assert s["playing"] is False
+    assert s["paused"] is False
+    assert s["file"] is None
+    assert s["elapsed_sec"] is None
 
 
 def test_play_sets_playing_state(player, tmp_path):
@@ -48,7 +52,10 @@ def test_stop_clears_state(player, tmp_path):
     player.play(f)
     time.sleep(0.05)
     player.stop()
-    assert player.status() == {"playing": False, "paused": False, "file": None}
+    s = player.status()
+    assert s["playing"] is False
+    assert s["file"] is None
+    assert s["elapsed_sec"] is None
 
 
 def test_pause_and_resume(player, tmp_path):

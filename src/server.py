@@ -160,7 +160,6 @@ def api_play(song: dict):
         "loops": loops,
         "bars": bars_per_loop,
         "bpm": bpm,
-        "started_at": _time.monotonic(),
     })
     _player.play(midi_path)
 
@@ -196,16 +195,17 @@ def api_resume():
 def api_status():
     s = _player.status()
     if s["playing"] and _play_meta:
-        elapsed = _time.monotonic() - _play_meta["started_at"]
+        elapsed = s.get("elapsed_sec")  # from first note, set by player
         duration = _play_meta["duration_sec"]
-        s["elapsed_sec"] = round(elapsed, 2)
         s["duration_sec"] = duration
         s["loops"] = _play_meta["loops"]
         s["bars"] = _play_meta["bars"]
         s["bpm"] = _play_meta["bpm"]
-        # current loop (1-based)
-        sec_per_loop = duration / _play_meta["loops"] if _play_meta["loops"] else duration
-        s["current_loop"] = min(int(elapsed / sec_per_loop) + 1, _play_meta["loops"]) if sec_per_loop > 0 else 1
+        if elapsed is not None:
+            sec_per_loop = duration / _play_meta["loops"] if _play_meta["loops"] else duration
+            s["current_loop"] = min(int(elapsed / sec_per_loop) + 1, _play_meta["loops"]) if sec_per_loop > 0 else 1
+        else:
+            s["current_loop"] = 1
     return s
 
 

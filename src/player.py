@@ -1,5 +1,6 @@
 import ctypes
 import threading
+import time as _time
 from pathlib import Path
 
 import mido
@@ -36,6 +37,7 @@ class Player:
         self._pause_event = threading.Event()
         self._pause_event.set()  # not paused initially
         self._current_file: str | None = None
+        self._started_at: float | None = None  # monotonic time of first note
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
@@ -52,12 +54,17 @@ class Player:
 
     def _playback_loop(self, midi_file: str) -> None:
         mid = mido.MidiFile(midi_file)
+        first_note = True
         for msg in mid.play():
             self._pause_event.wait()
             if self._stop_event.is_set():
                 break
             if msg.is_meta:
                 continue
+            if first_note:
+                with self._lock:
+                    self._started_at = _time.monotonic()
+                first_note = False
             if msg.type == "note_on":
                 self._fs.noteon(msg.channel, msg.note, msg.velocity)
             elif msg.type == "note_off":
@@ -70,6 +77,7 @@ class Player:
         with self._lock:
             if self._current_file == midi_file:
                 self._current_file = None
+                self._started_at = None
 
     def play(self, midi_file: str) -> None:
         self.stop()
@@ -78,6 +86,7 @@ class Player:
         self._pause_event.set()
         with self._lock:
             self._current_file = midi_file
+            self._started_at = None
         self._thread = threading.Thread(
             target=self._playback_loop, args=(midi_file,), daemon=True
         )
@@ -92,6 +101,7 @@ class Player:
         self._all_notes_off()
         with self._lock:
             self._current_file = None
+            self._started_at = None
 
     def pause(self) -> None:
         self._pause_event.clear()
@@ -106,7 +116,9 @@ class Player:
         paused = playing and not self._pause_event.is_set()
         with self._lock:
             f = self._current_file
-        return {"playing": playing, "paused": paused, "file": f}
+            started = self._started_at
+        elapsed = round(_time.monotonic() - started, 3) if (playing and started) else None
+        return {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed}
 
     def close(self) -> None:
         self.stop()

@@ -441,7 +441,7 @@ async function vampPlay() {
   const payload = {
     bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
     bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
-    fill_every: 12,
+    fill_every: 8,
   };
   setPlaybackUI('vamp', 'playing');
   setStatus('Playing');

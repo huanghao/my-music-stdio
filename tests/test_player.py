@@ -1,10 +1,12 @@
 import time
 from unittest.mock import MagicMock, patch
+
+import mido
 import pytest
 
 
 @pytest.fixture
-def player(tmp_path):
+def player():
     mock_fs = MagicMock()
     mock_fs.sfload.return_value = 1
     with patch("fluidsynth.Synth", return_value=mock_fs):
@@ -17,59 +19,41 @@ def player(tmp_path):
         p.close()
 
 
+def _make_mid(path, duration_ticks=480):
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    t = mido.MidiTrack()
+    t.append(mido.Message("note_on",  channel=0, note=60, velocity=80, time=0))
+    t.append(mido.Message("note_off", channel=0, note=60, velocity=0,  time=duration_ticks))
+    mid.tracks.append(t)
+    mid.save(str(path))
+    return str(path)
+
+
 def test_initial_state_is_stopped(player):
-    s = player.status()
-    assert s["playing"] is False
-    assert s["paused"] is False
-    assert s["file"] is None
+    assert player.status() == {"playing": False, "paused": False, "file": None}
 
 
 def test_play_sets_playing_state(player, tmp_path):
-    midi_file = tmp_path / "test.mid"
-    import mido
-    mid = mido.MidiFile(type=0, ticks_per_beat=480)
-    track = mido.MidiTrack()
-    track.append(mido.Message("note_on", channel=0, note=60, velocity=80, time=0))
-    track.append(mido.Message("note_off", channel=0, note=60, velocity=0, time=480))
-    mid.tracks.append(track)
-    mid.save(str(midi_file))
-
-    player.play(str(midi_file))
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(f)
     time.sleep(0.05)
-    assert player.status()["playing"] is True
-    assert player.status()["file"] == str(midi_file)
-    player.stop()
+    s = player.status()
+    assert s["playing"] is True
+    assert s["paused"] is False
+    assert s["file"] == f
 
 
 def test_stop_clears_state(player, tmp_path):
-    midi_file = tmp_path / "test.mid"
-    import mido
-    mid = mido.MidiFile(type=0, ticks_per_beat=480)
-    track = mido.MidiTrack()
-    track.append(mido.Message("note_on", channel=0, note=60, velocity=80, time=0))
-    track.append(mido.Message("note_off", channel=0, note=60, velocity=0, time=9600))
-    mid.tracks.append(track)
-    mid.save(str(midi_file))
-
-    player.play(str(midi_file))
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(f)
     time.sleep(0.05)
     player.stop()
-    s = player.status()
-    assert s["playing"] is False
-    assert s["file"] is None
+    assert player.status() == {"playing": False, "paused": False, "file": None}
 
 
 def test_pause_and_resume(player, tmp_path):
-    midi_file = tmp_path / "long.mid"
-    import mido
-    mid = mido.MidiFile(type=0, ticks_per_beat=480)
-    track = mido.MidiTrack()
-    track.append(mido.Message("note_on", channel=0, note=60, velocity=80, time=0))
-    track.append(mido.Message("note_off", channel=0, note=60, velocity=0, time=96000))
-    mid.tracks.append(track)
-    mid.save(str(midi_file))
-
-    player.play(str(midi_file))
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(f)
     time.sleep(0.05)
     player.pause()
     assert player.status()["paused"] is True
@@ -79,23 +63,11 @@ def test_pause_and_resume(player, tmp_path):
 
 
 def test_play_replaces_previous(player, tmp_path):
-    def make_mid(path):
-        import mido
-        mid = mido.MidiFile(type=0, ticks_per_beat=480)
-        track = mido.MidiTrack()
-        track.append(mido.Message("note_on", channel=0, note=60, velocity=80, time=0))
-        track.append(mido.Message("note_off", channel=0, note=60, velocity=0, time=96000))
-        mid.tracks.append(track)
-        mid.save(str(path))
-
-    f1 = tmp_path / "a.mid"
-    f2 = tmp_path / "b.mid"
-    make_mid(f1)
-    make_mid(f2)
-
-    player.play(str(f1))
+    f1 = _make_mid(tmp_path / "a.mid", duration_ticks=96000)
+    f2 = _make_mid(tmp_path / "b.mid", duration_ticks=96000)
+    player.play(f1)
     time.sleep(0.05)
-    player.play(str(f2))
+    player.play(f2)
     time.sleep(0.05)
-    assert player.status()["file"] == str(f2)
+    assert player.status()["file"] == f2
     player.stop()

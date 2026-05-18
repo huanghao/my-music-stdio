@@ -48,6 +48,15 @@ class Player:
             self._fs.start(driver="coreaudio")
             sf = str(Path(self._soundfont).expanduser())
             self._sfid = self._fs.sfload(sf)
+            self._init_gm_channels()
+
+    def _init_gm_channels(self) -> None:
+        # GM standard: channel 9 is drums (bank 128), others default to bank 0
+        for ch in range(16):
+            if ch == 9:
+                self._fs.program_select(ch, self._sfid, 128, 0)
+            else:
+                self._fs.program_select(ch, self._sfid, 0, 0)
 
     def _all_notes_off(self) -> None:
         if self._fs:
@@ -72,7 +81,8 @@ class Player:
             elif msg.type == "note_off":
                 self._fs.noteoff(msg.channel, msg.note)
             elif msg.type == "program_change":
-                self._fs.program_change(msg.channel, msg.program)
+                if msg.channel != 9:  # never override drum channel
+                    self._fs.program_change(msg.channel, msg.program)
             elif msg.type == "control_change":
                 self._fs.cc(msg.channel, msg.control, msg.value)
         self._all_notes_off()
@@ -91,6 +101,7 @@ class Player:
             if self._sfid is not None:
                 self._fs.sfunload(self._sfid, reset_presets=True)
             self._sfid = self._fs.sfload(path)
+            self._init_gm_channels()
 
     def play(self, midi_file: str) -> None:
         self.stop()

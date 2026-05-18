@@ -17,13 +17,49 @@
 
 ## 2. 各风格规格
 
-以下节拍位置以 16 分音符为单位，一小节共 16 格（1-16），"●" 表示击打：
+以下节拍位置以 16 分音符为单位，一小节共 16 格（1-16），用点阵表示击打（●）和静音（·），力度用大小写区分（●=正常，○=轻触 ghost note，◉=重击 accent）：
 
 ```
-位置:  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
-       |        |        |        |        |
-       1拍      2拍      3拍      4拍
+位置:  1  2  3  4 | 5  6  7  8 | 9 10 11 12 |13 14 15 16
+       ↑           ↑            ↑            ↑
+       beat 1      beat 2       beat 3       beat 4
 ```
+
+> 另一种常见写法是 MIDI piano roll 格网，但对于 groove 文档，上述 ASCII 点阵最直观。Band-in-a-Box 和 iReal Pro 均使用类似的 "x" / "." 记谱法。
+
+**"x / ." 写法示例（与本文 ● / · 等价）：**
+
+鼓谱常见用 `x` 表示敲击、`.` 表示静音，hihat 有时用小写 `x` 区分音色（闭合=`x`，开合=`o`）：
+
+```
+         1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
+Kick:    x  .  .  .  .  .  .  .  x  .  .  .  .  .  .  .
+Snare:   .  .  .  .  x  .  .  .  .  .  .  .  x  .  .  .
+HiHat:   x  .  x  .  x  .  x  .  x  .  x  .  x  .  x  .
+```
+
+**"动次打次"与鼓点的对应关系：**
+
+"动次打次"是民间对 Pop/Rock 基础律动的口语化描述，对应关系如下：
+
+| 口语音节 | 听感 | 对应乐器 | 16 分格位 |
+|---------|------|---------|----------|
+| **动** | 低沉 "咚" | Kick（底鼓） | 格 1（beat 1） |
+| **次** | 轻 "哒" | HiHat（踩镲） | 格 3（beat 1 后半） |
+| **打** | 响亮 "啪" | Snare（军鼓） | 格 5（beat 2） |
+| **次** | 轻 "哒" | HiHat | 格 7（beat 2 后半） |
+
+一小节完整展开（8 分音符 hihat 版）：
+
+```
+口语:   动    次    打    次    动    次    打    次
+格位:   1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16
+Kick:   x  .  .  .  .  .  .  .  x  .  .  .  .  .  .  .
+Snare:  .  .  .  .  x  .  .  .  .  .  .  .  x  .  .  .
+HiHat:  x  .  x  .  x  .  x  .  x  .  x  .  x  .  x  .
+```
+
+> "次大次大"（funk 版）：hihat 改为 16 分密集，kick 出现在切分位置，律动感更强。
 
 ---
 
@@ -204,20 +240,55 @@ def generate_bar(bar_index, style):
             generate_groove(beat, style)
 ```
 
-**Fill 实现要点：**
-- 替换最后半拍（或最后 1-2 拍）的 hihat，改为 snare/tom roll
-- Fill 力度通常从弱到强（crescendo）
-- 简单 fill：snare 在最后 4 个 16 分音符连击
-- 进阶 fill：tom 从高到低依次下行（high tom → mid tom → floor tom）
+**Fill 通用规则：**
+- HiHat 在 fill 期间通常停止（或只保留 crash 收尾）
+- Fill 力度通常从弱到强（crescendo），最后一击最重
+- Fill 长度：短 fill = 最后 1 拍（4 个 16 分音符）；长 fill = 最后 2 拍（8 个）
+- Fill 结尾通常配一下 crash cymbal（第 1 拍 crash = 进入新段落的标志）
 
-**示例：简单 snare fill（最后 2 拍）**
-```
-正常 groove 最后 2 拍：
-HiHat: ●  .  ●  .  ●  .  ●  .
+**Fill 变体分类：**
 
-替换为 fill：
-Snare: ●  ●  ●  ●  ●  ●  ●  ●  （16分音符连击，力度渐强）
+| 类型 | 乐器 | 规律 | 适用风格 |
+|------|------|------|----------|
+| Snare roll | Snare 连击 | 均匀 16 分，力度渐强 | Pop、Rock、R&B |
+| Tom cascade | High tom → Mid tom → Floor tom | 每 2 格换一个 tom，向下走 | Rock、Metal |
+| Snare + Tom 混合 | Snare 穿插 Tom | 非规律排列，模仿真实鼓手 | Funk、R&B |
+| Ghost note fill | Snare（轻） + accent（重） | 弱强交替，节奏感强 | Funk、R&B |
+| 反向 tom（ascending） | Floor tom → Mid tom → High tom | 向上走，制造"起飞感" | Metal、Rock |
+| Kick + Snare 交替 | Kick 和 Snare 轮流 | 8 分或 16 分交替 | Funk、Blues |
+| Half-time fill | 只占 2 个 16 分音符 | 极简，只在最后半拍换一下 | Ballad、Pop |
+
+**示例：各类型 fill（最后 2 拍 = 8 个 16 分音符格）**
+
 ```
+Snare roll（均匀连击）：
+Snare: ○  ○  ●  ○  ●  ●  ◉  ●   力度 pp→ff 渐强
+
+Tom cascade（高→低）：
+HiTom: ●  ●  .  .  .  .  .  .
+MidTom:.  .  ●  ●  .  .  .  .
+FlrTom:.  .  .  .  ●  ●  .  .
+Snare: .  .  .  .  .  .  ●  ◉   最后收尾
+
+Ghost note fill（Funk 风格）：
+Snare: ○  .  ○  ●  ○  .  ●  ◉   轻触穿插重拍，节奏感强
+
+Half-time fill（Ballad）：
+HiHat: ●  .  ●  .  ●  .  .  .
+Snare: .  .  .  .  .  .  ●  ◉   最后半拍一击即可
+```
+
+**风格与 fill 偏好的对应：**
+
+| 风格 | 首选 fill 类型 | 长度 |
+|------|--------------|------|
+| Pop | Snare roll | 1-2 拍 |
+| Ballad | Half-time / Snare roll | 1 拍 |
+| Rock | Tom cascade | 2 拍 |
+| Metal | Tom cascade（快速）/ Ascending tom | 2 拍 |
+| Funk | Ghost note fill | 1-2 拍 |
+| R&B | Snare + Tom 混合 | 1-2 拍 |
+| Blues/Shuffle | Kick + Snare 交替 | 1 拍 |
 
 ---
 
@@ -260,7 +331,155 @@ def extract_drum_pattern(midi_file, bars=1):
 
 ---
 
-## 5. 扩展计划
+## 5. 各风格推荐和弦进行
+
+风格和和弦进行是两个独立维度，但每种风格有约定俗成的"配套和弦"。以下是各风格的典型和弦进行，可作为默认预设。
+
+### 说明
+
+- 和弦进行用相对音级表示（1=I，6=VI，4=IV，5=V），方便移调
+- "调式"指该风格常用的音阶背景
+- 每种风格列出 1-2 个最常见的进行，够覆盖大部分练习场景
+
+---
+
+### Pop
+
+**调式：** 大调（Ionian）
+
+| 进行名 | 和弦（C 大调） | 特点 |
+|--------|---------------|------|
+| 1645   | C - Am - F - G | 最常见，几乎无处不在 |
+| 1564   | C - G - Am - F | 同一组和弦，不同顺序 |
+| 15634  | C - G - Am - Em - F - G | 6 和弦版本，更丰富 |
+
+---
+
+### Ballad
+
+**调式：** 大调或自然小调
+
+| 进行名 | 和弦（C 大调） | 特点 |
+|--------|---------------|------|
+| 1645   | Cmaj7 - Am7 - Fmaj7 - G7 | 加 maj7/m7 让声音更柔和 |
+| 6451   | Am - F - C - G | 小调感，常见于抒情慢歌 |
+
+---
+
+### Blues（12小节）
+
+**调式：** 蓝调音阶（Blues Scale），全用 dominant 7 和弦
+
+| 进行名 | 和弦（A 调） | 特点 |
+|--------|-------------|------|
+| 12-bar blues | A7 A7 A7 A7 / D7 D7 A7 A7 / E7 D7 A7 E7 | 标准 12 小节蓝调，I IV V 三个和弦 |
+| Quick change | A7 D7 A7 A7 / D7 D7 A7 A7 / E7 D7 A7 E7 | 第 2 小节提前到 IV，更常见于现代蓝调 |
+
+---
+
+### Shuffle
+
+**调式：** 大调或混合利底亚（Mixolydian）
+
+与 Blues 类似，常用 dominant 7，但也可以用普通大三和弦：
+
+| 进行名 | 和弦（G 调） | 特点 |
+|--------|-------------|------|
+| 1451   | G7 - C7 - G7 - D7 | 标准 shuffle 进行 |
+| 1645   | G - Em - C - D | 较轻盈的 shuffle 感 |
+
+---
+
+### Bossa Nova
+
+**调式：** 大调，大量爵士和声色彩
+
+| 进行名 | 和弦（C 调） | 特点 |
+|--------|-------------|------|
+| II-V-I | Dm7 - G7 - Cmaj7 | 爵士最核心进行，Bossa 里极常见 |
+| I-VI-II-V | Cmaj7 - Am7 - Dm7 - G7 | 标准 turnaround，循环性强 |
+| 桑巴进行 | Cmaj7 - Cm7 - F7 - Bbmaj7 | 含平行小调借用，有层次感 |
+
+---
+
+### R&B / Soul
+
+**调式：** 大调、多利亚小调（Dorian）
+
+| 进行名 | 和弦（C 调） | 特点 |
+|--------|-------------|------|
+| I-IV   | Cm7 - Fm7（循环） | 极简，强调律动而非和声变化 |
+| 1645   | C - Am7 - F - G7 | 加 7 音，更柔和 |
+| Dorian | Dm7 - G7（循环） | D Dorian，Soul 常见 |
+
+---
+
+### Funk
+
+**调式：** 多利亚小调（Dorian）、混合利底亚（Mixolydian）
+
+Funk 的和弦进行通常极简，节奏感 > 和声变化：
+
+| 进行名 | 和弦 | 特点 |
+|--------|------|------|
+| I7 vamp | E7（循环） | 单和弦，律动完全靠节奏 |
+| I-IV   | Am7 - D7（循环） | 两和弦循环，A Dorian |
+| 1625   | Cm7 - F7 - Bbmaj7 - Eb7 | 稍复杂，带爵士色彩的 funk |
+
+---
+
+### Rock
+
+**调式：** 大调、自然小调、五声音阶
+
+| 进行名 | 和弦（E 调） | 特点 |
+|--------|-------------|------|
+| I-IV-V | E - A - B（循环） | 最基础的 rock 进行 |
+| I-bVII-IV | E - D - A | 借用降七级，经典 rock 感 |
+| I-VI-IV-V | E - C#m - A - B | 带小六和弦，更有张力 |
+| Power chord 版 | E5 - D5 - A5 | 只用 power chord（根音+五音），无三音 |
+
+---
+
+### Heavy Metal
+
+**调式：** 自然小调（Aeolian）、弗里几亚（Phrygian）、洛克里亚（Locrian）
+
+Metal 几乎只用 power chord（无三音），和弦标记为 X5：
+
+| 进行名 | 和弦（E 调） | 特点 |
+|--------|-------------|------|
+| i-bVII-bVI | Em5 - D5 - C5 | 自然小调进行，最常见 |
+| i-bII      | Em5 - F5（循环）| 弗里几亚特色，半音上行感，极具压迫感 |
+| i-bVI-bVII | Em5 - C5 - D5 | 经典 metal 进行，稳重有力 |
+
+---
+
+### 代码中的实现方式
+
+每种风格对应一个默认和弦进行，作为 `--style xxx` 时的 fallback：
+
+```python
+# 用级数表示，运行时根据 --key 参数移调
+# 格式：罗马数字 + 可选修饰符（maj7 / m7 / 7 / m / 5）
+STYLE_DEFAULT_PROGRESSION = {
+    "pop":     ["I", "VIm", "IV", "V"],
+    "ballad":  ["Imaj7", "VIm7", "IVmaj7", "V7"],
+    "blues":   ["I7", "I7", "I7", "I7", "IV7", "IV7", "I7", "I7", "V7", "IV7", "I7", "V7"],
+    "shuffle": ["I7", "IV7", "I7", "V7"],
+    "bossa":   ["Imaj7", "VIm7", "IIm7", "V7"],
+    "rnb":     ["Im7", "IVm7", "Im7", "IVm7"],
+    "funk":    ["IIm7", "IIm7", "V7", "V7"],
+    "rock":    ["I", "bVII", "IV", "I"],
+    "metal":   ["i5", "i5", "bVI5", "bVII5"],
+}
+```
+
+用户不传和弦时自动使用对应风格的默认进行，传了和弦则覆盖默认值。移调示例：`I` 在 C 调 = `C`，在 A 调 = `A`，在 E 调 = `E`。
+
+---
+
+## 6. 扩展计划
 
 | 风格 | 鼓特征 | 和弦演奏 | 实现难度 |
 |---|---|---|---|

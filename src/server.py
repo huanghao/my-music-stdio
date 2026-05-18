@@ -165,6 +165,18 @@ def api_stop():
     return {"playing": False}
 
 
+@app.post("/api/pause")
+def api_pause():
+    _player.pause()
+    return _player.status()
+
+
+@app.post("/api/resume")
+def api_resume():
+    _player.resume()
+    return _player.status()
+
+
 @app.get("/api/status")
 def api_status():
     return _player.status()

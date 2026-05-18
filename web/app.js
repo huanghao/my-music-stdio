@@ -9,7 +9,7 @@ function keyOptions(selected) {
 // ── State ──
 const state = {
   styles: [],
-  jam: { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 1 },
+  jam: { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
   editor: { song: null, bars: [] },
   modal: { _onConfirm: null },
 };
@@ -299,7 +299,7 @@ function renderJamControls() {
       </div>
       <div class="field">
         <label>Loops</label>
-        <input type="number" id="jam-loops" value="1" min="1" max="20" oninput="updateJamDuration()">
+        <input type="number" id="jam-loops" value="3" min="1" max="20" oninput="updateJamDuration()">
         <span class="duration-hint" id="jam-duration">≈ 0:58 min</span>
       </div>
       <div class="divider"></div>
@@ -619,9 +619,14 @@ async function editorStop() {
 // ── Preferences page ──
 
 async function renderPrefsForm() {
-  const p = await api('/api/prefs');
+  const [p, soundfonts] = await Promise.all([api('/api/prefs'), api('/api/soundfonts')]);
+  const sfOptions = soundfonts.map(f => {
+    const name = f.split('/').pop();
+    return `<option value="${f}" ${f===p.soundfont_path?'selected':''}>${name}</option>`;
+  }).join('');
+
   document.getElementById('prefs-form').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:16px;max-width:480px;">
+    <div style="display:flex;flex-direction:column;gap:16px;max-width:520px;">
       <div class="field" style="gap:12px;">
         <label style="width:160px;font-size:13px;color:#555;">Bars per row</label>
         <select id="pref-bars-per-row">
@@ -631,29 +636,39 @@ async function renderPrefsForm() {
         </select>
       </div>
       <div class="field" style="gap:12px;">
-        <label style="width:160px;font-size:13px;color:#555;">SoundFont path</label>
-        <input type="text" id="pref-sf" value="${p.soundfont_path}" style="flex:1">
+        <label style="width:160px;font-size:13px;color:#555;">SoundFont</label>
+        <select id="pref-sf" style="flex:1" onchange="applyPrefs()">${sfOptions}</select>
       </div>
       <div class="field" style="gap:12px;">
         <label style="width:160px;font-size:13px;color:#555;">Songs directory</label>
         <input type="text" id="pref-songs-dir" value="${p.songs_dir}" style="flex:1">
       </div>
       <div>
-        <button class="btn btn-primary" onclick="savePrefs()">Save Preferences</button>
+        <button class="btn btn-primary" onclick="savePrefs()">Save</button>
+        <span id="prefs-saved-msg" style="font-size:12px;color:#7a9a7a;margin-left:10px;display:none">Saved</span>
       </div>
     </div>
   `;
 }
 
+async function applyPrefs() {
+  // SoundFont change takes effect immediately on next play — no restart needed
+  // because server.py reads prefs.load() dynamically on each /api/play call.
+  await savePrefs();
+}
+
 async function savePrefs() {
+  const sfEl = document.getElementById('pref-sf');
   const updates = {
     bars_per_row: parseInt(document.getElementById('pref-bars-per-row').value),
-    soundfont_path: document.getElementById('pref-sf').value.trim(),
+    soundfont_path: sfEl?.value || '',
     songs_dir: document.getElementById('pref-songs-dir').value.trim(),
   };
   await api('/api/prefs', 'PUT', updates);
-  setStatus('Preferences saved');
+  const msg = document.getElementById('prefs-saved-msg');
+  if (msg) { msg.style.display = ''; setTimeout(() => msg.style.display = 'none', 1500); }
   document.getElementById('status-sf').textContent = updates.soundfont_path.split('/').pop();
+  setStatus('Preferences saved');
 }
 
 // ── Start ──

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import mido
 
-DEFAULT_SOUNDFONT = str(Path("~/music-practice/soundfonts/MuseScore_General.sf3").expanduser())
+DEFAULT_SOUNDFONT = str(Path("~/music-practice/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2").expanduser())
 
 # pyfluidsynth needs libfluidsynth.dylib resolvable via ctypes.
 # On macOS with Homebrew, it lives in /opt/homebrew/lib but is not on the

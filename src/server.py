@@ -182,6 +182,20 @@ def api_status():
     return _player.status()
 
 
+@app.get("/api/soundfonts")
+def api_soundfonts():
+    """List .sf2/.sf3 files in the configured soundfonts directory."""
+    p = prefs.load()
+    sf_dir = Path(p["soundfont_path"]).expanduser().parent
+    if not sf_dir.exists():
+        return []
+    files = sorted(
+        str(f) for f in sf_dir.iterdir()
+        if f.suffix.lower() in {".sf2", ".sf3"}
+    )
+    return files
+
+
 # Serve frontend static files
 _web_dir = Path(__file__).parent.parent / "web"
 if _web_dir.exists():

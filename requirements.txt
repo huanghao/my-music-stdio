@@ -1,0 +1,2 @@
+# Runtime Python dependencies.
+matplotlib>=3.10

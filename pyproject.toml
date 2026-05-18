@@ -1,0 +1,12 @@
+[project]
+name = "my-music-stdio"
+version = "0.1.0"
+description = "Music practice workstation research and prototypes."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "matplotlib>=3.10",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88

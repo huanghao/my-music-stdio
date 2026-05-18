@@ -433,6 +433,22 @@ function renderVampControls() {
   syncFromDuration('vamp');
 }
 
+// 4/4 = 4 bars per phrase
+const VAMP_PHRASE_BARS = 4;
+
+function renderVampPhrase(activebar) {
+  const el = document.getElementById('vamp-phrase');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="vamp-phrase">
+      ${Array.from({length: VAMP_PHRASE_BARS}, (_, i) => `
+        <div class="vamp-bar ${activebar === i ? 'active' : ''}">
+          <span class="vamp-bar-num">${i + 1}</span>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
 async function vampPlay() {
   state.vamp.bpm   = parseInt(document.getElementById('vamp-bpm')?.value) || 120;
   state.vamp.loops = getLoops('vamp');
@@ -444,6 +460,7 @@ async function vampPlay() {
     fill_every: 8,
   };
   setPlaybackUI('vamp', 'playing');
+  renderVampPhrase(-1);
   setStatus('Playing');
   try {
     await api('/api/play', 'POST', payload);
@@ -452,7 +469,14 @@ async function vampPlay() {
 }
 async function vampPause()  { await api('/api/pause',  'POST'); setPlaybackUI('vamp', 'paused');  setStatus('Paused'); }
 async function vampResume() { await api('/api/resume', 'POST'); setPlaybackUI('vamp', 'playing'); setStatus('Playing'); }
-async function vampStop()   { stopPolling(); await api('/api/stop', 'POST'); setPlaybackUI('vamp', 'stopped'); setStatus('Ready'); }
+async function vampStop()   {
+  stopPolling();
+  await api('/api/stop', 'POST');
+  setPlaybackUI('vamp', 'stopped');
+  const el = document.getElementById('vamp-phrase');
+  if (el) el.innerHTML = '';
+  setStatus('Ready');
+}
 
 // ── Jam page ──
 
@@ -623,11 +647,15 @@ function startPolling(prefix) {
       if (loopVal && s.loops) loopVal.textContent = `${s.current_loop} / ${s.loops}`;
       if (stateEl) { stateEl.textContent = 'playing'; stateEl.className = 'playback-state playing'; }
 
-      // highlight current bar
+      // highlight current bar (chord chart) or phrase cell (vamp)
       if (s.elapsed_sec != null && s.duration_sec && s.bars && s.loops) {
         const secPerBar = s.duration_sec / (s.bars * s.loops);
-        const currentBar = Math.floor(s.elapsed_sec / secPerBar) % s.bars;
-        highlightBar(currentBar);
+        const totalBarsSoFar = Math.floor(s.elapsed_sec / secPerBar);
+        if (prefix === 'vamp') {
+          renderVampPhrase(totalBarsSoFar % VAMP_PHRASE_BARS);
+        } else {
+          highlightBar(totalBarsSoFar % s.bars);
+        }
       }
     } catch(_) {
       failCount++;

@@ -119,6 +119,24 @@ input[type="number"] { width: 64px; text-align: center; }
 .playback-state.playing { color: #4a7c4a; }
 .playback-state.paused  { color: #b8a040; }
 
+/* Vamp phrase grid */
+.vamp-phrase {
+  display: flex; gap: 8px; margin-bottom: 16px;
+}
+.vamp-bar {
+  flex: 1; height: 56px; background: #fff; border: 1px solid #ddd;
+  border-radius: 6px; display: flex; align-items: center; justify-content: center;
+  transition: background 0.1s, border-color 0.1s;
+}
+.vamp-bar.active {
+  background: rgba(74,124,74,0.15); border-color: #7a9a7a;
+}
+.vamp-bar-num {
+  font-size: 20px; font-weight: 600; color: #ccc;
+  font-family: Georgia, serif;
+}
+.vamp-bar.active .vamp-bar-num { color: #4a7c4a; }
+
 /* Current bar highlight */
 .chart-bar.active {
   background: rgba(74, 124, 74, 0.12);

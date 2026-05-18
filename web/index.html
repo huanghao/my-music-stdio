@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <title>Music Practice</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <span class="nav-title">🎵</span>
+  <button class="nav-btn active" data-page="jam" onclick="showPage('jam')">Jam</button>
+  <button class="nav-btn" data-page="songs" onclick="showPage('songs')">Songs</button>
+  <button class="nav-btn" data-page="prefs" onclick="showPage('prefs')">Preferences</button>
+</nav>
+
+<!-- JAM PAGE -->
+<div class="page active" id="page-jam">
+  <div id="jam-controls"></div>
+  <div class="gen-status" id="jam-gen-status">
+    <div class="gen-dot draft" id="jam-dot"></div>
+    <div>
+      <div class="gen-label" id="jam-label">Select a style and press Play</div>
+      <div class="gen-path" id="jam-path"></div>
+    </div>
+  </div>
+  <div id="jam-chart"></div>
+</div>
+
+<!-- SONGS PAGE -->
+<div class="page" id="page-songs">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h2 style="font-size:18px;">Songs</h2>
+    <button class="btn btn-primary" onclick="newSong()">+ New Song</button>
+  </div>
+  <div id="songs-list"></div>
+</div>
+
+<!-- SONG EDITOR PAGE -->
+<div class="page" id="page-editor">
+  <div id="editor-controls"></div>
+  <div class="gen-status" id="editor-gen-status">
+    <div class="gen-dot draft" id="editor-dot"></div>
+    <div>
+      <div class="gen-label" id="editor-label">Not generated yet</div>
+      <div class="gen-path" id="editor-path"></div>
+    </div>
+  </div>
+  <div id="editor-chart"></div>
+</div>
+
+<!-- PREFERENCES PAGE -->
+<div class="page" id="page-prefs">
+  <h2 style="font-size:18px;margin-bottom:20px;">Preferences</h2>
+  <div id="prefs-form"></div>
+</div>
+
+<div class="statusbar">
+  <span id="status-msg">Ready</span>
+  <span id="status-sf"></span>
+</div>
+
+<!-- Chord input modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <h3 id="modal-title">Edit Chord</h3>
+    <input class="modal-input" id="modal-input" placeholder="C" autocomplete="off" />
+    <div class="modal-hint">C · Am · F#m7 · Gmaj7 · Dsus4 · A7</div>
+    <div class="modal-suggestions" id="modal-suggestions"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="confirmChord()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

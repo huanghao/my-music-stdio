@@ -1,0 +1,179 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f0efe8;
+  color: #2a2a2a;
+  min-height: 100vh;
+}
+
+.nav {
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 44px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.nav-title { font-size: 14px; font-weight: 600; color: #555; margin-right: 12px; }
+.nav-btn {
+  background: none; border: none; cursor: pointer;
+  padding: 6px 14px; border-radius: 6px;
+  font-size: 14px; color: #555;
+  transition: background 0.1s;
+}
+.nav-btn:hover { background: #f0f0f0; }
+.nav-btn.active { background: #e8e4d8; color: #2a2a2a; font-weight: 500; }
+
+.page { display: none; padding: 24px 20px 60px; max-width: 900px; margin: 0 auto; }
+.page.active { display: block; }
+
+.btn {
+  padding: 7px 16px; border-radius: 6px; border: none;
+  cursor: pointer; font-size: 13px; font-weight: 500;
+  transition: opacity 0.1s; white-space: nowrap;
+}
+.btn:hover { opacity: 0.85; }
+.btn-primary { background: #4a7c4a; color: #fff; }
+.btn-stop { background: #8f4a4a; color: #fff; }
+.btn-ghost { background: none; border: 1px solid #ccc; color: #555; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+.field { display: flex; align-items: center; gap: 6px; }
+.field label { font-size: 12px; color: #888; white-space: nowrap; }
+input[type="text"], input[type="number"], select {
+  background: #fff; border: 1px solid #ccc; color: #2a2a2a;
+  padding: 5px 8px; border-radius: 4px; font-size: 13px;
+}
+input[type="text"]:focus, input[type="number"]:focus, select:focus {
+  outline: none; border-color: #7a9a7a;
+}
+input[type="number"] { width: 64px; text-align: center; }
+
+.controls-bar {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 10px 14px; display: flex; align-items: center;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.controls-bar .divider { width: 1px; height: 24px; background: #e0e0e0; }
+.duration-hint { font-size: 12px; color: #7a9a7a; }
+
+.gen-status {
+  background: #fff; border: 1px solid #ddd; border-radius: 6px;
+  padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+  margin-bottom: 20px;
+}
+.gen-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.gen-dot.ready { background: #4a8f4a; }
+.gen-dot.draft { background: #b8a040; }
+.gen-dot.playing { background: #4a8f4a; animation: pulse 1s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.gen-label { font-size: 13px; flex: 1; }
+.gen-path { font-size: 11px; color: #aaa; font-family: monospace; margin-top: 2px; }
+
+.song-card {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 14px 16px; display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: border-color 0.1s; margin-bottom: 8px;
+}
+.song-card:hover { border-color: #aaa; }
+.song-card-body { flex: 1; }
+.song-card-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+.song-card-meta { font-size: 12px; color: #888; }
+.song-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+.song-status.ready { background: #e6f0e6; color: #4a7c4a; }
+.song-status.draft { background: #f5f0e0; color: #8a7030; }
+.song-card-actions { display: flex; gap: 6px; }
+
+.chart-wrap {
+  background: #f5f5f0;
+  border: 1px solid #d8d4c8;
+  border-radius: 8px;
+  padding: 16px;
+  font-family: Georgia, "Times New Roman", serif;
+}
+.chart-row {
+  display: grid;
+  grid-template-columns: 32px repeat(4, 1fr);
+  border-bottom: 1px solid #c8c4b8;
+  min-height: 72px;
+}
+.chart-row:last-child { border-bottom: none; }
+.chart-timesig {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; color: #aaa; border-right: 2px solid #bbb;
+  padding: 4px;
+}
+.chart-bar {
+  border-right: 1px solid #bbb;
+  padding: 6px 8px;
+  position: relative;
+  min-height: 72px;
+  display: flex; flex-direction: column;
+}
+.chart-bar:last-child { border-right: 2px solid #bbb; }
+.chart-bar:hover { background: rgba(0,0,0,0.02); }
+.bar-num { font-size: 9px; color: #ccc; margin-bottom: 4px; font-family: sans-serif; }
+.bar-beats { flex: 1; display: flex; align-items: center; gap: 2px; }
+.beat-cell {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: 3px; height: 36px; cursor: pointer;
+  transition: background 0.1s;
+}
+.beat-cell:hover { background: rgba(0,0,0,0.06); }
+.beat-cell .chord-name { font-size: 18px; font-weight: bold; color: #2a2a2a; user-select: none; }
+.beat-cell.empty .chord-name { font-size: 13px; color: #ccc; font-family: sans-serif; }
+.beat-divider { width: 1px; background: #d8d4c8; height: 28px; flex-shrink: 0; }
+.add-bar-row {
+  display: flex; justify-content: center; padding: 8px;
+  border-top: 1px dashed #ccc; cursor: pointer; color: #bbb; font-size: 13px;
+  font-family: sans-serif;
+}
+.add-bar-row:hover { color: #888; }
+
+.ctx-menu {
+  position: fixed; background: #fff; border: 1px solid #ddd;
+  border-radius: 6px; box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  z-index: 200; min-width: 160px; padding: 4px 0;
+}
+.ctx-item { padding: 7px 14px; font-size: 13px; cursor: pointer; color: #333; }
+.ctx-item:hover { background: #f5f5f0; }
+.ctx-item.danger { color: #c04040; }
+.ctx-item.danger:hover { background: #fff0f0; }
+
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.3); z-index: 100;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: #fff; border-radius: 8px; padding: 20px;
+  width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.modal h3 { font-size: 13px; color: #888; margin-bottom: 12px; }
+.modal-input {
+  width: 100%; background: #fafafa; border: 1px solid #ccc;
+  color: #2a2a2a; padding: 8px 12px; border-radius: 4px;
+  font-size: 18px; font-weight: 600; text-align: center; margin-bottom: 8px;
+}
+.modal-input:focus { outline: none; border-color: #7a9a7a; }
+.modal-hint { font-size: 11px; color: #aaa; margin-bottom: 12px; text-align: center; }
+.modal-suggestions { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 14px; }
+.suggestion {
+  background: #f5f5f0; border: 1px solid #ddd; color: #666;
+  padding: 3px 8px; border-radius: 3px; font-size: 12px; cursor: pointer;
+}
+.suggestion:hover { background: #eee; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+.statusbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: #e8e4d8; border-top: 1px solid #ccc;
+  padding: 4px 20px; font-size: 11px; color: #888;
+  display: flex; gap: 16px;
+}

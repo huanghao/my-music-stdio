@@ -305,6 +305,8 @@ function renderJamControls() {
       <div class="divider"></div>
       <button class="btn btn-primary" id="jam-play-btn" onclick="jamPlay()">▶ Play</button>
       <button class="btn btn-stop" id="jam-stop-btn" style="display:none" onclick="jamStop()">■ Stop</button>
+      <button class="btn btn-ghost" id="jam-pause-btn" style="display:none" onclick="jamPause()">⏸ Pause</button>
+      <button class="btn btn-ghost" id="jam-resume-btn" style="display:none" onclick="jamResume()">▶ Resume</button>
       <button class="btn btn-ghost" onclick="jamSaveAs()">Save as Song…</button>
     </div>
   `;
@@ -342,13 +344,25 @@ function renderJamChart() {
     h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord);
 }
 
+function setPlaybackUI(prefix, state_) {
+  // state_: 'stopped' | 'playing' | 'paused'
+  const play    = document.getElementById(`${prefix}-play-btn`);
+  const stop    = document.getElementById(`${prefix}-stop-btn`);
+  const pause   = document.getElementById(`${prefix}-pause-btn`);
+  const resume  = document.getElementById(`${prefix}-resume-btn`);
+  if (!play) return;
+  play.style.display   = state_ === 'stopped' ? '' : 'none';
+  stop.style.display   = state_ !== 'stopped' ? '' : 'none';
+  pause.style.display  = state_ === 'playing'  ? '' : 'none';
+  resume.style.display = state_ === 'paused'   ? '' : 'none';
+}
+
 async function jamPlay() {
   state.jam.bpm = parseInt(document.getElementById('jam-bpm').value) || 120;
   state.jam.loops = parseInt(document.getElementById('jam-loops').value) || 1;
   state.jam.style = document.getElementById('jam-style').value;
   state.jam.key = document.getElementById('jam-key').value;
-  document.getElementById('jam-play-btn').style.display = 'none';
-  document.getElementById('jam-stop-btn').style.display = '';
+  setPlaybackUI('jam', 'playing');
   document.getElementById('jam-dot').className = 'gen-dot playing';
   document.getElementById('jam-label').textContent = 'Generating & playing…';
   setStatus('Playing');
@@ -361,10 +375,25 @@ async function jamPlay() {
   }
 }
 
+async function jamPause() {
+  await api('/api/pause', 'POST');
+  setPlaybackUI('jam', 'paused');
+  document.getElementById('jam-dot').className = 'gen-dot draft';
+  document.getElementById('jam-label').textContent = 'Paused';
+  setStatus('Paused');
+}
+
+async function jamResume() {
+  await api('/api/resume', 'POST');
+  setPlaybackUI('jam', 'playing');
+  document.getElementById('jam-dot').className = 'gen-dot playing';
+  document.getElementById('jam-label').textContent = 'Playing…';
+  setStatus('Playing');
+}
+
 async function jamStop() {
   await api('/api/stop', 'POST');
-  document.getElementById('jam-stop-btn').style.display = 'none';
-  document.getElementById('jam-play-btn').style.display = '';
+  setPlaybackUI('jam', 'stopped');
   document.getElementById('jam-dot').className = 'gen-dot draft';
   document.getElementById('jam-label').textContent = 'Stopped';
   setStatus('Ready');
@@ -496,6 +525,8 @@ function renderEditorControls() {
       <div class="divider"></div>
       <button class="btn btn-primary" id="ed-play-btn" onclick="editorPlay()">▶ Generate &amp; Play</button>
       <button class="btn btn-stop" id="ed-stop-btn" style="display:none" onclick="editorStop()">■ Stop</button>
+      <button class="btn btn-ghost" id="ed-pause-btn" style="display:none" onclick="editorPause()">⏸ Pause</button>
+      <button class="btn btn-ghost" id="ed-resume-btn" style="display:none" onclick="editorResume()">▶ Resume</button>
       <button class="btn btn-ghost" onclick="saveSong()">Save</button>
     </div>
   `;
@@ -551,8 +582,7 @@ async function saveSong() {
 async function editorPlay() {
   await saveSong();
   const s = state.editor.song;
-  document.getElementById('ed-play-btn').style.display = 'none';
-  document.getElementById('ed-stop-btn').style.display = '';
+  setPlaybackUI('ed', 'playing');
   document.getElementById('editor-dot').className = 'gen-dot playing';
   document.getElementById('editor-label').textContent = 'Generating & playing…';
   setStatus('Playing');
@@ -563,10 +593,25 @@ async function editorPlay() {
   } catch(e) { setStatus('Error: ' + e.message); editorStop(); }
 }
 
+async function editorPause() {
+  await api('/api/pause', 'POST');
+  setPlaybackUI('ed', 'paused');
+  document.getElementById('editor-dot').className = 'gen-dot draft';
+  document.getElementById('editor-label').textContent = 'Paused';
+  setStatus('Paused');
+}
+
+async function editorResume() {
+  await api('/api/resume', 'POST');
+  setPlaybackUI('ed', 'playing');
+  document.getElementById('editor-dot').className = 'gen-dot playing';
+  document.getElementById('editor-label').textContent = 'Playing…';
+  setStatus('Playing');
+}
+
 async function editorStop() {
   await api('/api/stop', 'POST');
-  document.getElementById('ed-stop-btn').style.display = 'none';
-  document.getElementById('ed-play-btn').style.display = '';
+  setPlaybackUI('ed', 'stopped');
   renderEditorGenStatus();
   setStatus('Ready');
 }

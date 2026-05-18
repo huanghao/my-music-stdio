@@ -37,9 +37,11 @@ class Player:
         self._pause_event = threading.Event()
         self._pause_event.set()  # not paused initially
         self._current_file: str | None = None
-        self._started_at: float | None = None  # monotonic time of first note
+        self._started_at: float | None = None
         self._paused_at: float | None = None
         self._total_paused: float = 0.0
+        self._bpm: float = 120.0  # dynamically adjustable
+        self._midi_tempo: int = 500_000  # microseconds per beat from MIDI file
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
@@ -65,26 +67,60 @@ class Player:
 
     def _playback_loop(self, midi_file: str) -> None:
         mid = mido.MidiFile(midi_file)
+        ppq = mid.ticks_per_beat or 480
+        # collect all messages with absolute tick positions
+        messages: list[tuple[int, mido.Message]] = []
+        tick = 0
+        for msg in mid.tracks[0]:
+            tick += msg.time
+            messages.append((tick, msg))
+
         first_note = True
-        for msg in mid.play():
+        for i, (abs_tick, msg) in enumerate(messages):
+            # --- sleep for delta ticks using current BPM ---
+            if i > 0:
+                delta_ticks = abs_tick - messages[i - 1][0]
+                if delta_ticks > 0:
+                    # split sleep into small chunks so BPM changes take effect quickly
+                    with self._lock:
+                        bpm = self._bpm
+                    sec_per_tick = 60.0 / (bpm * ppq)
+                    sleep_sec = delta_ticks * sec_per_tick
+                    deadline = _time.monotonic() + sleep_sec
+                    chunk = 0.02  # 20ms chunks
+                    while _time.monotonic() < deadline:
+                        self._pause_event.wait()
+                        if self._stop_event.is_set():
+                            break
+                        _time.sleep(min(chunk, deadline - _time.monotonic()))
+                    if self._stop_event.is_set():
+                        break
+
             self._pause_event.wait()
             if self._stop_event.is_set():
                 break
+
             if msg.is_meta:
+                if msg.type == "set_tempo":
+                    # update reference tempo but don't override user BPM
+                    self._midi_tempo = msg.tempo
                 continue
+
             if first_note:
                 with self._lock:
                     self._started_at = _time.monotonic()
                 first_note = False
+
             if msg.type == "note_on":
                 self._fs.noteon(msg.channel, msg.note, msg.velocity)
             elif msg.type == "note_off":
                 self._fs.noteoff(msg.channel, msg.note)
             elif msg.type == "program_change":
-                if msg.channel != 9:  # never override drum channel
+                if msg.channel != 9:
                     self._fs.program_change(msg.channel, msg.program)
             elif msg.type == "control_change":
                 self._fs.cc(msg.channel, msg.control, msg.value)
+
         self._all_notes_off()
         with self._lock:
             if self._current_file == midi_file:
@@ -103,7 +139,11 @@ class Player:
             self._sfid = self._fs.sfload(path)
             self._init_gm_channels()
 
-    def play(self, midi_file: str) -> None:
+    def set_bpm(self, bpm: float) -> None:
+        with self._lock:
+            self._bpm = max(20.0, min(300.0, float(bpm)))
+
+    def play(self, midi_file: str, bpm: float | None = None) -> None:
         self.stop()
         self._ensure_synth()
         self._stop_event.clear()
@@ -113,6 +153,8 @@ class Player:
             self._started_at = None
             self._paused_at = None
             self._total_paused = 0.0
+            if bpm is not None:
+                self._bpm = max(20.0, min(300.0, float(bpm)))
         self._thread = threading.Thread(
             target=self._playback_loop, args=(midi_file,), daemon=True
         )

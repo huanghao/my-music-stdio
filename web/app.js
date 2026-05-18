@@ -576,6 +576,16 @@ function renderJamChart() {
     h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
 }
 
+async function onLiveBpm(prefix, val) {
+  const bpm = parseInt(val);
+  const valEl = document.getElementById(`${prefix}-bpm-val`);
+  if (valEl) valEl.textContent = bpm;
+  // also sync the controls bar BPM input
+  const bpmInput = document.getElementById(`${prefix}-bpm`);
+  if (bpmInput) bpmInput.value = bpm;
+  try { await api('/api/bpm', 'POST', { bpm }); } catch(_) {}
+}
+
 function setPlaybackUI(prefix, state_) {
   const play    = document.getElementById(`${prefix}-play-btn`);
   const stop    = document.getElementById(`${prefix}-stop-btn`);
@@ -592,6 +602,20 @@ function setPlaybackUI(prefix, state_) {
   const stateEl = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-state`);
   if (panel) panel.className = 'playback-panel' + (state_ === 'playing' ? ' playing' : '');
   if (stateEl) { stateEl.textContent = state_; stateEl.className = 'playback-state ' + state_; }
+
+  // show live BPM slider only while playing or paused
+  const liveBpm = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-live-bpm`);
+  if (liveBpm) liveBpm.style.display = state_ !== 'stopped' ? '' : 'none';
+
+  if (state_ === 'playing') {
+    // sync slider to current BPM input value
+    const bpmInput = document.getElementById(`${prefix}-bpm`) || document.getElementById('ed-bpm');
+    const slider = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-bpm-slider`);
+    const valEl  = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-bpm-val`);
+    const bpm = parseInt(bpmInput?.value) || 120;
+    if (slider) slider.value = bpm;
+    if (valEl)  valEl.textContent = bpm;
+  }
 
   if (state_ === 'stopped') {
     const elapsed = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-elapsed`);

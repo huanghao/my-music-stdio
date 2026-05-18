@@ -169,7 +169,7 @@ def api_play(song: dict):
         "bars": bars_per_loop,
         "bpm": bpm,
     })
-    _player.play(midi_path)
+    _player.play(midi_path, bpm=bpm)
 
     if song_id:
         try:
@@ -179,6 +179,14 @@ def api_play(song: dict):
             pass
 
     return {"playing": True, "file": midi_path, "duration_sec": duration_sec, "loops": loops}
+
+
+@app.post("/api/bpm")
+def api_set_bpm(body: dict):
+    bpm = float(body.get("bpm", 120))
+    _player.set_bpm(bpm)
+    _play_meta["bpm"] = bpm
+    return {"bpm": bpm}
 
 
 @app.post("/api/stop")

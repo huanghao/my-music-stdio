@@ -1,2 +1,5 @@
 # Runtime Python dependencies.
 matplotlib>=3.10
+fastapi>=0.110
+uvicorn>=0.29
+mido>=1.3

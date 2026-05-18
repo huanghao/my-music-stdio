@@ -16,15 +16,45 @@ const state = {
   jamMode: 'chart',  // 'chart' | 'vamp'
 };
 
-// ── Init ──
-async function init() {
+// ── Connection indicator ──
+let _connOk = null;
+
+function setConn(ok) {
+  if (_connOk === ok) return;
+  _connOk = ok;
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-label');
+  if (!dot) return;
+  dot.className = 'conn-dot ' + (ok ? 'ok' : 'err');
+  lbl.textContent = ok ? 'connected' : 'disconnected';
+  if (!ok) setStatus('Server disconnected');
+}
+
+async function pingServer() {
+  try {
+    await fetch('/api/status', { method: 'GET' });
+    const wasDown = _connOk === false;
+    setConn(true);
+    if (wasDown) await loadApp();  // reinitialize after reconnect
+  } catch(_) {
+    setConn(false);
+  }
+}
+
+async function loadApp() {
   state.styles = await api('/api/styles');
   renderJamControls();
   renderPrefsForm();
-  applyStyle('pop', 'jam');
+  applyStyle(document.getElementById('jam-style')?.value || 'pop', 'jam');
   const p = await api('/api/prefs');
-  const sf = p.soundfont_path || '';
-  document.getElementById('status-sf').textContent = sf.split('/').pop();
+  document.getElementById('status-sf').textContent = (p.soundfont_path || '').split('/').pop();
+}
+
+// ── Init ──
+async function init() {
+  setInterval(pingServer, 3000);
+  await pingServer();
+  if (_connOk) await loadApp();
 }
 
 // ── Page nav ──
@@ -42,9 +72,14 @@ function showPage(name) {
 async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const r = await fetch(path, opts);
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
+  try {
+    const r = await fetch(path, opts);
+    if (!r.ok) throw new Error(await r.text());
+    return r.json();
+  } catch(e) {
+    if (!_connOk) throw new Error('Server disconnected');
+    throw e;
+  }
 }
 
 function setStatus(msg) {
@@ -550,10 +585,10 @@ function stopPolling() {
 }
 
 async function jamPlay() {
-  state.jam.bpm = parseInt(document.getElementById('jam-bpm').value) || 120;
+  state.jam.bpm = parseInt(document.getElementById('jam-bpm')?.value) || 120;
   state.jam.loops = getLoops('jam');
-  state.jam.style = document.getElementById('jam-style').value;
-  state.jam.key = document.getElementById('jam-key').value;
+  state.jam.style = document.getElementById('jam-style')?.value || 'pop';
+  state.jam.key = document.getElementById('jam-key')?.value || state.jam.key;
 
   let bars = state.jam.bars;
   if (state.jamMode === 'vamp') {

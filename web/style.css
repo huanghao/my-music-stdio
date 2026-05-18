@@ -20,6 +20,15 @@ body {
   z-index: 10;
 }
 .nav-title { font-size: 14px; font-weight: 600; color: #555; margin-right: 12px; }
+.nav-spacer { flex: 1; }
+.conn-indicator { display: flex; align-items: center; gap: 5px; }
+.conn-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #ccc; transition: background 0.3s;
+}
+.conn-dot.ok  { background: #4a8f4a; }
+.conn-dot.err { background: #c04040; animation: pulse 1.5s infinite; }
+.conn-label { font-size: 11px; color: #aaa; }
 .nav-btn {
   background: none; border: none; cursor: pointer;
   padding: 6px 14px; border-radius: 6px;

@@ -9,11 +9,11 @@ function keyOptions(selected) {
 // ── State ──
 const state = {
   styles: [],
-  jam: { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
+  vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3 },
+  jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
   editor: { song: null, bars: [] },
   modal: { _onConfirm: null },
   playback: { polling: null },
-  jamMode: 'chart',  // 'chart' | 'vamp'
   prefs: { bars_per_row: 4 },
 };
 
@@ -44,6 +44,7 @@ async function pingServer() {
 
 async function loadApp() {
   state.styles = await api('/api/styles');
+  renderVampControls();
   renderJamControls();
   renderPrefsForm();
   applyStyle(document.getElementById('jam-style')?.value || 'pop', 'jam');
@@ -389,37 +390,90 @@ function makeChordHandlers(getBars, rerenderFn) {
   return { onChordClick, onChordCtx, onBarCtx, onAddBar, onDeleteChord };
 }
 
+// ── Vamp page ──
+
+function renderVampControls() {
+  const el = document.getElementById('vamp-controls');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="controls-bar">
+      <div class="controls-row">
+        <div class="field"><label>Chord</label>
+          <input type="text" id="vamp-chord" value="${state.vamp.chord}"
+            style="width:80px;font-family:Georgia,serif;font-size:17px;font-weight:700;text-align:center"
+            autocomplete="off" spellcheck="false" oninput="state.vamp.chord=this.value.trim()">
+        </div>
+        <div class="field"><label>Style</label>
+          <select id="vamp-style" onchange="state.vamp.style=this.value">
+            ${state.styles.map(s => `<option value="${s.id}" ${s.id===state.vamp.style?'selected':''}>${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>BPM</label>
+          <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
+            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromLoops('vamp')">
+        </div>
+        <div class="field"><label>Loops</label>
+          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:52px"
+            oninput="syncFromLoops('vamp')">
+        </div>
+        <div class="field"><label>Duration</label>
+          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" style="width:60px"
+            oninput="syncFromDuration('vamp')">
+          <span class="duration-hint">min</span>
+        </div>
+      </div>
+      <div class="controls-row">
+        <button class="btn-icon btn-icon-play"   id="vamp-play-btn"   onclick="vampPlay()"   title="Play">▶</button>
+        <button class="btn-icon btn-icon-stop"   id="vamp-stop-btn"   onclick="vampStop()"   title="Stop"   style="display:none">⏹</button>
+        <button class="btn-icon btn-icon-pause"  id="vamp-pause-btn"  onclick="vampPause()"  title="Pause"  style="display:none">⏸</button>
+        <button class="btn-icon btn-icon-resume" id="vamp-resume-btn" onclick="vampResume()" title="Resume" style="display:none">▶</button>
+      </div>
+    </div>
+  `;
+  syncFromDuration('vamp');
+}
+
+async function vampPlay() {
+  state.vamp.bpm   = parseInt(document.getElementById('vamp-bpm')?.value) || 120;
+  state.vamp.loops = getLoops('vamp');
+  state.vamp.style = document.getElementById('vamp-style')?.value || 'pop';
+  state.vamp.chord = document.getElementById('vamp-chord')?.value.trim() || 'Am';
+  const payload = {
+    bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
+    bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
+    fill_every: 12,
+  };
+  setPlaybackUI('vamp', 'playing');
+  setStatus('Playing');
+  try {
+    await api('/api/play', 'POST', payload);
+    startPolling('vamp');
+  } catch(e) { setStatus('Error: ' + e.message); vampStop(); }
+}
+async function vampPause()  { await api('/api/pause',  'POST'); setPlaybackUI('vamp', 'paused');  setStatus('Paused'); }
+async function vampResume() { await api('/api/resume', 'POST'); setPlaybackUI('vamp', 'playing'); setStatus('Playing'); }
+async function vampStop()   { stopPolling(); await api('/api/stop', 'POST'); setPlaybackUI('vamp', 'stopped'); setStatus('Ready'); }
+
 // ── Jam page ──
 
 function renderJamControls() {
-  const isVamp = state.jamMode === 'vamp';
   const el = document.getElementById('jam-controls');
   el.innerHTML = `
     <div class="controls-bar">
       <div class="controls-row">
-        <div class="jam-mode-tabs">
-          <button class="jam-mode-tab ${!isVamp ? 'active' : ''}" onclick="setJamMode('chart')">Chord Chart</button>
-          <button class="jam-mode-tab ${isVamp ? 'active' : ''}" onclick="setJamMode('vamp')">Vamp</button>
-        </div>
-        <div class="divider"></div>
         <div class="field"><label>Style</label>
           <select id="jam-style" onchange="applyStyle(this.value,'jam')">
             ${state.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
           </select>
         </div>
-        ${!isVamp ? `<div class="field"><label>Key</label>
+        <div class="field"><label>Key</label>
           <select id="jam-key">${keyOptions(state.jam.key)}</select>
-        </div>` : ''}
-        <div class="field"><label>BPM</label>
-          <input type="number" id="jam-bpm" value="120" min="40" max="240" oninput="syncFromLoops('jam')">
         </div>
-        ${isVamp ? `
-        <div class="field"><label>Chord</label>
-          <input type="text" id="jam-vamp-chord" value="Am" style="width:64px;font-family:Georgia,serif;font-size:15px;font-weight:600;text-align:center"
-            autocomplete="off" spellcheck="false">
-        </div>` : ''}
+        <div class="field"><label>BPM</label>
+          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromLoops('jam')">
+        </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="jam-loops" value="3" min="1" max="99" style="width:52px"
+          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:52px"
             oninput="syncFromLoops('jam')">
         </div>
         <div class="field"><label>Duration</label>
@@ -438,18 +492,6 @@ function renderJamControls() {
       </div>
     </div>
   `;
-}
-
-function setJamMode(mode) {
-  state.jamMode = mode;
-  renderJamControls();
-  const chartEl = document.getElementById('jam-chart');
-  if (mode === 'chart') {
-    chartEl.style.display = '';
-    renderJamChart();
-  } else {
-    chartEl.style.display = 'none';
-  }
 }
 
 function applyStyle(styleId, context) {
@@ -472,9 +514,12 @@ function applyStyle(styleId, context) {
 // ── Loops / Duration shared helpers ──
 
 function secPerLoop(prefix) {
-  const bpm = parseInt(document.getElementById(prefix === 'jam' ? 'jam-bpm' : 'ed-bpm')?.value) || 120;
-  let bars = prefix === 'jam' ? state.jam.bars.length : state.editor.bars.length;
-  if (prefix === 'jam' && state.jamMode === 'vamp') bars = 1;
+  const bpmId = { jam: 'jam-bpm', ed: 'ed-bpm', vamp: 'vamp-bpm' }[prefix] || `${prefix}-bpm`;
+  const bpm = parseInt(document.getElementById(bpmId)?.value) || 120;
+  let bars;
+  if (prefix === 'vamp') bars = 1;
+  else if (prefix === 'jam') bars = state.jam.bars.length;
+  else bars = state.editor.bars.length;
   return Math.max(1, bars) * 4 * 60 / bpm;
 }
 
@@ -603,23 +648,14 @@ function stopPolling() {
 }
 
 async function jamPlay() {
-  state.jam.bpm = parseInt(document.getElementById('jam-bpm')?.value) || 120;
+  state.jam.bpm   = parseInt(document.getElementById('jam-bpm')?.value) || 120;
   state.jam.loops = getLoops('jam');
   state.jam.style = document.getElementById('jam-style')?.value || 'pop';
-  state.jam.key = document.getElementById('jam-key')?.value || state.jam.key;
-
-  let bars = state.jam.bars;
-  let fill_every = 4;  // default: fill every 4 bars
-  if (state.jamMode === 'vamp') {
-    const chord = (document.getElementById('jam-vamp-chord')?.value || 'Am').trim();
-    bars = [{ chords: [{ name: chord, beats: 4 }] }];
-    fill_every = 12;  // vamp: fill every 12 bars
-  }
-
+  state.jam.key   = document.getElementById('jam-key')?.value || state.jam.key;
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, bars, fill_every });
+    await api('/api/play', 'POST', { ...state.jam, fill_every: 4 });
     startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);

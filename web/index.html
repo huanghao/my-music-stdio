@@ -9,9 +9,10 @@
 
 <nav class="nav">
   <span class="nav-title">🎵</span>
-  <button class="nav-btn active" data-page="jam" onclick="showPage('jam')">Jam</button>
-  <button class="nav-btn" data-page="songs" onclick="showPage('songs')">Songs</button>
-  <button class="nav-btn" data-page="prefs" onclick="showPage('prefs')">Preferences</button>
+  <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
+  <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
+  <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
+  <button class="nav-btn"        data-page="prefs" onclick="showPage('prefs')">Preferences</button>
   <div class="nav-spacer"></div>
   <div class="conn-indicator" id="conn-indicator" title="Server connection">
     <div class="conn-dot" id="conn-dot"></div>
@@ -19,8 +20,21 @@
   </div>
 </nav>
 
+<!-- VAMP PAGE -->
+<div class="page active" id="page-vamp">
+  <div id="vamp-controls"></div>
+  <div class="playback-panel" id="vamp-playback">
+    <div class="playback-elapsed" id="vamp-elapsed">—</div>
+    <div class="playback-meta">
+      <span class="playback-meta-val" id="vamp-loop-val">—</span>
+      <span class="playback-meta-lbl">loop</span>
+    </div>
+    <div class="playback-state" id="vamp-state">stopped</div>
+  </div>
+</div>
+
 <!-- JAM PAGE -->
-<div class="page active" id="page-jam">
+<div class="page" id="page-jam">
   <div id="jam-controls"></div>
   <div class="playback-panel" id="jam-playback">
     <div class="playback-elapsed" id="jam-elapsed">—</div>

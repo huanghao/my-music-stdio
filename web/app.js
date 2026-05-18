@@ -443,8 +443,13 @@ function renderJamControls() {
 function setJamMode(mode) {
   state.jamMode = mode;
   renderJamControls();
-  if (mode === 'chart') renderJamChart();
-  else document.getElementById('jam-chart').innerHTML = '';
+  const chartEl = document.getElementById('jam-chart');
+  if (mode === 'chart') {
+    chartEl.style.display = '';
+    renderJamChart();
+  } else {
+    chartEl.style.display = 'none';
+  }
 }
 
 function applyStyle(styleId, context) {
@@ -604,15 +609,17 @@ async function jamPlay() {
   state.jam.key = document.getElementById('jam-key')?.value || state.jam.key;
 
   let bars = state.jam.bars;
+  let fill_every = 4;  // default: fill every 4 bars
   if (state.jamMode === 'vamp') {
     const chord = (document.getElementById('jam-vamp-chord')?.value || 'Am').trim();
     bars = [{ chords: [{ name: chord, beats: 4 }] }];
+    fill_every = 12;  // vamp: fill every 12 bars
   }
 
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, bars });
+    await api('/api/play', 'POST', { ...state.jam, bars, fill_every });
     startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);
@@ -890,6 +897,7 @@ async function savePrefs() {
   document.getElementById('status-sf').textContent = updates.soundfont_path.split('/').pop();
   setStatus('Preferences saved');
   renderJamChart();
+  if (state.editor.song) renderEditorChart();
 }
 
 // ── Start ──

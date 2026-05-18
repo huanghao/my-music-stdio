@@ -154,9 +154,10 @@ class Player:
             total_paused = self._total_paused
             paused_at = self._paused_at
         if playing and started:
-            raw = _time.monotonic() - started - total_paused
+            now = _time.monotonic()
+            raw = now - started - total_paused
             if paused_at is not None:
-                raw -= _time.monotonic() - paused_at
+                raw -= now - paused_at
             elapsed = round(max(0.0, raw), 3)
         else:
             elapsed = None

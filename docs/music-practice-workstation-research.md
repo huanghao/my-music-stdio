@@ -634,7 +634,134 @@ project.json
 | YouTube 截图 → 六线谱识别 | 高 | 待做，依赖图像识别模型 |
 | TAB PDF 生成 | 中 | 待做，依赖谱面渲染库 |
 
-**播放方案**：Web 负责编辑和交互，Python 后端生成 MIDI，后端调 FluidSynth 播放。音色使用 MuseScore_General.sf3（已下载至 `~/soundfonts/`）。不依赖 GarageBand（无 CLI 接口）。
+**播放方案**：Web 负责编辑和交互，Python 后端生成 MIDI，后端调 FluidSynth 播放。音色使用 MuseScore_General.sf3（已下载至 `~/music-practice/soundfonts/`）。不依赖 GarageBand（无 CLI 接口）。
+
+### FluidSynth 与 SoundFont 说明
+
+**FluidSynth 使用方式**
+
+两种方式都支持：
+
+- **命令行**：`fluidsynth soundfont.sf2 song.mid`，也可进入交互 shell 实时发 `noteon` / `noteoff` 命令
+- **库调用**：本体是 libfluidsynth（C），Python 通过 `pyfluidsynth` 绑定调用，或用 `midi2audio` 封装命令行（更简单）
+
+```python
+import fluidsynth
+fs = fluidsynth.Synth()
+fs.start(driver="coreaudio")
+sfid = fs.sfload("soundfont.sf2")
+fs.program_select(0, sfid, 0, 0)
+fs.noteon(0, 60, 100)
+```
+
+**FluidSynth 工作原理**
+
+核心是 SoundFont 软件合成，流程：
+
+```
+MIDI 事件 → 事件调度器 → Voice 分配（每个音符一个 Voice）
+    → 从 .sf2 读取对应 PCM 采样片段
+    → DSP 链：音高重采样 + ADSR 包络 + LFO + 低通滤波
+    → 混音（所有 Voice 叠加）
+    → 效果链：Reverb + Chorus
+    → 音频输出（CoreAudio / 文件）
+```
+
+`.sf2/.sf3` 文件本质是一个容器，存着原始 PCM 录音 + 每个音高/力度区间的映射规则（哪段采样 + loop 点 + ADSR 参数）。音高变化靠对采样做速率插值实现，不是波形合成。
+
+**SoundFont 音质对比**
+
+本机已有的 SoundFont（`~/music-practice/soundfonts/`）：
+
+| 文件 | 大小 | 质量 |
+|------|------|------|
+| MuseScore_General.sf3 | 38MB（压缩） | GM 标准，够用于开发验证 |
+| GeneralUser-GS.sf2 | 31MB | 类似定位，稍旧 |
+| **Timbres of Heaven (XGM) 4.00(G).sf2** | **419MB** | **最接近商业音源的免费 GM SF2，已下载** |
+
+与 GarageBand 的差距：GarageBand 用多速度层采样（弱/中/强力度各录一遍）+ 卷积混响（真实空间 IR），同一个音在不同力度下音色自然变化。SF2/SF3 只有单层采样靠插值模拟力度，这是"塑料感"的根源。
+
+**结论**：开发阶段用 MuseScore_General.sf3 验证节奏和结构；用户实际听时用 Timbres of Heaven。
+
+**更高音质路线：CoreAudio / AudioUnit / VST**
+
+FluidSynth + SoundFont 的天花板是单层采样。若要真正接近 GarageBand 级别，有三条路：
+
+**路线 A：CoreAudio / AudioUnit（调用系统或 GarageBand 自带音源）**
+
+**结论：GarageBand 的音源不能直接调用，但系统自带的 AU 可以用，实用价值有限。**
+
+具体情况：
+- GarageBand 的高质量音源（Steinway 钢琴、鼓组等）以 `.exs`/`.caf` 采样库格式存放在 GarageBand 沙箱内，macOS 沙箱机制阻止外部程序读取，**无法从 Python 或其他程序加载**
+- macOS 系统自带的 AU（如 `DLSMusicDevice`）可以用 `AVAudioEngine` 调用，但音质和 GarageBand 内置音源完全不同，实际上只相当于一个系统级 GM 合成器，比 Timbres of Heaven 还差
+- Python 调用需要通过 `PyObjC` 绑定 AVFoundation，开发成本高，收益低
+
+```swift
+// Swift 示例：用 AVAudioEngine 加载系统 AU（DLSMusicDevice）
+let engine = AVAudioEngine()
+let sampler = AVAudioUnitSampler()
+engine.attach(sampler)
+engine.connect(sampler, to: engine.mainMixerNode, format: nil)
+try engine.start()
+// 只能加载 .sf2 或系统 DLS，无法加载 GarageBand 专属音源
+try sampler.loadSoundBankInstrument(at: sf2URL, program: 0, bankMSB: 0x79, bankLSB: 0)
+sampler.startNote(60, withVelocity: 80, onChannel: 0)
+```
+
+**实际建议：跳过这条路，性价比最低。**
+
+**路线 B：VST 插件（如 Spitfire LABS）**
+
+> VST、DAW、AU 等术语的详细介绍见 [audio-tech-glossary.md](audio-tech-glossary.md)。
+
+VST/AU 插件是 DAW 生态的标准格式，很多高质量音源提供免费版：
+
+- **Spitfire LABS**：免费，每种乐器独立下载（钢琴、弦乐、合唱等），音质媲美商业音源
+- **BBCSO Discover**：Spitfire 出品，管弦乐免费版
+- **Decent Sampler**：免费插件引擎，可加载大量免费采样库
+
+Python 直接驱动 VST 的方案：
+- **`pedalboard`**（Spotify 出品）：Python 库，可加载 VST3/AU 插件并处理音频，**是 Python 调 VST 最成熟的方案**
+
+```python
+from pedalboard import Pedalboard, load_plugin
+import numpy as np
+
+# 加载 VST3 插件
+plugin = load_plugin("/Library/Audio/Plug-Ins/VST3/LABS.vst3")
+
+# 发送 MIDI 并渲染音频
+sample_rate = 44100
+audio = plugin(np.zeros((2, sample_rate)), sample_rate, reset=False)
+```
+
+**路线 C：直接用 DAW 渲染（离线方案）**
+
+不追求实时，只求音质：把 MIDI 文件发给 DAW 离线渲染成 WAV。
+
+- **Reaper**（$60，支持命令行批量渲染）：`reaper -nosplash -nonewinst -saveas output.wav project.rpp`
+- **MuseScore 4**（免费）：内置 Muse Sounds 音源，命令行导出：`mscore -o output.wav input.mid`
+- 适合"生成伴奏 → 高质量导出"的场景，不适合实时交互
+
+**"实时"的含义**
+
+这里"实时"不是指计算速度快，而是指**驱动方式**：
+
+- **实时**：有一个常驻内存的合成器进程/对象，Python 直接调用 `noteon(channel, note, velocity)` 这样的函数，合成器在内存里立刻产生音频并送到声卡，延迟通常 <20ms。用户按下按钮 → 立刻出声。
+- **离线**：Python 先把所有音符写入 MIDI 文件，再启动一个外部进程（如 MuseScore）读取整个文件、渲染成 WAV，完成后才能播放。这个过程需要几秒到几十秒，适合"导出"但不适合"演奏"。
+
+FluidSynth、pedalboard + VST 都是实时方式：合成器对象在内存里，MIDI 事件通过函数调用直接注入，不经过文件系统。
+
+**方案对比**
+
+| 方案 | 实时性 | 音质 | Python 集成难度 | 适用场景 |
+|------|--------|------|----------------|---------|
+| FluidSynth + Timbres of Heaven | ✅ 实时 | ★★★☆ | 简单（pyfluidsynth） | 开发验证、实时播放 |
+| pedalboard + LABS VST | ✅ 实时 | ★★★★ | 中等 | 高质量实时，无需 DAW |
+| AVAudioEngine + AU | ✅ 实时 | ★★★★ | 复杂（需 Swift 桥接） | 调用系统音源 |
+| MuseScore 4 命令行渲染 | ❌ 离线 | ★★★★★ | 简单（subprocess） | 最终导出 WAV |
+
+**当前项目建议**：实时播放继续用 FluidSynth + Timbres of Heaven；若未来需要高质量导出，用 MuseScore 4 命令行渲染最省力。
 
 **其他音乐爱好者常见练习需求（供参考）**：
 - 节拍器（可变速，可设置重音型）

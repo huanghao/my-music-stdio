@@ -184,7 +184,7 @@ Generation: ○ Not generated  ~/music-practice/songs/1645-练习/accompaniment.
 ```json
 {
   "bars_per_row": 4,
-  "soundfont_path": "~/soundfonts/MuseScore_General.sf3",
+  "soundfont_path": "~/music-practice/soundfonts/MuseScore_General.sf3",
   "songs_dir": "~/music-practice/songs/"
 }
 ```
@@ -192,7 +192,7 @@ Generation: ○ Not generated  ~/music-practice/songs/1645-练习/accompaniment.
 | 设置项 | 默认值 | 说明 |
 |--------|--------|------|
 | 每行小节数 | 4 | 选项：2 / 4 / 8 |
-| SoundFont 路径 | `~/soundfonts/MuseScore_General.sf3` | FluidSynth 音色文件 |
+| SoundFont 路径 | `~/music-practice/soundfonts/MuseScore_General.sf3` | FluidSynth 音色文件 |
 | Songs 目录 | `~/music-practice/songs/` | 歌曲保存位置 |
 
 ---

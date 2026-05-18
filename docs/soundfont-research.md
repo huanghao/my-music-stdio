@@ -66,5 +66,5 @@ fluidsynth -a coreaudio /System/Library/Components/CoreAudio.component/Contents/
 未来集成播放器时，建议下载 GeneralUser GS.sf2，让 FluidSynth 完整控制音色：
 
 ```bash
-fluidsynth -a coreaudio ~/soundfonts/GeneralUser_GS.sf2 output/xxx.mid
+fluidsynth -a coreaudio ~/music-practice/soundfonts/GeneralUser_GS.sf2 output/xxx.mid
 ```

@@ -3,7 +3,7 @@ from pathlib import Path
 
 DEFAULTS = {
     "bars_per_row": 4,
-    "soundfont_path": "~/soundfonts/MuseScore_General.sf3",
+    "soundfont_path": "~/music-practice/soundfonts/MuseScore_General.sf3",
     "songs_dir": "~/music-practice/songs/",
 }
 

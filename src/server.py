@@ -1,6 +1,7 @@
 import json
 import re
 import shutil
+import signal
 import time as _time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,11 @@ import src.gen_accompaniment_midi as gen
 app = FastAPI()
 _player = Player()
 _play_meta: dict = {}  # stores duration_sec and loops for the current play session
+
+def _shutdown(signum, frame):
+    _player.close()
+
+signal.signal(signal.SIGTERM, _shutdown)
 
 
 def _songs_dir() -> Path:

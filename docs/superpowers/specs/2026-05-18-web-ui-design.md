@@ -177,7 +177,17 @@ Generation: ○ Not generated  ~/music-practice/songs/1645-练习/accompaniment.
 
 ## Preferences 页
 
-简单表单：
+设置保存在 `~/.config/music-practice/prefs.json`，后端启动时读取，前端通过 `/api/prefs` GET/PUT 读写。修改后**不需要重启服务**，后端热更新配置。
+
+两个路径（SoundFont、Songs 目录）也在这里修改，不是服务器启动参数——服务器每次使用时从 prefs.json 动态读取。
+
+```json
+{
+  "bars_per_row": 4,
+  "soundfont_path": "~/soundfonts/MuseScore_General.sf3",
+  "songs_dir": "~/music-practice/songs/"
+}
+```
 
 | 设置项 | 默认值 | 说明 |
 |--------|--------|------|

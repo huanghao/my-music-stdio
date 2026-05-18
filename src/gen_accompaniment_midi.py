@@ -329,7 +329,7 @@ def drum_bar_events(groove_fn, bar_offset: int, is_fill: bool) -> list[tuple[int
 
 # --- track builder ---
 
-def build_track(progression: list[str], bpm: int, style: str) -> mido.MidiTrack:
+def build_track(progression: list[str], bpm: int, style: str, fill_every: int = 4) -> mido.MidiTrack:
     groove_fn = GROOVE_FN[style]
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("set_tempo", tempo=int(60_000_000 / bpm), time=0))
@@ -341,7 +341,7 @@ def build_track(progression: list[str], bpm: int, style: str) -> mido.MidiTrack:
         for bar_i, chord in enumerate(progression):
             global_bar = repeat * len(progression) + bar_i
             bar_offset = global_bar * TICKS_PER_BAR
-            is_fill = (global_bar % 4 == 3) and (global_bar < total_bars - 1)
+            is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
 
             all_events += piano_bar_events(chord, bar_offset)
             all_events += bass_bar_events(chord, bar_offset)

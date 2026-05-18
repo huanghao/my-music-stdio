@@ -131,6 +131,7 @@ def api_play(song: dict):
     loops = song.get("loops", 4)
     bpm = song.get("bpm", 120)
     style = song.get("style", "pop")
+    fill_every = int(song.get("fill_every", 4))
 
     song_id = song.get("id")
     if song_id:
@@ -145,7 +146,7 @@ def api_play(song: dict):
     original_repeats = gen.REPEATS
     gen.REPEATS = loops
     mid = mido.MidiFile(type=0, ticks_per_beat=gen.PPQ)
-    mid.tracks.append(gen.build_track(progression, bpm, style))
+    mid.tracks.append(gen.build_track(progression, bpm, style, fill_every=fill_every))
     mid.save(midi_path)
     gen.REPEATS = original_repeats
 

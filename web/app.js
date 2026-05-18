@@ -356,31 +356,31 @@ function renderJamControls() {
   const el = document.getElementById('jam-controls');
   el.innerHTML = `
     <div class="controls-bar">
-      <div class="field">
-        <label>Style</label>
-        <select id="jam-style" onchange="applyStyle(this.value,'jam')">
-          ${state.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-        </select>
+      <div class="controls-row">
+        <div class="field"><label>Style</label>
+          <select id="jam-style" onchange="applyStyle(this.value,'jam')">
+            ${state.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Key</label>
+          <select id="jam-key">${keyOptions(state.jam.key)}</select>
+        </div>
+        <div class="field"><label>BPM</label>
+          <input type="number" id="jam-bpm" value="120" min="40" max="240" oninput="updateJamDuration()">
+        </div>
+        <div class="field"><label>Loops</label>
+          <input type="number" id="jam-loops" value="3" min="1" max="20" oninput="updateJamDuration()">
+          <span class="duration-hint" id="jam-duration"></span>
+        </div>
       </div>
-      <div class="field">
-        <label>Key</label>
-        <select id="jam-key">${keyOptions(state.jam.key)}</select>
+      <div class="controls-row">
+        <button class="btn-icon btn-icon-play"   id="jam-play-btn"   onclick="jamPlay()"   title="Play">▶</button>
+        <button class="btn-icon btn-icon-stop"   id="jam-stop-btn"   onclick="jamStop()"   title="Stop"   style="display:none">⏹</button>
+        <button class="btn-icon btn-icon-pause"  id="jam-pause-btn"  onclick="jamPause()"  title="Pause"  style="display:none">⏸</button>
+        <button class="btn-icon btn-icon-resume" id="jam-resume-btn" onclick="jamResume()" title="Resume" style="display:none">▶</button>
+        <div class="divider"></div>
+        <button class="btn btn-ghost btn-sm" onclick="jamSaveAs()">Save as Song…</button>
       </div>
-      <div class="field">
-        <label>BPM</label>
-        <input type="number" id="jam-bpm" value="120" min="40" max="240" oninput="updateJamDuration()">
-      </div>
-      <div class="field">
-        <label>Loops</label>
-        <input type="number" id="jam-loops" value="3" min="1" max="20" oninput="updateJamDuration()">
-        <span class="duration-hint" id="jam-duration">≈ 0:58 min</span>
-      </div>
-      <div class="divider"></div>
-      <button class="btn btn-primary" id="jam-play-btn" onclick="jamPlay()">▶ Play</button>
-      <button class="btn btn-stop" id="jam-stop-btn" style="display:none" onclick="jamStop()">■ Stop</button>
-      <button class="btn btn-ghost" id="jam-pause-btn" style="display:none" onclick="jamPause()">⏸ Pause</button>
-      <button class="btn btn-ghost" id="jam-resume-btn" style="display:none" onclick="jamResume()">▶ Resume</button>
-      <button class="btn btn-ghost" onclick="jamSaveAs()">Save as Song…</button>
     </div>
   `;
 }
@@ -428,6 +428,20 @@ function setPlaybackUI(prefix, state_) {
   stop.style.display   = state_ !== 'stopped' ? '' : 'none';
   pause.style.display  = state_ === 'playing'  ? '' : 'none';
   resume.style.display = state_ === 'paused'   ? '' : 'none';
+
+  // playback panel state
+  const panel = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-playback`);
+  const stateEl = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-state`);
+  if (panel) panel.className = 'playback-panel' + (state_ === 'playing' ? ' playing' : '');
+  if (stateEl) { stateEl.textContent = state_; stateEl.className = 'playback-state ' + state_; }
+
+  if (state_ === 'stopped') {
+    const elapsed = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-elapsed`);
+    const loopVal = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-loop-val`);
+    if (elapsed) elapsed.textContent = '—';
+    if (loopVal) loopVal.textContent = '—';
+    clearBarHighlight();
+  }
 }
 
 function fmt(sec) {
@@ -435,39 +449,51 @@ function fmt(sec) {
   return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }
 
-function startPolling(dotId, labelId) {
+function clearBarHighlight() {
+  document.querySelectorAll('.chart-bar.active').forEach(el => el.classList.remove('active'));
+}
+
+function highlightBar(barIndex, totalBars) {
+  clearBarHighlight();
+  // bars are rendered as .chart-bar elements in DOM order
+  const bars = document.querySelectorAll('.chart-bar');
+  if (bars[barIndex]) bars[barIndex].classList.add('active');
+}
+
+function startPolling(prefix) {
   stopPolling();
+  const panelPrefix = prefix === 'ed' ? 'editor' : prefix;
   state.playback.polling = setInterval(async () => {
     try {
       const s = await api('/api/status');
       if (!s.playing) {
-        // playback finished naturally
         stopPolling();
-        const dot = document.getElementById(dotId);
-        const label = document.getElementById(labelId);
-        if (dot) dot.className = 'gen-dot ready';
-        if (label) label.textContent = 'Done';
-        // figure out which prefix is active and reset buttons
-        const prefix = dotId.startsWith('jam') ? 'jam' : 'ed';
         setPlaybackUI(prefix, 'stopped');
         setStatus('Ready');
         return;
       }
-      const dot = document.getElementById(dotId);
-      const label = document.getElementById(labelId);
-      if (!dot || !label) return;
+
+      const elapsed = document.getElementById(`${panelPrefix}-elapsed`);
+      const loopVal = document.getElementById(`${panelPrefix}-loop-val`);
+      const stateEl = document.getElementById(`${panelPrefix}-state`);
+
       if (s.paused) {
-        dot.className = 'gen-dot draft';
-        label.textContent = 'Paused';
+        if (stateEl) { stateEl.textContent = 'paused'; stateEl.className = 'playback-state paused'; }
         return;
       }
-      dot.className = 'gen-dot playing';
-      if (s.duration_sec) {
-        const pct = Math.min(100, Math.round(s.elapsed_sec / s.duration_sec * 100));
-        label.textContent = `Loop ${s.current_loop}/${s.loops}  ${fmt(s.elapsed_sec)} / ${fmt(s.duration_sec)}  (${pct}%)`;
+
+      if (elapsed) elapsed.textContent = fmt(s.elapsed_sec || 0);
+      if (loopVal && s.loops) loopVal.textContent = `${s.current_loop} / ${s.loops}`;
+      if (stateEl) { stateEl.textContent = 'playing'; stateEl.className = 'playback-state playing'; }
+
+      // highlight current bar
+      if (s.elapsed_sec != null && s.duration_sec && s.bars && s.loops) {
+        const secPerBar = s.duration_sec / (s.bars * s.loops);
+        const currentBar = Math.floor(s.elapsed_sec / secPerBar) % s.bars;
+        highlightBar(currentBar, s.bars);
       }
     } catch(_) {}
-  }, 500);
+  }, 250);
 }
 
 function stopPolling() {
@@ -483,14 +509,10 @@ async function jamPlay() {
   state.jam.style = document.getElementById('jam-style').value;
   state.jam.key = document.getElementById('jam-key').value;
   setPlaybackUI('jam', 'playing');
-  document.getElementById('jam-dot').className = 'gen-dot playing';
-  document.getElementById('jam-label').textContent = 'Generating…';
   setStatus('Playing');
   try {
-    const r = await api('/api/play', 'POST', state.jam);
-    document.getElementById('jam-path').textContent = r.file || '';
-    document.getElementById('jam-label').textContent = `Loop 1/${r.loops}  0:00 / ${fmt(r.duration_sec)}`;
-    startPolling('jam-dot', 'jam-label');
+    await api('/api/play', 'POST', state.jam);
+    startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);
     jamStop();
@@ -513,9 +535,6 @@ async function jamStop() {
   stopPolling();
   await api('/api/stop', 'POST');
   setPlaybackUI('jam', 'stopped');
-  document.getElementById('jam-dot').className = 'gen-dot draft';
-  document.getElementById('jam-label').textContent = 'Stopped';
-  document.getElementById('jam-path').textContent = '';
   setStatus('Ready');
 }
 
@@ -615,39 +634,38 @@ async function openEditor(id) {
 function renderEditorControls() {
   const s = state.editor.song;
   document.getElementById('editor-controls').innerHTML = `
-    <div style="margin-bottom:10px;">
+    <div style="margin-bottom:8px;">
       <button class="btn btn-ghost btn-sm" onclick="showPage('songs')">← Songs</button>
     </div>
     <div class="controls-bar">
-      <div class="field">
-        <label>Title</label>
-        <input type="text" id="ed-title" value="${s.title}" style="width:160px">
+      <div class="controls-row">
+        <div class="field"><label>Title</label>
+          <input type="text" id="ed-title" value="${s.title}" style="width:150px">
+        </div>
+        <div class="field"><label>Key</label>
+          <select id="ed-key">${keyOptions(s.key)}</select>
+        </div>
+        <div class="field"><label>BPM</label>
+          <input type="number" id="ed-bpm" value="${s.bpm}" min="40" max="240" oninput="updateEditorDuration()">
+        </div>
+        <div class="field"><label>Style</label>
+          <select id="ed-style">
+            ${state.styles.map(st => `<option value="${st.id}" ${st.id===s.style?'selected':''}>${st.name}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field"><label>Loops</label>
+          <input type="number" id="ed-loops" value="${s.loops}" min="1" max="20" oninput="updateEditorDuration()">
+          <span class="duration-hint" id="ed-duration"></span>
+        </div>
       </div>
-      <div class="field">
-        <label>Key</label>
-        <select id="ed-key">${keyOptions(s.key)}</select>
+      <div class="controls-row">
+        <button class="btn-icon btn-icon-play"   id="ed-play-btn"   onclick="editorPlay()"   title="Generate &amp; Play">▶</button>
+        <button class="btn-icon btn-icon-stop"   id="ed-stop-btn"   onclick="editorStop()"   title="Stop"   style="display:none">⏹</button>
+        <button class="btn-icon btn-icon-pause"  id="ed-pause-btn"  onclick="editorPause()"  title="Pause"  style="display:none">⏸</button>
+        <button class="btn-icon btn-icon-resume" id="ed-resume-btn" onclick="editorResume()" title="Resume" style="display:none">▶</button>
+        <div class="divider"></div>
+        <button class="btn btn-ghost btn-sm" onclick="saveSong()">Save</button>
       </div>
-      <div class="field">
-        <label>BPM</label>
-        <input type="number" id="ed-bpm" value="${s.bpm}" min="40" max="240" oninput="updateEditorDuration()">
-      </div>
-      <div class="field">
-        <label>Style</label>
-        <select id="ed-style">
-          ${state.styles.map(st => `<option value="${st.id}" ${st.id===s.style?'selected':''}>${st.name}</option>`).join('')}
-        </select>
-      </div>
-      <div class="field">
-        <label>Loops</label>
-        <input type="number" id="ed-loops" value="${s.loops}" min="1" max="20" oninput="updateEditorDuration()">
-        <span class="duration-hint" id="ed-duration"></span>
-      </div>
-      <div class="divider"></div>
-      <button class="btn btn-primary" id="ed-play-btn" onclick="editorPlay()">▶ Generate &amp; Play</button>
-      <button class="btn btn-stop" id="ed-stop-btn" style="display:none" onclick="editorStop()">■ Stop</button>
-      <button class="btn btn-ghost" id="ed-pause-btn" style="display:none" onclick="editorPause()">⏸ Pause</button>
-      <button class="btn btn-ghost" id="ed-resume-btn" style="display:none" onclick="editorResume()">▶ Resume</button>
-      <button class="btn btn-ghost" onclick="saveSong()">Save</button>
     </div>
   `;
   updateEditorDuration();
@@ -663,18 +681,7 @@ function updateEditorDuration() {
 }
 
 function renderEditorGenStatus() {
-  const s = state.editor.song;
-  const dot = document.getElementById('editor-dot');
-  const label = document.getElementById('editor-label');
-  const path = document.getElementById('editor-path');
-  if (s.generated) {
-    dot.className = 'gen-dot ready';
-    label.textContent = 'MIDI ready';
-  } else {
-    dot.className = 'gen-dot draft';
-    label.textContent = 'Not generated yet';
-  }
-  path.textContent = `~/music-practice/songs/${s.id}/accompaniment.mid`;
+  // no-op — status shown in playback-panel now
 }
 
 function renderEditorChart() {
@@ -704,15 +711,11 @@ async function editorPlay() {
   await saveSong();
   const s = state.editor.song;
   setPlaybackUI('ed', 'playing');
-  document.getElementById('editor-dot').className = 'gen-dot playing';
-  document.getElementById('editor-label').textContent = 'Generating…';
   setStatus('Playing');
   try {
-    const r = await api('/api/play', 'POST', { ...s, bars: state.editor.bars });
+    await api('/api/play', 'POST', { ...s, bars: state.editor.bars });
     state.editor.song.generated = true;
-    document.getElementById('editor-label').textContent = `Loop 1/${r.loops}  0:00 / ${fmt(r.duration_sec)}`;
-    document.getElementById('editor-path').textContent = r.file || '';
-    startPolling('editor-dot', 'editor-label');
+    startPolling('ed');
   } catch(e) { setStatus('Error: ' + e.message); editorStop(); }
 }
 
@@ -732,7 +735,6 @@ async function editorStop() {
   stopPolling();
   await api('/api/stop', 'POST');
   setPlaybackUI('ed', 'stopped');
-  renderEditorGenStatus();
   setStatus('Ready');
 }
 

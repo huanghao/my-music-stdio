@@ -194,6 +194,51 @@ def render_harmonic_stack(base_freq=FREQ):
     return samples
 
 
+def render_piano_like(note=C4_MIDI_NOTE, duration=3.0):
+    # A tiny synthetic piano-like tone: fast attack, long decay, many partials.
+    # Real piano is better done with samples or physical modeling; this only
+    # demonstrates the basic idea with inharmonic partials and per-partial decay.
+    base_freq = note_frequency(note)
+    partials = [
+        (1, 1.00, 2.40),
+        (2, 0.55, 1.80),
+        (3, 0.32, 1.35),
+        (4, 0.22, 1.05),
+        (5, 0.16, 0.85),
+        (6, 0.11, 0.65),
+        (8, 0.07, 0.45),
+        (10, 0.04, 0.30),
+    ]
+    total = int(SAMPLE_RATE * duration)
+    samples = []
+    attack = int(0.006 * SAMPLE_RATE)
+    inharmonicity = 0.0008
+
+    for index in range(total):
+        time = float(index) / SAMPLE_RATE
+        if index < attack:
+            attack_amp = float(index) / attack
+        else:
+            attack_amp = 1.0
+
+        value = 0.0
+        for multiple, amp, decay_seconds in partials:
+            stretched = multiple * math.sqrt(1.0 + inharmonicity * multiple * multiple)
+            partial_freq = base_freq * stretched
+            partial_decay = math.exp(-time / decay_seconds)
+            value += amp * partial_decay * sine(time, partial_freq)
+
+        # A very short hammer-like click gives the attack more piano character.
+        hammer_noise = 0.0
+        if index < int(0.018 * SAMPLE_RATE):
+            hammer_noise = 0.025 * math.sin(2 * math.pi * 3200.0 * time)
+            hammer_noise *= math.exp(-time / 0.006)
+
+        samples.append(0.38 * (value + hammer_noise) * attack_amp)
+
+    return samples
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Generate sine/saw/square/filter demo WAV files.",
@@ -234,6 +279,7 @@ def main():
         ("c_major_chord.wav", c_major_chord),
         ("c_major_arpeggio.wav", render_arpeggio(c_major_notes)),
         ("harmonic_stack.wav", render_harmonic_stack(FREQ)),
+        ("piano_like_c4.wav", render_piano_like(C4_MIDI_NOTE)),
     ]
 
     for filename, samples in outputs:
@@ -242,7 +288,7 @@ def main():
     plot_path = args.plot_path or os.path.join(out_dir, "waveforms.png")
     plot_waveforms(outputs, plot_path)
 
-    print("Generated {0} files in {1}".format(len(outputs), out_dir))
+    print("Generated {0} WAV files in {1}".format(len(outputs), out_dir))
     for filename, _ in outputs:
         print("- {0}".format(os.path.join(out_dir, filename)))
     print("- {0}".format(plot_path))

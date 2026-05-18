@@ -135,30 +135,25 @@ A sawtooth oscillator through a low-pass filter is a classic synth bass starting
 
 最小演示不需要 MIDI，也不需要插件；直接用程序生成 PCM 音频即可。示例脚本在 [src/synth_wave_demo.py](../src/synth_wave_demo.py)。
 
-脚本会生成几个 `.wav` 文件：
+脚本会生成一组 `.wav` 文件和一张波形对比图。下面这张图来自脚本生成的 `waveforms.png`：
 
-- `sine.wav`：220 Hz 正弦波单音。
-- `saw.wav`：220 Hz 锯齿波单音。
-- `square.wav`：220 Hz 方波单音。
-- `saw_no_envelope_click.wav`：没有包络的锯齿波，开头和结尾更容易有 click。
-- `saw_lowpass.wav`：锯齿波经过低通滤波器后的声音。
-- `saw_sweep.wav`：低通 cutoff 从低到高扫动的声音。
-- `c4_sine.wav`：C4 的正弦波单音。
-- `c_major_chord.wav`：C4、E4、G4 同时响的大三和弦。
-- `c_major_arpeggio.wav`：C4、E4、G4 依次响的琶音。
-- `harmonic_stack.wav`：用 220 Hz 基频叠加多个泛音的声音。
+![波形对比图](assets/synth-waveforms.png)
 
-听的时候重点比较：
+生成文件和听感对比：
 
-- `sine.wav` 泛音少，最纯。
-- `saw.wav` 泛音多，明亮刺耳。
-- `square.wav` 有明显电子感。
-- `saw_no_envelope_click.wav` 的开头/结尾比 `saw.wav` 更突兀。
-- `saw_lowpass.wav` 比 `saw.wav` 暗，因为高频被滤掉。
-- `saw_sweep.wav` 会从暗变亮，因为 cutoff 逐渐升高。
-- `c_major_chord.wav` 是三个音同时叠加，听起来是和弦。
-- `c_major_arpeggio.wav` 是三个音依次出现，听起来是琶音。
-- `harmonic_stack.wav` 和 `sine.wav` 音高接近，但音色更丰富，因为多了泛音。
+| 文件 | 内容 | 重点听什么 |
+| --- | --- | --- |
+| `sine.wav` | 220 Hz 正弦波单音 | 泛音少，最纯，像测试音。 |
+| `saw.wav` | 220 Hz 锯齿波单音 | 泛音多，明亮、刺耳。 |
+| `square.wav` | 220 Hz 方波单音 | 音高接近 220 Hz，但更空心、更电子。 |
+| `saw_no_envelope_click.wav` | 没有包络的锯齿波 | 开头和结尾比 `saw.wav` 更突兀，可能有 click。 |
+| `saw_lowpass.wav` | 锯齿波经过低通滤波器 | 比 `saw.wav` 暗，因为高频被滤掉。 |
+| `saw_sweep.wav` | 低通 cutoff 从低到高扫动 | 从暗变亮，能听到滤波器打开。 |
+| `c4_sine.wav` | C4 的正弦波单音 | 音高变成 C4，但音色仍是纯正弦。 |
+| `c_major_chord.wav` | C4、E4、G4 同时响 | 三个频率同时叠加，听起来是和弦。 |
+| `c_major_arpeggio.wav` | C4、E4、G4 依次响 | 三个音按时间展开，听起来是琶音。 |
+| `harmonic_stack.wav` | 220 Hz 基频叠加多个泛音 | 音高接近 `sine.wav`，但音色更丰富。 |
+| `piano_like_c4.wav` | 合成近似的类钢琴 C4 | 比 `c4_sine.wav` 更像敲击类乐器，但不是真实钢琴采样。 |
 
 这就是最基础的 subtractive synthesis：先产生富含泛音的波形，再用滤波器削掉一部分频率。
 
@@ -202,6 +197,25 @@ FREQ = 220.0
 frequency = 440 * 2 ** ((midi_note - 69) / 12)
 ```
 
+这个公式来自两个约定：
+
+1. 八度关系：高一个八度，频率翻倍；低一个八度，频率减半。所以 A3 是 220 Hz，A4 是 440 Hz，A5 是 880 Hz。
+2. 十二平均律：一个八度被平均分成 12 个半音，每个半音的频率比例相同。
+
+如果 12 个半音之后频率要刚好翻倍，那么每个半音的比例 `r` 必须满足：
+
+```text
+r ** 12 = 2
+r = 2 ** (1 / 12)
+```
+
+MIDI note 69 被约定为 A4，也就是 440 Hz。某个 MIDI note 和 69 差多少个半音，就把 440 乘上多少次 `2 ** (1 / 12)`：
+
+```text
+frequency = 440 * (2 ** (1 / 12)) ** (midi_note - 69)
+          = 440 * 2 ** ((midi_note - 69) / 12)
+```
+
 例子：
 
 | 音名 | MIDI note | 频率 |
@@ -228,6 +242,14 @@ frequency = 440 * 2 ** ((midi_note - 69) / 12)
 - 20000 Hz 以上：多数人听不到，很多设备也不完整重放。
 
 合成器里即使振荡器产生了很高的泛音，超过人耳或采样率可表达范围后也不能正常听到。数字音频还受 Nyquist 频率限制：采样率 44100 Hz 时，理论上最高只能表示 22050 Hz 以下的频率。
+
+50 Hz 交流电本身不是“空气中的声音”，所以你不会直接听到电压。人能听到的是空气压力变化。220V/50Hz 交流电如果让某个设备的线圈、变压器铁芯、灯具外壳或扬声器发生机械振动，就可能听到 50 Hz 或 100 Hz 的嗡声。很多电器的 hum 就是这个原因。
+
+所以：
+
+- 50 Hz 作为空气振动，音量足够时可以听到，是很低的嗡声。
+- 电线里 50 Hz 的电压变化，如果没有转成机械振动或扬声器运动，人耳听不到。
+- 普通音响播放 50 Hz 正弦波时能听到或感到低频，但小手机/笔记本扬声器可能放不出来。
 
 ### `sine` 做什么
 
@@ -325,6 +347,10 @@ PCM int16:    -32768 ... 32767
 5th harmonic: 1100 Hz
 ```
 
+是的，220 Hz 到 440 Hz 正好高一个八度，因为频率翻倍就是高一个八度。这里的 2nd harmonic 既是 A3 的第二泛音，也是 A4 的基频频率。
+
+但在听感上，`220 Hz + 440 Hz + 660 Hz...` 这一组泛音通常仍会被听成以 220 Hz 为主的一个音，而不是“同时弹了 A3 和 A4”。原因是这些频率形成同一个 harmonic series，大脑会把它们归并成一个带有特定音色的整体。
+
 人耳通常把最低的基频听成主要音高，而把上面的泛音听成音色差异。钢琴、小提琴、吉他、合成器锯齿波听起来不同，很大一部分原因就是泛音结构不同。
 
 脚本里的 `harmonic_stack.wav` 是手工叠加 220 Hz、440 Hz、660 Hz、880 Hz、1100 Hz 等频率。它的音高仍接近 220 Hz，但比纯正弦波更有“质感”。
@@ -343,6 +369,51 @@ PCM int16:    -32768 ... 32767
 | `saw_lowpass.wav` | 220 Hz | 高频泛音被削掉 | 音高不变，但音色变暗 |
 
 这就是合成器里“同一个音高可以有不同音色”的基础。
+
+### 能不能生成钢琴音色的 C4
+
+可以，但要看目标是“类钢琴”还是“真实钢琴”。
+
+有三种常见路线：
+
+1. 合成近似钢琴音色：用多个衰减很快的泛音叠加，再加快速 attack、长 decay 和一点敲击感。能听出是类似电钢/敲击乐器，但不等于真实钢琴。
+2. 采样器方式：录下真实钢琴 C4，再按 MIDI 触发播放。真实钢琴音源通常靠大量采样，包括不同力度、踏板状态和 release sample。
+3. 物理建模：用算法模拟琴槌、琴弦、共鸣板、踏板、琴体共鸣。可控性强，但实现复杂。
+
+当前 demo 用的是第一种，也就是“合成近似”。核心思路：
+
+```text
+C4 基频 261.63 Hz
+  + 2 倍频附近
+  + 3 倍频附近
+  + 4 倍频附近
+  + 更高 partials
+  + 快 attack
+  + 长 decay
+  + 高频 partials 衰减更快
+  + 轻微 inharmonicity
+```
+
+真实钢琴有一个关键特征：泛音不是完美整数倍。钢琴弦有 stiffness，高频 partial 会略微偏离整数倍，这叫 inharmonicity。再加上琴槌敲击噪声、共鸣板、踏板和房间空间感，纯算法 demo 只能近似。
+
+脚本里的 `piano_like_c4.wav` 做了几件事：
+
+- 用 C4 频率作为基频。
+- 叠加多个 partial。
+- 高频 partial 音量更小、衰减更快。
+- 每个 partial 加一点 inharmonicity。
+- 开头加很短的 hammer-like 高频成分。
+- 用快 attack 和长 decay 模拟“敲一下后自然衰减”。
+
+如果目标是真实钢琴，应优先用采样器方式：
+
+```text
+录制或加载真实钢琴 C4 sample
+  -> 按 velocity 选择采样层
+  -> Note On 时播放 sample
+  -> Note Off 时触发 release envelope 或 release sample
+  -> 踏板时延长 release 并加入共鸣
+```
 
 ### Filter
 

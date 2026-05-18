@@ -112,13 +112,6 @@ input[type="number"] { width: 64px; text-align: center; }
 .playback-meta { display: flex; flex-direction: column; align-items: center; }
 .playback-meta-val { font-size: 22px; font-weight: 600; color: #2a2a2a; line-height: 1; }
 .playback-meta-lbl { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-.live-bpm {
-  display: flex; align-items: center; gap: 8px; flex: 1;
-}
-.live-bpm-label { font-size: 11px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
-.live-bpm input[type="range"] { flex: 1; accent-color: #4a7c4a; }
-.live-bpm-val { font-size: 14px; font-weight: 600; color: #2a2a2a; min-width: 32px; text-align: right; }
-
 .playback-state {
   font-size: 11px; color: #aaa; text-transform: uppercase;
   letter-spacing: 0.8px; margin-left: auto;

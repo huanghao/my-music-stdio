@@ -410,7 +410,7 @@ function renderVampControls() {
         </div>
         <div class="field"><label>BPM</label>
           <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
-            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp')">
+            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value)">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:52px"
@@ -494,7 +494,7 @@ function renderJamControls() {
           <select id="jam-key">${keyOptions(state.jam.key)}</select>
         </div>
         <div class="field"><label>BPM</label>
-          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromDuration('jam')">
+          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromDuration('jam'); liveSetBpm(this.value)">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:52px"
@@ -576,13 +576,9 @@ function renderJamChart() {
     h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
 }
 
-async function onLiveBpm(prefix, val) {
+async function liveSetBpm(val) {
   const bpm = parseInt(val);
-  const valEl = document.getElementById(`${prefix}-bpm-val`);
-  if (valEl) valEl.textContent = bpm;
-  // also sync the controls bar BPM input
-  const bpmInput = document.getElementById(`${prefix}-bpm`);
-  if (bpmInput) bpmInput.value = bpm;
+  if (!bpm || !_connOk) return;
   try { await api('/api/bpm', 'POST', { bpm }); } catch(_) {}
 }
 
@@ -602,20 +598,6 @@ function setPlaybackUI(prefix, state_) {
   const stateEl = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-state`);
   if (panel) panel.className = 'playback-panel' + (state_ === 'playing' ? ' playing' : '');
   if (stateEl) { stateEl.textContent = state_; stateEl.className = 'playback-state ' + state_; }
-
-  // show live BPM slider only while playing or paused
-  const liveBpm = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-live-bpm`);
-  if (liveBpm) liveBpm.style.display = state_ !== 'stopped' ? '' : 'none';
-
-  if (state_ === 'playing') {
-    // sync slider to current BPM input value
-    const bpmInput = document.getElementById(`${prefix}-bpm`) || document.getElementById('ed-bpm');
-    const slider = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-bpm-slider`);
-    const valEl  = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-bpm-val`);
-    const bpm = parseInt(bpmInput?.value) || 120;
-    if (slider) slider.value = bpm;
-    if (valEl)  valEl.textContent = bpm;
-  }
 
   if (state_ === 'stopped') {
     const elapsed = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-elapsed`);

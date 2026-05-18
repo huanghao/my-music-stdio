@@ -146,6 +146,7 @@ class Player:
     def play(self, midi_file: str, bpm: float | None = None) -> None:
         self.stop()
         self._ensure_synth()
+        self._init_gm_channels()  # reset channels on every play
         self._stop_event.clear()
         self._pause_event.set()
         with self._lock:

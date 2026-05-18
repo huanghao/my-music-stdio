@@ -1,3 +1,11 @@
+// ── Constants ──
+const ALL_KEYS = ['C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B',
+                  'Am','Bm','Cm','Dm','Em','F#m','Gm'];
+
+function keyOptions(selected) {
+  return ALL_KEYS.map(k => `<option value="${k}" ${k===selected?'selected':''}>${k}</option>`).join('');
+}
+
 // ── State ──
 const state = {
   styles: [],
@@ -52,7 +60,7 @@ function beatsForChords(chords) {
   return chords.map(c => ({ ...c, beats: c.beats || 1 }));
 }
 
-function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAddBar) {
+function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAddBar, onDeleteChord) {
   containerEl.innerHTML = '';
   const wrap = document.createElement('div');
   wrap.className = 'chart-wrap';
@@ -97,19 +105,42 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
         beatsEl.appendChild(cell);
       } else {
         chordsWithBeats.forEach((chord, ci) => {
+          // ＋ insert-before button between chords
           if (ci > 0) {
-            const div = document.createElement('div');
-            div.className = 'beat-divider';
-            beatsEl.appendChild(div);
+            const ins = document.createElement('div');
+            ins.className = 'beat-insert';
+            ins.innerHTML = '<span>+</span>';
+            ins.title = 'Insert chord here';
+            ins.addEventListener('click', e => { e.stopPropagation(); onChordClick(barIdx, ci, true); });
+            beatsEl.appendChild(ins);
           }
           const cell = document.createElement('div');
           cell.className = 'beat-cell';
           cell.style.flex = chord.beats;
-          cell.innerHTML = `<span class="chord-name">${chord.name}</span>`;
-          cell.addEventListener('click', e => { e.stopPropagation(); onChordClick(barIdx, ci, false); });
+          // chord name (click to edit) + × delete button
+          cell.innerHTML = `
+            <span class="chord-name" title="Click to edit">${chord.name}</span>
+            <button class="chord-del" title="Delete">×</button>
+          `;
+          cell.querySelector('.chord-name').addEventListener('click', e => {
+            e.stopPropagation(); onChordClick(barIdx, ci, false);
+          });
+          cell.querySelector('.chord-del').addEventListener('click', e => {
+            e.stopPropagation();
+            if (onDeleteChord) onDeleteChord(barIdx, ci);
+          });
           cell.addEventListener('contextmenu', e => { e.preventDefault(); onChordCtx(e, barIdx, ci); });
           beatsEl.appendChild(cell);
         });
+        // ＋ append-after button at end of bar
+        const appendBtn = document.createElement('div');
+        appendBtn.className = 'beat-insert beat-append';
+        appendBtn.innerHTML = '<span>+</span>';
+        appendBtn.title = 'Add chord';
+        appendBtn.addEventListener('click', e => {
+          e.stopPropagation(); onChordClick(barIdx, chordsWithBeats.length, true);
+        });
+        beatsEl.appendChild(appendBtn);
       }
 
       barEl.appendChild(beatsEl);
@@ -188,6 +219,10 @@ document.getElementById('modal-input').addEventListener('keydown', e => {
 
 // ── Chord chart helpers (shared between Jam and Editor) ──
 function makeChordHandlers(getBars, rerenderFn) {
+  const onDeleteChord = (barIdx, chordIdx) => {
+    getBars()[barIdx].chords.splice(chordIdx, 1);
+    rerenderFn();
+  };
   const onChordClick = (barIdx, chordIdx, isNew) => {
     const bar = getBars()[barIdx];
     openModal(isNew ? `Bar ${barIdx+1} · Add Chord` : `Bar ${barIdx+1} · Edit`,
@@ -239,7 +274,7 @@ function makeChordHandlers(getBars, rerenderFn) {
     ]);
   };
   const onAddBar = () => { getBars().push({ chords: [] }); rerenderFn(); };
-  return { onChordClick, onChordCtx, onBarCtx, onAddBar };
+  return { onChordClick, onChordCtx, onBarCtx, onAddBar, onDeleteChord };
 }
 
 // ── Jam page ──
@@ -256,10 +291,7 @@ function renderJamControls() {
       </div>
       <div class="field">
         <label>Key</label>
-        <select id="jam-key">
-          ${['C','G','D','A','E','B','F','Bb','Eb','Ab','Am','Em','Dm'].map(k =>
-            `<option value="${k}">${k}</option>`).join('')}
-        </select>
+        <select id="jam-key">${keyOptions(state.jam.key)}</select>
       </div>
       <div class="field">
         <label>BPM</label>
@@ -307,7 +339,7 @@ function updateJamDuration() {
 function renderJamChart() {
   const h = makeChordHandlers(() => state.jam.bars, () => { renderJamChart(); updateJamDuration(); });
   renderChart(document.getElementById('jam-chart'), state.jam.bars,
-    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar);
+    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord);
 }
 
 async function jamPlay() {
@@ -444,10 +476,7 @@ function renderEditorControls() {
       </div>
       <div class="field">
         <label>Key</label>
-        <select id="ed-key">
-          ${['C','G','D','A','E','B','F','Bb','Eb','Ab','Am','Em','Dm'].map(k =>
-            `<option value="${k}" ${k===s.key?'selected':''}>${k}</option>`).join('')}
-        </select>
+        <select id="ed-key">${keyOptions(s.key)}</select>
       </div>
       <div class="field">
         <label>BPM</label>
@@ -500,7 +529,7 @@ function renderEditorGenStatus() {
 function renderEditorChart() {
   const h = makeChordHandlers(() => state.editor.bars, () => { renderEditorChart(); updateEditorDuration(); });
   renderChart(document.getElementById('editor-chart'), state.editor.bars,
-    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar);
+    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord);
 }
 
 async function saveSong() {

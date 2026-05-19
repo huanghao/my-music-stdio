@@ -457,7 +457,7 @@ async function vampPlay() {
   const payload = {
     bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
     bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
-    fill_every: 4,
+    fill_every: 8,
   };
   setPlaybackUI('vamp', 'playing');
   renderVampPhrase(-1);
@@ -689,7 +689,7 @@ async function jamPlay() {
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, fill_every: 4 });
+    await api('/api/play', 'POST', { ...state.jam, fill_every: 8 });
     startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);

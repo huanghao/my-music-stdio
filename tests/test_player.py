@@ -78,3 +78,38 @@ def test_play_replaces_previous(player, tmp_path):
     time.sleep(0.05)
     assert player.status()["file"] == f2
     player.stop()
+
+
+def test_status_includes_session_metadata(player, tmp_path):
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(
+        f,
+        bpm=120,
+        session_meta={"duration_sec": 8, "loops": 2, "bars": 4, "bpm": 120},
+    )
+    time.sleep(0.05)
+
+    s = player.status()
+
+    assert s["playing"] is True
+    assert s["duration_sec"] == 8
+    assert s["loops"] == 2
+    assert s["bars"] == 4
+    assert s["bpm"] == 120
+    assert s["current_loop"] == 1
+    player.stop()
+
+
+def test_set_bpm_updates_session_metadata(player, tmp_path):
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(
+        f,
+        bpm=120,
+        session_meta={"duration_sec": 8, "loops": 2, "bars": 4, "bpm": 120},
+    )
+    time.sleep(0.05)
+
+    player.set_bpm(144)
+
+    assert player.status()["bpm"] == 144
+    player.stop()

@@ -13,9 +13,11 @@ import random
 
 import mido
 
+from src import style_patterns
+
 PPQ = 480
 TICKS_PER_BAR = PPQ * 4
-REPEATS = 4
+DEFAULT_LOOPS = 4
 
 # --- chord builder ---
 
@@ -318,7 +320,12 @@ def humanize(tick: int, velocity: int, tick_jitter: int = 8, vel_jitter: int = 8
 
 # --- event builders ---
 
-def piano_bar_events(chord: str, bar_offset: int, style: str = "pop") -> list[tuple[int, mido.Message]]:
+def piano_bar_events(
+    chord: str,
+    bar_offset: int,
+    style: str = "pop",
+    bar_role: str = "phrase_middle",
+) -> list[tuple[int, mido.Message]]:
     notes = chord_midi_notes(chord)
     events = []
 
@@ -328,7 +335,16 @@ def piano_bar_events(chord: str, bar_offset: int, style: str = "pop") -> list[tu
             events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
             events.append((t + dur, mido.Message("note_off", channel=0, note=n, velocity=0)))
 
-    if style in ("funk", "rnb"):
+    if style in style_patterns.PIANO_PATTERNS:
+        pattern = style_patterns.PIANO_PATTERNS[style]
+        ticks_per_slot = PPQ * 4 // pattern.grid_slots
+        for rule in style_patterns.piano_rules(style, bar_role):
+            hit(
+                rule.slot * ticks_per_slot,
+                rule.velocity,
+                int(rule.duration_slots * ticks_per_slot),
+            )
+    elif style in ("funk", "rnb"):
         # Staccato stabs on offbeats: beat 2-and, beat 4
         hit(PPQ + PPQ // 2, 88, PPQ // 3)
         hit(PPQ * 3,        75, PPQ // 3)
@@ -357,13 +373,9 @@ def piano_bar_events(chord: str, bar_offset: int, style: str = "pop") -> list[tu
     return events
 
 
-def bass_bar_events(chord: str, bar_offset: int, next_chord: str | None = None) -> list[tuple[int, mido.Message]]:
-    """Walking bass: root → third → fifth → approach note to next chord."""
-    events = []
+def _bass_context(chord: str, next_chord: str | None = None) -> dict[str, int]:
     root, quality = parse_chord(chord)
     intervals = QUALITY_INTERVALS[quality]
-    third = root + intervals[1]  # minor or major third
-    fifth = root + 7
 
     # beat 4 approach: chromatic step toward next chord's root
     if next_chord:
@@ -380,6 +392,7 @@ def bass_bar_events(chord: str, bar_offset: int, next_chord: str | None = None) 
         approach = root  # no movement, stay on root
 
     bass_root = bass_root_midi(chord)
+
     # map voice-leading notes to bass octave range
     def to_bass(midi_note: int) -> int:
         b = (bass_root // 12) * 12 + (midi_note % 12)
@@ -387,22 +400,72 @@ def bass_bar_events(chord: str, bar_offset: int, next_chord: str | None = None) 
             b -= 12
         return b
 
-    walk = [
-        (0,           bass_root,        95),   # beat 1: root (strong)
-        (PPQ,         to_bass(third),   78),   # beat 2: third
-        (PPQ * 2,     to_bass(fifth),   82),   # beat 3: fifth
-        (PPQ * 3,     to_bass(approach), 72),  # beat 4: approach
-    ]
-    dur = PPQ - 30
-    for beat_tick, note, base_vel in walk:
+    return {
+        "root": bass_root,
+        "third": to_bass(root + intervals[1]),
+        "fifth": to_bass(root + 7),
+        "octave": bass_root + 12,
+        "approach_next": to_bass(approach),
+    }
+
+
+def bass_bar_events(
+    chord: str,
+    bar_offset: int,
+    next_chord: str | None = None,
+    style: str = "pop",
+    bar_role: str = "phrase_middle",
+) -> list[tuple[int, mido.Message]]:
+    events = []
+    bass_notes = _bass_context(chord, next_chord)
+
+    if style in style_patterns.BASS_PATTERNS:
+        pattern = style_patterns.BASS_PATTERNS[style]
+        ticks_per_slot = PPQ * 4 // pattern.grid_slots
+        rules = style_patterns.bass_rules(style, bar_role)
+        hits = [
+            (
+                rule.slot * ticks_per_slot,
+                bass_notes[rule.degree],
+                rule.velocity,
+                int(ticks_per_slot * rule.duration_slots),
+            )
+            for rule in rules
+        ]
+    else:
+        hits = [
+            (0,       bass_notes["root"],          95, PPQ - 30),
+            (PPQ,     bass_notes["third"],         78, PPQ - 30),
+            (PPQ * 2, bass_notes["fifth"],         82, PPQ - 30),
+            (PPQ * 3, bass_notes["approach_next"], 72, PPQ - 30),
+        ]
+
+    for beat_tick, note, base_vel, dur in hits:
         t, v = humanize(bar_offset + beat_tick, base_vel, tick_jitter=4, vel_jitter=7)
         events.append((t, mido.Message("note_on",  channel=1, note=note, velocity=v)))
         events.append((t + dur, mido.Message("note_off", channel=1, note=note, velocity=0)))
     return events
 
 
-def drum_bar_events(groove_fn, bar_offset: int, is_fill: bool, style: str = "pop") -> list[tuple[int, mido.Message]]:
-    raw = groove_fn(bar_offset, False)  # groove functions no longer handle fills
+def _bar_role(global_bar: int, is_fill: bool, fill_every: int) -> str:
+    if is_fill:
+        return "phrase_end"
+    if fill_every > 0 and global_bar % fill_every == 0:
+        return "phrase_start"
+    return "phrase_middle"
+
+
+def drum_bar_events(
+    groove_fn,
+    bar_offset: int,
+    is_fill: bool,
+    style: str = "pop",
+    bar_role: str = "phrase_middle",
+) -> list[tuple[int, mido.Message]]:
+    if style in style_patterns.DRUM_PATTERNS:
+        raw = style_patterns.drum_bar_raw_events(style, bar_offset, bar_role, PPQ)
+    else:
+        raw = groove_fn(bar_offset, False)  # groove functions no longer handle fills
     if is_fill:
         raw = raw + _pick_fill(style, bar_offset)
     events = []
@@ -417,23 +480,30 @@ def drum_bar_events(groove_fn, bar_offset: int, is_fill: bool, style: str = "pop
 
 # --- track builder ---
 
-def build_track(progression: list[str], bpm: int, style: str, fill_every: int = 4) -> mido.MidiTrack:
+def build_track(
+    progression: list[str],
+    bpm: int,
+    style: str,
+    fill_every: int = 4,
+    loops: int = DEFAULT_LOOPS,
+) -> mido.MidiTrack:
     groove_fn = GROOVE_FN[style]
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("set_tempo", tempo=int(60_000_000 / bpm), time=0))
     track.append(mido.Message("program_change", channel=1, program=32, time=0))  # Acoustic Bass
 
     all_events: list[tuple[int, mido.Message]] = []
-    total_bars = REPEATS * len(progression)
-    flat = progression * REPEATS  # all bars in order
+    total_bars = loops * len(progression)
+    flat = progression * loops  # all bars in order
     for global_bar, chord in enumerate(flat):
         bar_offset = global_bar * TICKS_PER_BAR
         is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
+        bar_role = _bar_role(global_bar, is_fill, fill_every)
         next_chord = flat[global_bar + 1] if global_bar + 1 < total_bars else None
 
-        all_events += piano_bar_events(chord, bar_offset, style)
-        all_events += bass_bar_events(chord, bar_offset, next_chord)
-        all_events += drum_bar_events(groove_fn, bar_offset, is_fill, style)
+        all_events += piano_bar_events(chord, bar_offset, style, bar_role)
+        all_events += bass_bar_events(chord, bar_offset, next_chord, style, bar_role)
+        all_events += drum_bar_events(groove_fn, bar_offset, is_fill, style, bar_role)
 
     all_events.sort(key=lambda e: e[0])
     prev_tick = 0
@@ -452,13 +522,9 @@ def main() -> None:
     parser.add_argument("chords", nargs="*", default=["C", "Am", "F", "G"])
     parser.add_argument("--bpm",   type=int, default=120)
     parser.add_argument("--style", choices=list(GROOVE_FN), default="pop")
-    parser.add_argument("--bars",  type=int, default=None, help="override REPEATS")
+    parser.add_argument("--bars",  type=int, default=DEFAULT_LOOPS, help="loop count")
     parser.add_argument("--out",   default=None)
     args = parser.parse_args()
-
-    global REPEATS
-    if args.bars:
-        REPEATS = args.bars
 
     progression = BLUES_12_BAR if args.style == "blues" and args.chords == ["C", "Am", "F", "G"] else args.chords
 
@@ -474,9 +540,9 @@ def main() -> None:
     out = args.out or f"output/{name}_{args.style}_{args.bpm}bpm.mid"
 
     mid = mido.MidiFile(type=0, ticks_per_beat=PPQ)
-    mid.tracks.append(build_track(progression, args.bpm, args.style))
+    mid.tracks.append(build_track(progression, args.bpm, args.style, loops=args.bars))
     mid.save(out)
-    print(f"Saved: {out}  ({REPEATS * len(progression)} bars, {args.bpm} BPM, style={args.style})")
+    print(f"Saved: {out}  ({args.bars * len(progression)} bars, {args.bpm} BPM, style={args.style})")
 
 
 if __name__ == "__main__":

@@ -42,6 +42,7 @@ class Player:
         self._total_paused: float = 0.0
         self._bpm: float = 120.0  # dynamically adjustable
         self._midi_tempo: int = 500_000  # microseconds per beat from MIDI file
+        self._session_meta: dict = {}
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
@@ -126,6 +127,7 @@ class Player:
             if self._current_file == midi_file:
                 self._current_file = None
                 self._started_at = None
+                self._session_meta = {}
 
     def set_soundfont(self, path: str) -> None:
         path = str(Path(path).expanduser())
@@ -142,8 +144,15 @@ class Player:
     def set_bpm(self, bpm: float) -> None:
         with self._lock:
             self._bpm = max(20.0, min(300.0, float(bpm)))
+            if self._session_meta:
+                self._session_meta["bpm"] = self._bpm
 
-    def play(self, midi_file: str, bpm: float | None = None) -> None:
+    def play(
+        self,
+        midi_file: str,
+        bpm: float | None = None,
+        session_meta: dict | None = None,
+    ) -> None:
         self.stop()
         self._ensure_synth()
         self._init_gm_channels()  # reset channels on every play
@@ -156,6 +165,9 @@ class Player:
             self._total_paused = 0.0
             if bpm is not None:
                 self._bpm = max(20.0, min(300.0, float(bpm)))
+            self._session_meta = dict(session_meta or {})
+            if self._session_meta and bpm is not None:
+                self._session_meta["bpm"] = self._bpm
         self._thread = threading.Thread(
             target=self._playback_loop, args=(midi_file,), daemon=True
         )
@@ -173,6 +185,7 @@ class Player:
             self._started_at = None
             self._paused_at = None
             self._total_paused = 0.0
+            self._session_meta = {}
 
     def pause(self) -> None:
         self._pause_event.clear()
@@ -196,6 +209,7 @@ class Player:
             started = self._started_at
             total_paused = self._total_paused
             paused_at = self._paused_at
+            session_meta = dict(self._session_meta)
         if playing and started:
             now = _time.monotonic()
             raw = now - started - total_paused
@@ -204,7 +218,21 @@ class Player:
             elapsed = round(max(0.0, raw), 3)
         else:
             elapsed = None
-        return {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed}
+        status = {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed}
+        if playing and session_meta:
+            status.update(session_meta)
+            duration = session_meta.get("duration_sec")
+            loops = session_meta.get("loops")
+            if elapsed is not None and duration and loops:
+                sec_per_loop = duration / loops
+                status["current_loop"] = (
+                    min(int(elapsed / sec_per_loop) + 1, loops)
+                    if sec_per_loop > 0
+                    else 1
+                )
+            else:
+                status["current_loop"] = 1
+        return status
 
     def close(self) -> None:
         self.stop()

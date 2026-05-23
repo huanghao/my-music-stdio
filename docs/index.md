@@ -17,6 +17,7 @@
 
 - [alphaTab 渲染调研](alphatab-rendering-research.md)：alphaTab 的定位、数据模型、文件导入、谱面渲染、播放同步和集成风险。
 - [伴奏生成调研](accompaniment-generation-research.md)：规则和 pattern 伴奏生成、各声部逻辑、MVP 工作拆解和参考产品。
+- [伴奏风格模式设计](style-pattern-design.md)：把音乐人描述风格的方式拆成风格画像、声部策略、候选 pattern 和变化规则，避免把风格写成死板事件表。
 
 ## 数字音乐基础设施
 

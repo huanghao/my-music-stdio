@@ -1,8 +1,8 @@
 import json
 import re
 import shutil
-import signal
 import time as _time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -15,14 +15,16 @@ from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
 
-app = FastAPI()
 _player = Player()
-_play_meta: dict = {}  # stores duration_sec and loops for the current play session
 
-def _shutdown(signum, frame):
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
     _player.close()
 
-signal.signal(signal.SIGTERM, _shutdown)
+
+app = FastAPI(lifespan=lifespan)
 
 
 def _songs_dir() -> Path:
@@ -149,27 +151,25 @@ def api_play(song: dict):
         tmp_dir.mkdir(exist_ok=True)
         midi_path = str(tmp_dir / "jam_accompaniment.mid")
 
-    original_repeats = gen.REPEATS
-    gen.REPEATS = loops
     mid = mido.MidiFile(type=0, ticks_per_beat=gen.PPQ)
-    mid.tracks.append(gen.build_track(progression, bpm, style, fill_every=fill_every))
+    mid.tracks.append(
+        gen.build_track(progression, bpm, style, fill_every=fill_every, loops=loops)
+    )
     mid.save(midi_path)
-    gen.REPEATS = original_repeats
 
     # compute total duration
     bars_per_loop = len(song.get("bars", []))
     sec_per_bar = 4 * 60 / bpm
     duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
 
-    _player.set_soundfont(soundfont)
-    _play_meta.clear()
-    _play_meta.update({
+    session_meta = {
         "duration_sec": duration_sec,
         "loops": loops,
         "bars": bars_per_loop,
         "bpm": bpm,
-    })
-    _player.play(midi_path, bpm=bpm)
+    }
+    _player.set_soundfont(soundfont)
+    _player.play(midi_path, bpm=bpm, session_meta=session_meta)
 
     if song_id:
         try:
@@ -185,7 +185,6 @@ def api_play(song: dict):
 def api_set_bpm(body: dict):
     bpm = float(body.get("bpm", 120))
     _player.set_bpm(bpm)
-    _play_meta["bpm"] = bpm
     return {"bpm": bpm}
 
 
@@ -209,20 +208,7 @@ def api_resume():
 
 @app.get("/api/status")
 def api_status():
-    s = _player.status()
-    if s["playing"] and _play_meta:
-        elapsed = s.get("elapsed_sec")  # from first note, set by player
-        duration = _play_meta["duration_sec"]
-        s["duration_sec"] = duration
-        s["loops"] = _play_meta["loops"]
-        s["bars"] = _play_meta["bars"]
-        s["bpm"] = _play_meta["bpm"]
-        if elapsed is not None:
-            sec_per_loop = duration / _play_meta["loops"] if _play_meta["loops"] else duration
-            s["current_loop"] = min(int(elapsed / sec_per_loop) + 1, _play_meta["loops"]) if sec_per_loop > 0 else 1
-        else:
-            s["current_loop"] = 1
-    return s
+    return _player.status()
 
 
 @app.get("/api/soundfonts")

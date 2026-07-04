@@ -2594,12 +2594,16 @@ function fbAutoCorrelate(buf, sampleRate, rmsThreshold = 0.01) {
   rms = Math.sqrt(rms / SIZE);
   if (rms < rmsThreshold) return -1; // too quiet / silence
 
+  // Trim leading/trailing near-silence so autocorrelation focuses on signal.
+  // Fallback to the full buffer when the signal is consistently quiet (e.g. a
+  // decaying bent string whose amplitude is below 0.2 throughout) rather than
+  // returning -1 and discarding a valid but soft note.
   const THRES = 0.2;
   let start = 0;
   while (start < SIZE / 2 && Math.abs(buf[start]) < THRES) start++;
   let end = SIZE - 1;
   while (end > SIZE / 2 && Math.abs(buf[end]) < THRES) end--;
-  const trimmed = buf.slice(start, end);
+  const trimmed = (end > start) ? buf.slice(start, end) : buf;
   const n = trimmed.length;
   if (n < 2) return -1;
 
@@ -3376,5 +3380,8 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_EAR_SCALES, fbEarIntervalName, fbEarPossibleIntervals, fbEarAdjacentIntervals, fbEarPickOrder,
     FB_EAR_RANGE_BASE, FB_EAR_INTERVAL_HINTS,
     FB_CHORD_PROGRESSIONS, fbChordBestQualityFor, fbChordEligibleProgressions, fbChordBuildProgressionChords,
+    fbBendIntervalCents, fbBendNoteLabel,
+    fbVibratoAnalyze,
+    fbChordPickTargetFixedRoot,
   };
 }

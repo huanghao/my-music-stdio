@@ -102,3 +102,45 @@ def test_get_status(client):
     r = client.get("/api/status")
     assert r.status_code == 200
     assert r.json()["playing"] is False
+
+
+# ── Pydantic validation ────────────────────────────────────────────────────
+
+def test_bpm_out_of_range_rejected(client):
+    """BPM outside [20, 300] → HTTP 422 Unprocessable Entity."""
+    base = {"title": "T", "key": "C", "style": "pop",
+            "time_signature": "4/4", "loops": 4,
+            "bars": [{"chords": [{"name": "C", "beats": 4}]}]}
+    assert client.post("/api/songs", json={**base, "bpm": 5}).status_code == 422
+    assert client.post("/api/songs", json={**base, "bpm": 400}).status_code == 422
+    # Boundary values must be accepted
+    assert client.post("/api/songs", json={**base, "bpm": 20}).status_code == 200
+    assert client.post("/api/songs", json={**base, "bpm": 300}).status_code == 200
+
+
+def test_loops_out_of_range_rejected(client):
+    """Loops outside [1, 999] → HTTP 422."""
+    base = {"title": "T", "key": "C", "style": "pop", "bpm": 120,
+            "time_signature": "4/4", "bars": []}
+    assert client.post("/api/songs", json={**base, "loops": 0}).status_code == 422
+    assert client.post("/api/songs", json={**base, "loops": 1000}).status_code == 422
+    assert client.post("/api/songs", json={**base, "loops": 1}).status_code == 200
+    assert client.post("/api/songs", json={**base, "loops": 999}).status_code == 200
+
+
+def test_play_empty_bars_returns_400(client):
+    """POSTing /api/play with no chords should return 400."""
+    r = client.post("/api/play", json={
+        "bars": [], "bpm": 120, "style": "pop", "loops": 4,
+    })
+    assert r.status_code == 400
+    assert "No chords" in r.json()["detail"]
+
+
+def test_play_bpm_validated(client):
+    """POST /api/play also validates bpm through SongBody."""
+    r = client.post("/api/play", json={
+        "bars": [{"chords": [{"name": "C"}]}],
+        "bpm": 5, "style": "pop", "loops": 2,
+    })
+    assert r.status_code == 422

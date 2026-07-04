@@ -286,3 +286,97 @@ test('fbEarAdjacentIntervals reads the two consecutive intervals in playback ord
   // descending 4 -> b3 -> 1  (indices 2, 1, 0): same two intervals, reversed order
   assert.deepEqual(fb.fbEarAdjacentIntervals(degrees, [2, 1, 0]), [2, 3]);
 });
+
+// ── Bend & Vibrato ────────────────────────────────────────────────────────
+
+test('fbBendIntervalCents: half=100, full=200, full_half=300', () => {
+  assert.equal(fb.fbBendIntervalCents('half'),      100);
+  assert.equal(fb.fbBendIntervalCents('full'),      200);
+  assert.equal(fb.fbBendIntervalCents('full_half'), 300);
+});
+
+test('fbBendNoteLabel: MIDI note number → note name + octave string', () => {
+  assert.equal(fb.fbBendNoteLabel(69), 'A4');   // A4 = 440 Hz
+  assert.equal(fb.fbBendNoteLabel(60), 'C4');   // middle C
+  assert.equal(fb.fbBendNoteLabel(71), 'B4');
+  assert.equal(fb.fbBendNoteLabel(72), 'C5');   // octave boundary
+  assert.equal(fb.fbBendNoteLabel(59), 'B3');   // B string open (MIDI 59)
+  assert.equal(fb.fbBendNoteLabel(64), 'E4');   // high E open (MIDI 64)
+});
+
+test('fbVibratoAnalyze: returns zeros for empty or too-short history', () => {
+  assert.deepEqual(fb.fbVibratoAnalyze([]), { speed: 0, depth: 0 });
+  // 7 entries < minimum 8
+  const tiny = Array.from({ length: 7 }, (_, i) => ({ cents: i, ts: i * 10 }));
+  assert.deepEqual(fb.fbVibratoAnalyze(tiny), { speed: 0, depth: 0 });
+});
+
+test('fbVibratoAnalyze: sinusoidal history → correct speed (Hz) and depth (¢)', () => {
+  // 5 Hz vibrato, ±50¢ depth, 1 second at 10 ms per frame.
+  // Phase offset π/6 ensures zero-crossings don't land on exact integer frames
+  // (which would produce Math.round() → 0, making 0*x=0 miss the crossing).
+  const HZ = 5, DEPTH = 50, FRAMES = 100, MS_PER_FRAME = 10;
+  const PHASE = Math.PI / 6;
+  const history = [];
+  for (let i = 0; i < FRAMES; i++) {
+    const t = i * MS_PER_FRAME / 1000;
+    history.push({ cents: Math.round(DEPTH * Math.sin(2 * Math.PI * HZ * t + PHASE)), ts: i * MS_PER_FRAME });
+  }
+  const { speed, depth } = fb.fbVibratoAnalyze(history);
+  assert.ok(Math.abs(speed - HZ) <= 1, `speed ${speed} Hz not within 1 Hz of target ${HZ} Hz`);
+  assert.ok(Math.abs(depth - DEPTH) <= 10, `depth ${depth}¢ not within 10¢ of target ${DEPTH}¢`);
+});
+
+test('fbAutoCorrelate: quiet consistent signal detected with lowered rmsThreshold', () => {
+  const sampleRate = 44100;
+  const freq = 220; // A3
+  // Amplitude 0.04 → RMS ≈ 0.028.  Below default rmsThreshold (0.01)? No —
+  // 0.028 > 0.01, so actually this passes the default.  Use amplitude 0.012
+  // so RMS ≈ 0.008 which is below 0.01 but above 0.003.
+  const amp = 0.012;
+  const buf = new Float32Array(2048);
+  for (let i = 0; i < 2048; i++) buf[i] = amp * Math.sin(2 * Math.PI * freq * i / sampleRate);
+
+  // Default threshold (0.01) should reject it
+  assert.equal(fb.fbAutoCorrelate(buf, sampleRate, 0.01), -1,
+    'default threshold should reject RMS ≈ 0.008 signal');
+
+  // Lower threshold (0.003) should detect the pitch
+  const detected = fb.fbAutoCorrelate(buf, sampleRate, 0.003);
+  assert.ok(detected > 0, `expected positive frequency, got ${detected}`);
+  assert.ok(Math.abs(detected - freq) / freq < 0.05,
+    `detected ${detected.toFixed(1)} Hz, expected ~${freq} Hz`);
+});
+
+// ── Fixed-root chord mode ─────────────────────────────────────────────────
+
+test('fbChordPickTargetFixedRoot: always returns the configured root', () => {
+  // Set fixed root to A (pitch class 9)
+  fb.fbState.chord.fixedRoot = 9;
+  fb.fbState.chord.target = null;
+  // Enable a few qualities
+  Object.keys(fb.fbState.chord.qualities).forEach(q => { fb.fbState.chord.qualities[q] = false; });
+  fb.fbState.chord.qualities[''] = true;
+  fb.fbState.chord.qualities['m'] = true;
+  fb.fbState.chord.qualities['7'] = true;
+
+  for (let i = 0; i < 30; i++) {
+    const result = fb.fbChordPickTargetFixedRoot();
+    assert.equal(result.root, 9, `iteration ${i}: expected root=9, got root=${result.root}`);
+    assert.ok(result.quality !== undefined, 'result must have a quality');
+    assert.ok(result.symbol.startsWith('A'), `symbol ${result.symbol} should start with A`);
+  }
+});
+
+test('fbChordPickTargetFixedRoot: does not repeat the previous quality when alternatives exist', () => {
+  fb.fbState.chord.fixedRoot = 0; // C
+  Object.keys(fb.fbState.chord.qualities).forEach(q => { fb.fbState.chord.qualities[q] = false; });
+  fb.fbState.chord.qualities[''] = true;  // C major
+  fb.fbState.chord.qualities['m'] = true; // C minor
+
+  // Previous quality was major — next must be minor
+  fb.fbState.chord.target = { root: 0, quality: '', symbol: 'C' };
+  const result = fb.fbChordPickTargetFixedRoot();
+  assert.equal(result.quality, 'm',
+    `with prev=major, expected minor, got ${result.quality}`);
+});

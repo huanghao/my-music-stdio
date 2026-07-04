@@ -81,7 +81,7 @@ const fbState = {
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
     subMode: 'bend', string: 4, interval: 'full',
-    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _history: [], _lastFreqTs: null,
+    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
     current: null, correct: 0, total: 0, streak: 0,
   },
   vibrato: {
@@ -2587,12 +2587,12 @@ function fbChordOnMatch() {
 // Autocorrelation-based pitch detector (standard ACF2+ technique):
 // trims low-amplitude edges, autocorrelates, finds the first strong peak
 // after the initial downslope, then refines it via parabolic interpolation.
-function fbAutoCorrelate(buf, sampleRate) {
+function fbAutoCorrelate(buf, sampleRate, rmsThreshold = 0.01) {
   const SIZE = buf.length;
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; // too quiet / silence
+  if (rms < rmsThreshold) return -1; // too quiet / silence
 
   const THRES = 0.2;
   let start = 0;
@@ -3010,6 +3010,7 @@ function fbBendNext() {
   s._nextAt = null;
   s._history = [];
   s._lastFreqTs = null;
+  s._smoothedCents = null;
   const ex = fbBendPickExercise();
   const midi = FB_STRING_OPEN_MIDI[ex.string] + ex.fret;
   const targetCents = fbBendIntervalCents(s.interval);
@@ -3042,6 +3043,7 @@ async function fbBendMicStart() {
     fbState.bend._holdFr   = 0;
     fbState.bend._history  = [];
     fbState.bend._lastFreqTs = null;
+    fbState.bend._smoothedCents = null;
     fbBendFb('Pluck the string — then bend…', '');
     fbBendRenderGraph();
   } else {
@@ -3076,7 +3078,7 @@ function fbBendBendOnFrame(analyser, sampleRate) {
   const s = fbState.bend;
   const now = performance.now();
 
-  // Auto-advance
+  // Auto-advance after success
   if (s._nextAt && now >= s._nextAt) {
     s._nextAt = null;
     fbBendNext();
@@ -3085,14 +3087,17 @@ function fbBendBendOnFrame(analyser, sampleRate) {
 
   const buf = new Float32Array(analyser.fftSize);
   analyser.getFloatTimeDomainData(buf);
-  const freq = fbAutoCorrelate(buf, sampleRate);
+  // Use a lower RMS threshold (0.003 vs default 0.01) so decaying notes
+  // during bending are still detected rather than discarded as silence.
+  const freq = fbAutoCorrelate(buf, sampleRate, 0.003);
   const hasSignal = freq > 60 && freq < 2000;
 
   if (hasSignal) {
     s._lastFreqTs = now;
 
     if (!s.baseFreq) {
-      // Phase: locking baseline. Require N frames of pitch stable within 25¢.
+      // ── Phase 1: lock baseline ──
+      // Accumulate N frames with < 25¢ pitch drift to confirm the note is stable.
       if (s._lastFreq) {
         const delta = Math.abs(1200 * Math.log2(freq / s._lastFreq));
         if (delta < 25) s._stableFr++;
@@ -3102,54 +3107,66 @@ function fbBendBendOnFrame(analyser, sampleRate) {
       }
       s._lastFreq = freq;
       if (s._stableFr >= FB_BEND_STABLE_FRAMES) {
-        s.baseFreq  = s._lastFreq;
-        s.phase     = 'bending';
-        s._history  = [];
-        s._holdFr   = 0;
-        s._lastFreq = null;
-        s._stableFr = 0;
+        s.baseFreq      = s._lastFreq;
+        s.phase         = 'bending';
+        s._history      = [];
+        s._holdFr       = 0;
+        s._lastFreq     = null;
+        s._stableFr     = 0;
+        s._smoothedCents = 0;
         fbBendFb('Got it — now bend up!', '');
       }
     } else {
-      // Phase: measuring deviation from baseline
-      const cents = Math.round(1200 * Math.log2(freq / s.baseFreq));
-      s._history.push({ cents, ts: now });
-      // Trim history to rolling window
-      const cutoff = now - FB_BEND_HISTORY_MS;
-      while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
-
-      if (s.phase !== 'success') {
-        const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
-        if (inZone) {
-          s._holdFr++;
-          if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
-            s.phase = 'success';
-            s.correct++; s.total++; s.streak++;
-            fbBendFb('✓ Perfect bend!', 'ok');
-            fbBendRenderStats();
-            s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
-          }
-        } else {
-          // Decay hold counter slowly so brief dips don't fully reset it
-          s._holdFr = Math.max(0, s._holdFr - 2);
-        }
-      }
+      // ── Phase 2: measure & smooth ──
+      const rawCents = 1200 * Math.log2(freq / s.baseFreq);
+      // EMA smoothing (α=0.4): keeps the curve fluid while tracking the bend.
+      // Lower α → smoother but more lag; 0.4 gives ~80 ms lag at 60 fps.
+      s._smoothedCents = (s._smoothedCents === null)
+        ? rawCents
+        : 0.6 * s._smoothedCents + 0.4 * rawCents;
+      s._recordCents(now);
     }
-  } else if (s.baseFreq && s._history && s._lastFreqTs) {
-    // Brief silence: replay last known cents to keep the trace visible
-    // (a decaying plucked note goes quiet before the bend is fully registered)
-    const sinceLastMs = now - s._lastFreqTs;
-    if (sinceLastMs < FB_BEND_SILENCE_HOLD_MS && s._history.length > 0) {
-      const lastCents = s._history[s._history.length - 1].cents;
-      s._history.push({ cents: lastCents, ts: now });
-      const cutoff = now - FB_BEND_HISTORY_MS;
-      while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
+  } else if (s.baseFreq && s._lastFreqTs !== null) {
+    // ── Silence window ──
+    // A decaying bent note goes quiet before the bend position is released.
+    // Keep the smoothed value alive for up to SILENCE_HOLD_MS so the hold
+    // counter can still accumulate during the quieter tail of the note.
+    const sinceMs = now - s._lastFreqTs;
+    if (sinceMs < FB_BEND_SILENCE_HOLD_MS && s._smoothedCents !== null) {
+      s._recordCents(now);  // freeze last smoothed value — bend still held
     }
   }
 
-  // Render graph every frame (even during silence, to keep it live)
   if (s.baseFreq) fbBendRenderGraph();
 }
+
+// Shared helper: push current smoothedCents into history, trim window,
+// and advance the hold counter / check success.  Called from both the
+// active-signal and silence-hold branches so both count toward success.
+fbState.bend._recordCents = function(now) {
+  const s = fbState.bend;
+  const cents = Math.round(s._smoothedCents);
+  s._history.push({ cents, ts: now });
+  const cutoff = now - FB_BEND_HISTORY_MS;
+  while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
+
+  if (s.phase === 'success') return;
+
+  const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
+  if (inZone) {
+    s._holdFr++;
+    if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
+      s.phase = 'success';
+      s.correct++; s.total++; s.streak++;
+      fbBendFb('✓ Perfect bend!', 'ok');
+      fbBendRenderStats();
+      s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
+    }
+  } else {
+    // Decay slowly so short excursions don't reset all progress.
+    s._holdFr = Math.max(0, s._holdFr - 2);
+  }
+};
 
 // ── Vibrato ──
 

@@ -303,9 +303,7 @@
       <div id="fb-bend-options"></div>
       <div class="fb-stats" id="fb-bend-stats"></div>
       <div class="fb-prompt" id="fb-bend-prompt"></div>
-      <div class="fb-bend-meter-area">
-        <div id="fb-bend-meter"></div>
-      </div>
+      <canvas id="fb-bend-canvas" class="fb-bend-canvas" width="480" height="180"></canvas>
       <div class="fb-feedback" id="fb-bend-feedback"></div>
     </div>
 
@@ -377,6 +375,7 @@
   <canvas id="st-waveform-canvas" class="st-waveform-canvas" width="640" height="60"></canvas>
 
   <div class="st-mic-level"><div class="st-mic-level-fill" id="st-mic-level-fill"></div></div>
+  <p style="font-size:11px;color:#aaa;margin-bottom:4px;">Timing chart (last 4 bars, gridlines mark bar boundaries):</p>
   <canvas id="st-analysis-canvas" class="st-analysis-canvas" width="640" height="120"></canvas>
   <div class="st-analysis-verdict" id="st-analysis-verdict"></div>
 

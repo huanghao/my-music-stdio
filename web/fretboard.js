@@ -81,7 +81,7 @@ const fbState = {
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
     subMode: 'bend', string: 4, interval: 'full',
-    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null,
+    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _history: [], _lastFreqTs: null,
     current: null, correct: 0, total: 0, streak: 0,
   },
   vibrato: {
@@ -2753,10 +2753,12 @@ const FB_BEND_EXERCISES = [
   { string: 5, fret: 12 },  // hiE-str fret 12 = E5
 ];
 
-const FB_BEND_STABLE_FRAMES  = 3;
-const FB_BEND_HOLD_FRAMES    = 12;   // ~0.5 s at 60 fps
-const FB_BEND_TOLERANCE      = 22;   // cents around target → success
-const FB_BEND_NEXT_DELAY_MS  = 2000;
+const FB_BEND_STABLE_FRAMES   = 4;    // frames of stable pitch to lock baseline
+const FB_BEND_HOLD_FRAMES     = 8;    // frames in target zone → success
+const FB_BEND_TOLERANCE       = 25;   // cents around target → success
+const FB_BEND_NEXT_DELAY_MS   = 2500;
+const FB_BEND_HISTORY_MS      = 5000; // rolling graph window
+const FB_BEND_SILENCE_HOLD_MS = 600;  // keep last reading for this long during decay
 
 const FB_VIBRATO_HISTORY_MS    = 4000;
 const FB_VIBRATO_SUCCESS_MS    = 3000;
@@ -2842,33 +2844,102 @@ function fbBendRenderPrompt() {
     <div class="fb-bend-notes-row">${c.startLabel} &nbsp;→&nbsp; <span class="fb-bend-target-note">${c.targetLabel}</span></div>`;
 }
 
-function fbBendRenderMeter(centsOrNull) {
+function fbBendRenderGraph() {
+  const canvas = document.getElementById('fb-bend-canvas');
+  if (!canvas) return;
   const s = fbState.bend;
-  const el = document.getElementById('fb-bend-meter');
-  if (!el) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
   const targetCents = s.current ? s.current.targetCents : 200;
-  const maxCents = targetCents + 60;
-  const toY = c => 100 - Math.max(0, Math.min(100, (c / maxCents) * 100));  // % from top
-  const targetY = toY(targetCents);
-  const halfY   = toY(100);
-  const fillH   = centsOrNull !== null ? Math.max(0, Math.min(100, (centsOrNull / maxCents) * 100)) : 0;
-  const inZone  = centsOrNull !== null && Math.abs(centsOrNull - targetCents) <= FB_BEND_TOLERANCE;
-  el.innerHTML = `
-    <div class="fb-bend-meter-col">
-      <div class="fb-bend-meter-track">
-        <div class="fb-bend-meter-fill ${inZone ? 'in-zone' : ''}" style="height:${fillH}%"></div>
-        <div class="fb-bend-meter-target-line" style="top:${targetY}%">
-          <span class="fb-bend-marker-label right">${targetCents}¢ &nbsp;${s.current ? s.current.targetLabel : ''}</span>
-        </div>
-        ${targetCents > 105 ? `<div class="fb-bend-meter-half-line" style="top:${halfY}%">
-          <span class="fb-bend-marker-label right">100¢</span>
-        </div>` : ''}
-        <div class="fb-bend-meter-base-line">
-          <span class="fb-bend-marker-label right">0¢ &nbsp;${s.current ? s.current.startLabel : ''}</span>
-        </div>
-      </div>
-      <div class="fb-bend-cents-val">${centsOrNull !== null ? (centsOrNull > 0 ? '+' : '') + centsOrNull + '¢' : '—'}</div>
-    </div>`;
+  const maxCents    = targetCents + 60;
+  const PAD_T = 20, PAD_B = 16, PAD_L = 0, PAD_R = 0;
+  const innerH = H - PAD_T - PAD_B;
+
+  // cents → canvas y (0¢ at bottom, maxCents at top)
+  const cy = c => PAD_T + innerH - Math.max(0, Math.min(innerH, (Math.max(0, c) / maxCents) * innerH));
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#f8f7f0';
+  ctx.fillRect(0, 0, W, H);
+
+  // Target zone (green band)
+  const yz1 = cy(targetCents + FB_BEND_TOLERANCE);
+  const yz2 = cy(targetCents - FB_BEND_TOLERANCE);
+  ctx.fillStyle = 'rgba(74,124,74,0.15)';
+  ctx.fillRect(0, yz1, W, yz2 - yz1);
+
+  // Target dashed line
+  const yt = cy(targetCents);
+  ctx.save();
+  ctx.strokeStyle = '#4a7c4a';
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 4]);
+  ctx.beginPath(); ctx.moveTo(0, yt); ctx.lineTo(W, yt); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#4a7c4a';
+  ctx.font = '11px sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(`${targetCents}¢  ${s.current ? s.current.targetLabel : ''}`, 6, yt - 1);
+
+  // Half-step guide (if target > 100¢)
+  if (targetCents > 105) {
+    const yh = cy(100);
+    ctx.save();
+    ctx.strokeStyle = '#ddd';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 5]);
+    ctx.beginPath(); ctx.moveTo(0, yh); ctx.lineTo(W, yh); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#bbb';
+    ctx.font = '10px sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('100¢', 6, yh - 1);
+  }
+
+  // Baseline
+  const yb = cy(0);
+  ctx.strokeStyle = '#6a8caa';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, yb); ctx.lineTo(W, yb); ctx.stroke();
+  ctx.fillStyle = '#6a8caa';
+  ctx.font = '11px sans-serif';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`0¢  ${s.current ? s.current.startLabel : ''}`, 6, yb + 2);
+
+  if (!s._history || s._history.length < 2) return;
+
+  // Pitch trace
+  const now = performance.now();
+  ctx.strokeStyle = '#b8843a';
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  let first = true;
+  for (const { cents, ts } of s._history) {
+    const x = PAD_L + (W - PAD_L - PAD_R) * (1 - (now - ts) / FB_BEND_HISTORY_MS);
+    const y = cy(Math.max(-20, Math.min(maxCents, cents)));
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Current dot
+  const last = s._history[s._history.length - 1];
+  if (last) {
+    const inZone = Math.abs(last.cents - targetCents) <= FB_BEND_TOLERANCE;
+    ctx.fillStyle = inZone ? '#27ae60' : '#b8843a';
+    const dx = PAD_L + (W - PAD_L - PAD_R) * (1 - (now - last.ts) / FB_BEND_HISTORY_MS);
+    const dy = cy(Math.max(-20, Math.min(maxCents, last.cents)));
+    ctx.beginPath();
+    ctx.arc(Math.min(W - 4, Math.max(4, dx)), dy, 5, 0, Math.PI * 2);
+    ctx.fill();
+    // Cents readout in top-right
+    ctx.fillStyle = inZone ? '#27ae60' : '#2a2a2a';
+    ctx.font = 'bold 14px monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'right';
+    ctx.fillText((last.cents >= 0 ? '+' : '') + last.cents + '¢', W - 8, 4);
+    ctx.textAlign = 'left';
+  }
 }
 
 function fbBendRenderStats() {
@@ -2914,6 +2985,8 @@ function fbBendNext() {
   s._holdFr = 0;
   s._lastFreq = null;
   s._nextAt = null;
+  s._history = [];
+  s._lastFreqTs = null;
   const ex = fbBendPickExercise();
   const midi = FB_STRING_OPEN_MIDI[ex.string] + ex.fret;
   const targetCents = fbBendIntervalCents(s.interval);
@@ -2925,7 +2998,7 @@ function fbBendNext() {
     targetCents, intLabel: fbBendIntervalLabel(s.interval),
   };
   fbBendRenderPrompt();
-  fbBendRenderMeter(null);
+  fbBendRenderGraph();
   fbBendRenderStats();
   fbBendFb(fbMic.owner === 'bend' ? 'Pluck the string…' : '', '');
 }
@@ -2938,8 +3011,16 @@ async function fbBendMicStart() {
     return;
   }
   if (fbState.bend.subMode === 'bend') {
-    fbState.bend.phase = 'pluck';
-    fbBendFb('Pluck the string and then bend…', '');
+    // Reset detection state so each listening session starts fresh
+    fbState.bend.phase    = 'pluck';
+    fbState.bend.baseFreq = null;
+    fbState.bend._stableFr = 0;
+    fbState.bend._lastFreq = null;
+    fbState.bend._holdFr   = 0;
+    fbState.bend._history  = [];
+    fbState.bend._lastFreqTs = null;
+    fbBendFb('Pluck the string — then bend…', '');
+    fbBendRenderGraph();
   } else {
     fbState.vibrato.phase = 'pluck';
     document.getElementById('fb-vibrato-feedback').textContent = 'Pluck any note and apply vibrato…';
@@ -2952,7 +3033,7 @@ function fbBendMicStop() {
   fbMicStop();
   fbState.bend.phase = 'idle';
   fbState.vibrato.phase = 'idle';
-  fbBendRenderMeter(null);
+  fbBendRenderGraph();
   fbSyncMicButtons('bend');
 }
 
@@ -2970,61 +3051,81 @@ function fbBendOnFrame(analyser, sampleRate) {
 
 function fbBendBendOnFrame(analyser, sampleRate) {
   const s = fbState.bend;
-  if (s._nextAt && performance.now() >= s._nextAt) {
+  const now = performance.now();
+
+  // Auto-advance
+  if (s._nextAt && now >= s._nextAt) {
     s._nextAt = null;
     fbBendNext();
     return;
   }
-  if (s.phase === 'success') return;
 
   const buf = new Float32Array(analyser.fftSize);
   analyser.getFloatTimeDomainData(buf);
   const freq = fbAutoCorrelate(buf, sampleRate);
+  const hasSignal = freq > 60 && freq < 2000;
 
-  if (!(freq > 60 && freq < 2000)) {
-    if (s.phase === 'bending') fbBendRenderMeter(null);
-    return;
-  }
+  if (hasSignal) {
+    s._lastFreqTs = now;
 
-  if (s.phase === 'pluck') {
-    // Accumulate stable frames at roughly the same pitch
-    if (s._lastFreq) {
-      const delta = Math.abs(1200 * Math.log2(freq / s._lastFreq));
-      if (delta < 30) s._stableFr++;
-      else { s._stableFr = 0; }
-    } else {
-      s._stableFr = 1;
-    }
-    s._lastFreq = freq;
-    if (s._stableFr >= FB_BEND_STABLE_FRAMES) {
-      s.baseFreq  = freq;
-      s.phase     = 'bending';
-      s._stableFr = 0;
-      s._holdFr   = 0;
-      s._lastFreq = null;
-      fbBendFb('Got it! Now bend up…', '');
-      fbBendRenderMeter(0);
-    }
-    return;
-  }
-
-  if (s.phase === 'bending') {
-    const cents = Math.round(1200 * Math.log2(freq / s.baseFreq));
-    fbBendRenderMeter(Math.max(-20, cents));  // clamp negative briefly
-    const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
-    if (inZone) {
-      s._holdFr++;
-      if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
-        s.phase = 'success';
-        s.correct++; s.total++; s.streak++;
-        fbBendFb('✓ Perfect bend!', 'ok');
-        fbBendRenderStats();
-        s._nextAt = performance.now() + FB_BEND_NEXT_DELAY_MS;
+    if (!s.baseFreq) {
+      // Phase: locking baseline. Require N frames of pitch stable within 25¢.
+      if (s._lastFreq) {
+        const delta = Math.abs(1200 * Math.log2(freq / s._lastFreq));
+        if (delta < 25) s._stableFr++;
+        else            s._stableFr = 0;
+      } else {
+        s._stableFr = 1;
+      }
+      s._lastFreq = freq;
+      if (s._stableFr >= FB_BEND_STABLE_FRAMES) {
+        s.baseFreq  = s._lastFreq;
+        s.phase     = 'bending';
+        s._history  = [];
+        s._holdFr   = 0;
+        s._lastFreq = null;
+        s._stableFr = 0;
+        fbBendFb('Got it — now bend up!', '');
       }
     } else {
-      if (s._holdFr > 0) s._holdFr = Math.max(0, s._holdFr - 2);
+      // Phase: measuring deviation from baseline
+      const cents = Math.round(1200 * Math.log2(freq / s.baseFreq));
+      s._history.push({ cents, ts: now });
+      // Trim history to rolling window
+      const cutoff = now - FB_BEND_HISTORY_MS;
+      while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
+
+      if (s.phase !== 'success') {
+        const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
+        if (inZone) {
+          s._holdFr++;
+          if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
+            s.phase = 'success';
+            s.correct++; s.total++; s.streak++;
+            fbBendFb('✓ Perfect bend!', 'ok');
+            fbBendRenderStats();
+            s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
+          }
+        } else {
+          // Decay hold counter slowly so brief dips don't fully reset it
+          s._holdFr = Math.max(0, s._holdFr - 2);
+        }
+      }
+    }
+  } else if (s.baseFreq && s._history && s._lastFreqTs) {
+    // Brief silence: replay last known cents to keep the trace visible
+    // (a decaying plucked note goes quiet before the bend is fully registered)
+    const sinceLastMs = now - s._lastFreqTs;
+    if (sinceLastMs < FB_BEND_SILENCE_HOLD_MS && s._history.length > 0) {
+      const lastCents = s._history[s._history.length - 1].cents;
+      s._history.push({ cents: lastCents, ts: now });
+      const cutoff = now - FB_BEND_HISTORY_MS;
+      while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
     }
   }
+
+  // Render graph every frame (even during silence, to keep it live)
+  if (s.baseFreq) fbBendRenderGraph();
 }
 
 // ── Vibrato ──

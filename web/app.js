@@ -1,3 +1,14 @@
+// ── Utilities ──
+
+/** Escape a value for safe insertion into HTML (prevents XSS). */
+function htmlEsc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 // ── Constants ──
 const ALL_KEYS = ['C','C#/Db','D','D#/Eb','E','F','F#/Gb','G','G#/Ab','A','A#/Bb','B',
                   'Am','Bm','Cm','Dm','Em','F#m','Gm'];
@@ -12,6 +23,7 @@ const state = {
   vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3 },
   jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
   editor: { song: null, bars: [] },
+  sightread: { song: null, bars: [] },
   modal: { _onConfirm: null },
   playback: { polling: null },
   prefs: { bars_per_row: 4 },
@@ -19,6 +31,7 @@ const state = {
 
 // ── Connection indicator ──
 let _connOk = null;
+let _connFailures = 0;
 
 function setConn(ok) {
   if (_connOk === ok) return;
@@ -35,19 +48,69 @@ async function pingServer() {
   try {
     await fetch('/api/status', { method: 'GET' });
     const wasDown = _connOk === false;
+    _connFailures = 0;
     setConn(true);
     if (wasDown) await loadApp();  // reinitialize after reconnect
   } catch(_) {
+    _connFailures++;
     setConn(false);
+    if (_connFailures >= 7) setStatus('Server unreachable — retrying in 30s');
   }
+}
+
+function _pingDelay() {
+  if (_connFailures >= 7) return 30000;
+  if (_connFailures >= 4) return 10000;
+  return 3000;
+}
+
+async function _pingLoop() {
+  await pingServer();
+  setTimeout(_pingLoop, _pingDelay());
+}
+
+// ── Last selection (persisted across reloads) ──
+// Vamp/Jam controls are "live scratchpad" state, not saved Songs — without
+// this they silently reset to hardcoded defaults on every refresh, which is
+// surprising once you've actually dialed in a chord/tempo/progression.
+const LAST_SELECTION_KEY = 'mps_last_selection';
+
+function loadLastSelection() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LAST_SELECTION_KEY)) || {}; } catch (_) { saved = {}; }
+  if (saved.vamp) {
+    if (typeof saved.vamp.chord === 'string') state.vamp.chord = saved.vamp.chord;
+    if (typeof saved.vamp.style === 'string') state.vamp.style = saved.vamp.style;
+    if (Number.isFinite(saved.vamp.bpm)) state.vamp.bpm = saved.vamp.bpm;
+    if (Number.isFinite(saved.vamp.loops)) state.vamp.loops = saved.vamp.loops;
+  }
+  if (saved.jam) {
+    if (Array.isArray(saved.jam.bars)) state.jam.bars = saved.jam.bars;
+    if (typeof saved.jam.style === 'string') state.jam.style = saved.jam.style;
+    if (typeof saved.jam.key === 'string') state.jam.key = saved.jam.key;
+    if (Number.isFinite(saved.jam.bpm)) state.jam.bpm = saved.jam.bpm;
+    if (Number.isFinite(saved.jam.loops)) state.jam.loops = saved.jam.loops;
+  }
+}
+
+function saveLastSelection() {
+  localStorage.setItem(LAST_SELECTION_KEY, JSON.stringify({
+    vamp: state.vamp,
+    jam: state.jam,
+  }));
 }
 
 async function loadApp() {
   state.styles = await api('/api/styles');
+  loadLastSelection();
   renderVampControls();
   renderJamControls();
   renderPrefsForm();
-  applyStyle(document.getElementById('jam-style')?.value || 'pop', 'jam');
+  if (state.jam.bars.length) {
+    renderJamChart();
+  } else {
+    applyStyle(document.getElementById('jam-style')?.value || 'pop', 'jam');
+  }
   const p = await api('/api/prefs');
   state.prefs = p;
   document.getElementById('status-sf').textContent = (p.soundfont_path || '').split('/').pop();
@@ -55,13 +118,32 @@ async function loadApp() {
 
 // ── Init ──
 async function init() {
-  setInterval(pingServer, 3000);
   await pingServer();
+  setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();
 }
 
+// Stop polling when the tab is hidden; resume when it becomes visible again.
+const _PAGE_PREFIX_MAP = {
+  'page-vamp': 'vamp', 'page-jam': 'jam',
+  'page-editor': 'ed', 'page-sightread': 'sightread',
+};
+document.addEventListener('visibilitychange', function() {
+  if (document.hidden) {
+    stopPolling();
+  } else if (state.playback.polling === null) {
+    const pageId = document.querySelector('.page.active')?.id || '';
+    const prefix = _PAGE_PREFIX_MAP[pageId];
+    if (prefix) {
+      api('/api/status').then(s => { if (s.playing) startPolling(prefix); }).catch(() => {});
+    }
+  }
+});
+
 // ── Page nav ──
 function showPage(name) {
+  if (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active')) fbLeavePage();
+  if (name !== 'speed' && document.getElementById('page-speed')?.classList.contains('active')) stStop();
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => {
@@ -69,6 +151,9 @@ function showPage(name) {
   });
   if (name === 'songs') loadSongs();
   if (name === 'prefs') renderPrefsForm();
+  if (name === 'fretboard') initFretboardPage();
+  if (name === 'sightread') loadSightReadPicker();
+  if (name === 'speed') initSpeedPage();
 }
 
 // ── API helper ──
@@ -231,7 +316,7 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
           cell.className = 'beat-cell';
           cell.style.flex = chord.beats;
           cell.innerHTML = `
-            <span class="chord-name">${chord.name}</span>
+            <span class="chord-name">${htmlEsc(chord.name)}</span>
             <button class="chord-del" title="Delete">×</button>
           `;
           cell.querySelector('.chord-name').addEventListener('click', e => {
@@ -399,26 +484,26 @@ function renderVampControls() {
     <div class="controls-bar">
       <div class="controls-row">
         <div class="field"><label>Chord</label>
-          <input type="text" id="vamp-chord" value="${state.vamp.chord}"
+          <input type="text" id="vamp-chord" value="${htmlEsc(state.vamp.chord)}"
             style="width:80px;font-family:Georgia,serif;font-size:17px;font-weight:700;text-align:center"
-            autocomplete="off" spellcheck="false" oninput="state.vamp.chord=this.value.trim()">
+            autocomplete="off" spellcheck="false" oninput="state.vamp.chord=this.value.trim(); saveLastSelection()">
         </div>
         <div class="field"><label>Style</label>
-          <select id="vamp-style" onchange="state.vamp.style=this.value">
+          <select id="vamp-style" onchange="state.vamp.style=this.value; saveLastSelection()">
             ${state.styles.map(s => `<option value="${s.id}" ${s.id===state.vamp.style?'selected':''}>${s.name}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>BPM</label>
           <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
-            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value)">
+            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:52px"
-            oninput="syncFromLoops('vamp')">
+            oninput="state.vamp.loops=parseInt(this.value)||1; syncFromLoops('vamp'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
           <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" style="width:60px"
-            oninput="syncFromDuration('vamp')">
+            oninput="syncFromDuration('vamp'); state.vamp.loops=getLoops('vamp'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
       </div>
@@ -430,7 +515,10 @@ function renderVampControls() {
       </div>
     </div>
   `;
-  syncFromDuration('vamp');
+  // Duration-as-source-of-truth would clobber a restored `state.vamp.loops`
+  // with whatever the hardcoded "5.0" duration default computes to — use
+  // loops-as-source-of-truth instead, same as Jam/Editor controls do.
+  syncFromLoops('vamp');
 }
 
 // 4/4 = 4 bars per phrase
@@ -487,22 +575,23 @@ function renderJamControls() {
       <div class="controls-row">
         <div class="field"><label>Style</label>
           <select id="jam-style" onchange="applyStyle(this.value,'jam')">
-            ${state.styles.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+            ${state.styles.map(s => `<option value="${s.id}" ${s.id===state.jam.style?'selected':''}>${s.name}</option>`).join('')}
           </select>
         </div>
         <div class="field"><label>Key</label>
-          <select id="jam-key">${keyOptions(state.jam.key)}</select>
+          <select id="jam-key" onchange="state.jam.key=this.value; saveLastSelection()">${keyOptions(state.jam.key)}</select>
         </div>
         <div class="field"><label>BPM</label>
-          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240" oninput="syncFromDuration('jam'); liveSetBpm(this.value)">
+          <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240"
+            oninput="state.jam.bpm=parseInt(this.value)||120; syncFromDuration('jam'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:52px"
-            oninput="syncFromLoops('jam')">
+            oninput="state.jam.loops=parseInt(this.value)||1; syncFromLoops('jam'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
           <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" style="width:60px"
-            oninput="syncFromDuration('jam')">
+            oninput="syncFromDuration('jam'); state.jam.loops=getLoops('jam'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
       </div>
@@ -516,6 +605,7 @@ function renderJamControls() {
       </div>
     </div>
   `;
+  syncFromLoops('jam');
 }
 
 function applyStyle(styleId, context) {
@@ -532,6 +622,7 @@ function applyStyle(styleId, context) {
     if (keyEl) keyEl.value = s.default_key;
     updateJamDuration();
     renderJamChart();
+    saveLastSelection();
   }
 }
 
@@ -570,7 +661,7 @@ function updateJamDuration() { syncFromLoops('jam'); }
 function updateEditorDuration() { syncFromLoops('ed'); }
 
 function renderJamChart() {
-  const rerender = () => { renderJamChart(); updateJamDuration(); };
+  const rerender = () => { renderJamChart(); updateJamDuration(); saveLastSelection(); };
   const h = makeChordHandlers(() => state.jam.bars, rerender);
   renderChart(document.getElementById('jam-chart'), state.jam.bars,
     h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
@@ -622,7 +713,10 @@ function highlightBar(barIndex) {
   const activePage = document.querySelector('.page.active');
   if (!activePage) return;
   const bars = activePage.querySelectorAll('.chart-bar');
-  if (bars[barIndex]) bars[barIndex].classList.add('active');
+  if (bars[barIndex]) {
+    bars[barIndex].classList.add('active');
+    bars[barIndex].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
 }
 
 function startPolling(prefix) {
@@ -744,8 +838,8 @@ async function loadSongs() {
     return `
       <div class="song-card" onclick="openEditor('${s.id}')">
         <div class="song-card-body">
-          <div class="song-card-title">${s.title}</div>
-          <div class="song-card-meta">${s.key} · ${s.style} · ${s.bpm} BPM &nbsp;·&nbsp; ${s.bars?.length||0} bars × ${s.loops||1} = ${dur} &nbsp;·&nbsp; ${ago}</div>
+          <div class="song-card-title">${htmlEsc(s.title)}</div>
+          <div class="song-card-meta">${htmlEsc(s.key)} · ${htmlEsc(s.style)} · ${s.bpm} BPM &nbsp;·&nbsp; ${s.bars?.length||0} bars × ${s.loops||1} = ${dur} &nbsp;·&nbsp; ${ago}</div>
         </div>
         <span class="song-status ${s.generated ? 'ready' : 'draft'}">${s.generated ? 'Generated' : 'Draft'}</span>
         <div class="song-card-actions">
@@ -818,7 +912,7 @@ function renderEditorControls() {
     <div class="controls-bar">
       <div class="controls-row">
         <div class="field"><label>Title</label>
-          <input type="text" id="ed-title" value="${s.title}" style="width:150px">
+          <input type="text" id="ed-title" value="${htmlEsc(s.title)}" style="width:150px">
         </div>
         <div class="field"><label>Key</label>
           <select id="ed-key">${keyOptions(s.key)}</select>
@@ -909,6 +1003,160 @@ async function editorStop() {
   stopPolling();
   await api('/api/stop', 'POST');
   setPlaybackUI('ed', 'stopped');
+  setStatus('Ready');
+}
+
+// ── Sight Read page ──
+// Standalone nav page: pick a song from a picker list, then read-only chord
+// chart with no editing affordances, current bar highlighted (and scrolled
+// into view) in sync with playback — for reading/playing along rather than
+// building the song. Independent of the Songs/Editor flow.
+
+async function loadSightReadPicker() {
+  document.getElementById('sightread-view').style.display = 'none';
+  document.getElementById('sightread-picker').style.display = '';
+  const songs = await api('/api/songs');
+  const el = document.getElementById('sightread-song-list');
+  if (!songs.length) {
+    el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">No songs yet — create one on the Songs page first.</p>';
+    return;
+  }
+  el.innerHTML = songs.map(s => `
+    <div class="song-card" onclick="openSightRead('${s.id}')">
+      <div class="song-card-body">
+        <div class="song-card-title">${htmlEsc(s.title)}</div>
+        <div class="song-card-meta">${htmlEsc(s.key)} · ${htmlEsc(s.style)} · ${s.bpm} BPM &nbsp;·&nbsp; ${s.bars?.length||0} bars × ${s.loops||1}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function openSightRead(id) {
+  const song = await api(`/api/songs/${id}`);
+  state.sightread.song = song;
+  state.sightread.bars = song.bars;
+  renderSightReadControls();
+  renderSightReadChart();
+  document.getElementById('sightread-picker').style.display = 'none';
+  document.getElementById('sightread-view').style.display = '';
+}
+
+function backToSightReadPicker() {
+  sightReadStop();
+  loadSightReadPicker();
+}
+
+function renderSightReadControls() {
+  const s = state.sightread.song;
+  document.getElementById('sightread-controls').innerHTML = `
+    <div style="margin-bottom:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="backToSightReadPicker()">← Choose another song</button>
+    </div>
+    <div class="controls-bar">
+      <div class="controls-row">
+        <div class="field"><label>Title</label>
+          <div class="sightread-readonly">${htmlEsc(s.title)}</div>
+        </div>
+        <div class="field"><label>Key</label>
+          <div class="sightread-readonly">${htmlEsc(s.key)}</div>
+        </div>
+        <div class="field"><label>Style</label>
+          <div class="sightread-readonly">${htmlEsc(state.styles.find(st => st.id === s.style)?.name || s.style)}</div>
+        </div>
+        <div class="field"><label>BPM</label>
+          <input type="number" id="sightread-bpm" value="${s.bpm}" min="40" max="240"
+            oninput="liveSetBpm(this.value)">
+        </div>
+      </div>
+      <div class="controls-row">
+        <button class="btn-icon btn-icon-play"   id="sightread-play-btn"   onclick="sightReadPlay()"   title="Play">▶</button>
+        <button class="btn-icon btn-icon-stop"   id="sightread-stop-btn"   onclick="sightReadStop()"   title="Stop"   style="display:none">⏹</button>
+        <button class="btn-icon btn-icon-pause"  id="sightread-pause-btn"  onclick="sightReadPause()"  title="Pause"  style="display:none">⏸</button>
+        <button class="btn-icon btn-icon-resume" id="sightread-resume-btn" onclick="sightReadResume()" title="Resume" style="display:none">▶</button>
+      </div>
+    </div>
+  `;
+}
+
+// Deliberately not `renderChart()`: that renderer always attaches inline-edit,
+// insert and delete affordances (chord toolbar, "+" cells, "×" buttons) meant
+// for building a song. Sight reading is a read-only "just play along" view,
+// so this renders the same chart-row/chart-bar markup (highlightBar's
+// `.chart-bar` lookup and the shared CSS both work unmodified) without any
+// of that editing UI.
+function renderSightReadChart() {
+  const containerEl = document.getElementById('sightread-chart');
+  containerEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'chart-wrap sightread-wrap';
+  const bars = state.sightread.bars;
+  const BARS_PER_ROW = state.prefs.bars_per_row || 4;
+  const totalRows = Math.ceil(Math.max(bars.length, 1) / BARS_PER_ROW);
+
+  for (let rowStart = 0; rowStart < totalRows * BARS_PER_ROW; rowStart += BARS_PER_ROW) {
+    const row = document.createElement('div');
+    row.className = 'chart-row';
+    row.style.gridTemplateColumns = `32px repeat(${BARS_PER_ROW}, 1fr)`;
+
+    const tsig = document.createElement('div');
+    tsig.className = 'chart-timesig';
+    tsig.textContent = rowStart === 0 ? '4/4' : '';
+    row.appendChild(tsig);
+
+    for (let col = 0; col < BARS_PER_ROW; col++) {
+      const barIdx = rowStart + col;
+      const bar = bars[barIdx];
+      const barEl = document.createElement('div');
+      barEl.className = 'chart-bar';
+
+      if (bar) {
+        const numEl = document.createElement('div');
+        numEl.className = 'bar-num';
+        numEl.textContent = barIdx + 1;
+        barEl.appendChild(numEl);
+
+        const beatsEl = document.createElement('div');
+        beatsEl.className = 'bar-beats';
+        beatsForChords(bar.chords || []).forEach(chord => {
+          const cell = document.createElement('div');
+          cell.className = 'beat-cell sightread-cell';
+          cell.style.flex = chord.beats;
+          cell.innerHTML = `<span class="chord-name">${htmlEsc(chord.name)}</span>`;
+          beatsEl.appendChild(cell);
+        });
+        barEl.appendChild(beatsEl);
+      }
+      row.appendChild(barEl);
+    }
+    wrap.appendChild(row);
+
+    const hasContent = Array.from({length: BARS_PER_ROW}, (_, i) => bars[rowStart + i]).some(Boolean);
+    if (!hasContent && rowStart > 0) {
+      wrap.removeChild(row);
+      break;
+    }
+  }
+
+  containerEl.appendChild(wrap);
+}
+
+async function sightReadPlay() {
+  const s = state.sightread.song;
+  const bpm = parseInt(document.getElementById('sightread-bpm')?.value) || s.bpm;
+  setPlaybackUI('sightread', 'playing');
+  setStatus('Playing');
+  try {
+    await api('/api/play', 'POST', { ...s, bpm, bars: state.sightread.bars });
+    startPolling('sightread');
+  } catch(e) { setStatus('Error: ' + e.message); sightReadStop(); }
+}
+
+async function sightReadPause()  { await api('/api/pause',  'POST'); setPlaybackUI('sightread', 'paused');  setStatus('Paused'); }
+async function sightReadResume() { await api('/api/resume', 'POST'); setPlaybackUI('sightread', 'playing'); setStatus('Playing'); }
+async function sightReadStop() {
+  stopPolling();
+  await api('/api/stop', 'POST');
+  setPlaybackUI('sightread', 'stopped');
   setStatus('Ready');
 }
 

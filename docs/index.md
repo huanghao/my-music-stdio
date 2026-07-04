@@ -7,6 +7,8 @@
 ## 音乐表示与格式
 
 - [和弦表示法调研](chord-symbol-notation-research.md)：流行/爵士和弦符号、iReal Pro 写法、罗马数字分析、Nashville Number System 和内部结构化建议。
+- [常见和弦进行分类调研](common-chord-progressions-research.md)：流行"四和弦"家族、Blues 12 小节变体、爵士 ii-V-I、小调/调式进行分类，以及给 Sight Read 练习库用的具体候选清单。
+- [CAGED 同把位级数进行练习 + 任意调级数快查方法](caged-positional-progression-practice.md)：用 G 大调 1-6-4-5 具体走一遍"同把位换形状"的横按品位，以及"看到一个小调秒答级数进行"的关系大小调快查法和拆解练习方法。
 - [MIDI 协议介绍](midi-format-research.md)：MIDI 消息、通道、字节结构、Standard MIDI File、General MIDI、MIDI 2.0、优缺点和相关标准。
 - [General MIDI 介绍](general-midi-research.md)：GM 的音色映射、鼓通道、复音能力和播放兼容意义。
 - [MusicXML 格式调研](musicxml-format-research.md)：MusicXML 的定位、适合表达的内容、导入策略、风险和验证点。
@@ -18,6 +20,7 @@
 - [alphaTab 渲染调研](alphatab-rendering-research.md)：alphaTab 的定位、数据模型、文件导入、谱面渲染、播放同步和集成风险。
 - [伴奏生成调研](accompaniment-generation-research.md)：规则和 pattern 伴奏生成、各声部逻辑、MVP 工作拆解和参考产品。
 - [伴奏风格模式设计](style-pattern-design.md)：把音乐人描述风格的方式拆成风格画像、声部策略、候选 pattern 和变化规则，避免把风格写成死板事件表。
+- [练习模式功能规划与开源生态调研](practice-mode-oss-landscape.md)：现有练习功能对应领域的开源库地图（pitchfinder.js、Tonal.js、Impro-Visor、music21 等）、和弦指位图"要不要用库生成"的设计结论，以及下一步练习模式的落地优先级。
 
 ## 数字音乐基础设施
 
@@ -31,6 +34,8 @@
 ## 学习资料
 
 - [音乐专业英语词汇表](music-professional-english-glossary.md)：音乐、吉他、钢琴、谱面、演奏表达和数字音乐制作相关的专业英语词汇。
+- [吉他和弦指法学习资料推荐](guitar-chord-shapes-resources.md)：配合 Fretboard 页面练习内容整理的外部资料——和弦图读法惯例、CAGED 系统、减七/半减七和弦指法来源、Standard/Jazz 记谱法对比。
+- [吉他延伸和弦（6/add9/9/11/13）常用程度调研](guitar-extended-chords-research.md)：这几类和弦在流行/摇滚/民谣/爵士里的实际使用频率对比，以及哪些值得加进指型参考表的结论。
 
 ## 建议阅读顺序
 

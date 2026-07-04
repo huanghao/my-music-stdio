@@ -82,6 +82,16 @@ STYLES: list[dict[str, Any]] = [
         "parts": {"drums": "groove_bossa", "bass": "root_fifth", "piano": "block_chord"},
         "reference_songs": ["João Gilberto《The Girl from Ipanema》"],
     },
+    {
+        "id": "ambient", "name": "Ambient Pad", "tags": ["氛围"],
+        "bpm_range": [55, 75], "bpm_default": 65,
+        "time_signature": "4/4", "feel": "straight", "default_key": "Em",
+        "default_progression": [
+            _bar([("Em9", 4)]), _bar([("Cmaj7", 4)]), _bar([("Gadd9", 4)]), _bar([("Dsus2", 4)]),
+        ],
+        "parts": {"drums": None, "bass": None, "piano": "sustained_pad"},
+        "reference_songs": ["Atmospheric Ambient Pad Backing Track in E Minor"],
+    },
 ]
 
 _INDEX = {s["id"]: s for s in STYLES}

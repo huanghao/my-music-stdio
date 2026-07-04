@@ -1,7 +1,7 @@
 import json
+import logging
 import re
 import shutil
-import time as _time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,11 +9,46 @@ from pathlib import Path
 import mido
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from typing import Optional
 
 import src.prefs as prefs
 from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+# ── Request models ──
+
+class ChordEntry(BaseModel):
+    name: str
+    beats: Optional[int] = None
+
+
+class BarEntry(BaseModel):
+    chords: list[ChordEntry] = []
+
+
+class SongBody(BaseModel):
+    """Validated request body for song create/update and play endpoints."""
+    model_config = {"extra": "allow"}
+
+    title: str = "Untitled"
+    key: str = "C"
+    style: str = "pop"
+    bpm: float = Field(default=120.0, ge=20.0, le=300.0)
+    loops: int = Field(default=4, ge=1, le=999)
+    time_signature: str = "4/4"
+    bars: list[BarEntry] = []
+    fill_every: int = Field(default=4, ge=1, le=32)
+    id: Optional[str] = None
+
 
 _player = Player()
 
@@ -34,7 +69,11 @@ def _songs_dir() -> Path:
 
 
 def _song_path(song_id: str) -> Path:
-    return _songs_dir() / song_id
+    base = _songs_dir()
+    p = (base / song_id).resolve()
+    if not p.is_relative_to(base.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid song id")
+    return p
 
 
 def _slugify(title: str) -> str:
@@ -96,22 +135,24 @@ def api_get_song(song_id: str):
 
 
 @app.post("/api/songs")
-def api_create_song(song: dict):
-    song_id = _slugify(song.get("title", "song"))
+def api_create_song(song: SongBody):
+    data = song.model_dump(exclude={"id"})
+    song_id = _slugify(data.get("title", "song"))
     base = song_id
     i = 1
     while _song_path(song_id).exists():
         song_id = f"{base}-{i}"
         i += 1
-    _write_song(song_id, song)
-    return {**song, "id": song_id, "generated": False}
+    _write_song(song_id, data)
+    return {**data, "id": song_id, "generated": False}
 
 
 @app.put("/api/songs/{song_id}")
-def api_update_song(song_id: str, song: dict):
+def api_update_song(song_id: str, song: SongBody):
     _read_song(song_id)  # 404 if not found
-    _write_song(song_id, song)
-    return {**song, "id": song_id}
+    data = song.model_dump(exclude={"id"})
+    _write_song(song_id, data)
+    return {**data, "id": song_id}
 
 
 @app.delete("/api/songs/{song_id}")
@@ -124,30 +165,27 @@ def api_delete_song(song_id: str):
 
 
 @app.post("/api/play")
-def api_play(song: dict):
+def api_play(song: SongBody):
     p = prefs.load()
     soundfont = str(Path(p["soundfont_path"]).expanduser())
 
-    progression = []
-    for bar in song.get("bars", []):
-        for chord in bar.get("chords", []):
-            progression.append(chord["name"])
+    progression = [chord.name for bar in song.bars for chord in bar.chords]
 
     if not progression:
         raise HTTPException(status_code=400, detail="No chords in song")
 
-    loops = song.get("loops", 4)
-    bpm = song.get("bpm", 120)
-    style = song.get("style", "pop")
-    fill_every = int(song.get("fill_every", 4))
+    loops = song.loops
+    bpm = song.bpm
+    style = song.style
+    fill_every = song.fill_every
 
-    song_id = song.get("id")
+    song_id = song.id
     if song_id:
         out_dir = _song_path(song_id)
         out_dir.mkdir(parents=True, exist_ok=True)
         midi_path = str(out_dir / "accompaniment.mid")
     else:
-        tmp_dir = Path("/tmp/my-music-stdio")
+        tmp_dir = Path(__file__).parent.parent / "tmp"
         tmp_dir.mkdir(exist_ok=True)
         midi_path = str(tmp_dir / "jam_accompaniment.mid")
 
@@ -158,7 +196,7 @@ def api_play(song: dict):
     mid.save(midi_path)
 
     # compute total duration
-    bars_per_loop = len(song.get("bars", []))
+    bars_per_loop = len(song.bars)
     sec_per_bar = 4 * 60 / bpm
     duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
 
@@ -168,6 +206,7 @@ def api_play(song: dict):
         "bars": bars_per_loop,
         "bpm": bpm,
     }
+    logger.info("play: %s bars, bpm=%s, style=%s, loops=%s → %s", len(song.get("bars", [])), bpm, style, loops, midi_path)
     _player.set_soundfont(soundfont)
     _player.play(midi_path, bpm=bpm, session_meta=session_meta)
 
@@ -190,18 +229,21 @@ def api_set_bpm(body: dict):
 
 @app.post("/api/stop")
 def api_stop():
+    logger.info("stop")
     _player.stop()
     return {"playing": False}
 
 
 @app.post("/api/pause")
 def api_pause():
+    logger.info("pause")
     _player.pause()
     return _player.status()
 
 
 @app.post("/api/resume")
 def api_resume():
+    logger.info("resume")
     _player.resume()
     return _player.status()
 

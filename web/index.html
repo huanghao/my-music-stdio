@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Music Practice</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,6 +13,9 @@
   <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
   <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
+  <button class="nav-btn"        data-page="sightread" onclick="showPage('sightread')">Sight Read</button>
+  <button class="nav-btn"        data-page="fretboard" onclick="showPage('fretboard')">Fretboard</button>
+  <button class="nav-btn"        data-page="speed" onclick="showPage('speed')">Speed Trainer</button>
   <button class="nav-btn"        data-page="prefs" onclick="showPage('prefs')">Preferences</button>
   <div class="nav-spacer"></div>
   <div class="conn-indicator" id="conn-indicator" title="Server connection">
@@ -71,6 +75,255 @@
   <div id="editor-chart"></div>
 </div>
 
+<!-- SIGHT READ PAGE -->
+<div class="page" id="page-sightread">
+  <div id="sightread-picker">
+    <h2 style="font-size:18px;margin-bottom:16px;">Sight Read — pick a song</h2>
+    <div id="sightread-song-list"></div>
+  </div>
+  <div id="sightread-view" style="display:none">
+    <div id="sightread-controls"></div>
+    <div class="playback-panel" id="sightread-playback">
+      <div class="playback-elapsed" id="sightread-elapsed">—</div>
+      <div class="playback-meta">
+        <span class="playback-meta-val" id="sightread-loop-val">—</span>
+        <span class="playback-meta-lbl">loop</span>
+      </div>
+      <div class="playback-state" id="sightread-state">stopped</div>
+    </div>
+    <div id="sightread-chart"></div>
+  </div>
+</div>
+
+<!-- FRETBOARD PAGE -->
+<div class="page" id="page-fretboard">
+  <div class="fb-tabs-row">
+    <div class="fb-tabs">
+      <button class="fb-tab active" data-fbmode="notes" onclick="fbShowMode('notes')">Note Names</button>
+      <button class="fb-tab" data-fbmode="caged" onclick="fbShowMode('caged')">CAGED Shapes</button>
+      <button class="fb-tab" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
+      <button class="fb-tab" data-fbmode="tuner" onclick="fbShowMode('tuner')">Tuner</button>
+      <button class="fb-tab" data-fbmode="chord" onclick="fbShowMode('chord')">Chord Match</button>
+      <button class="fb-tab" data-fbmode="keymap" onclick="fbShowMode('keymap')">Key Map</button>
+      <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
+    </div>
+    <a class="fb-ref-link" href="chord-reference-sheet-by-chord.html" target="_blank">📄 和弦指型参考表 ↗</a>
+  </div>
+
+  <!-- Shared mic/speaker device pickers — apply across every mode below,
+       since they all share the same underlying fbMic/fbOutput singletons. -->
+  <div class="fb-device-bar" id="fb-device-bar"></div>
+
+  <!-- Note Names drill -->
+  <div class="fb-panel active" id="fb-notes">
+    <div class="fb-options" id="fb-notes-options"></div>
+    <div class="fb-stats" id="fb-notes-stats"></div>
+    <div id="fb-notes-board"></div>
+    <div class="fb-answer-grid" id="fb-notes-answers"></div>
+    <div class="fb-feedback" id="fb-notes-feedback"></div>
+  </div>
+
+  <!-- CAGED Shapes drill -->
+  <div class="fb-panel" id="fb-caged">
+    <div class="fb-subtabs" id="fb-caged-mode-tabs" style="margin-bottom:12px">
+      <button class="fb-subtab active" data-cagedmode="barre" onclick="fbCagedSetMode('barre')">Barre Position</button>
+      <button class="fb-subtab" data-cagedmode="degrees" onclick="fbCagedSetMode('degrees')">Shape Degrees</button>
+    </div>
+
+    <!-- Barre Position: given a root + shape letter, name the barre fret -->
+    <div id="fb-caged-barre-panel">
+      <div class="fb-stats" id="fb-caged-stats"></div>
+      <div class="fb-prompt" id="fb-caged-prompt"></div>
+      <div class="fb-caged-answer">
+        <label>Fret</label>
+        <input type="number" id="fb-caged-fret" min="0" max="15" style="width:64px">
+        <button class="btn btn-primary btn-sm" onclick="fbCagedCheck()">Check</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbCagedNext()">Next →</button>
+      </div>
+      <div class="fb-feedback" id="fb-caged-feedback"></div>
+      <div id="fb-caged-board"></div>
+    </div>
+
+    <!-- Shape Degrees: which finger position in a CAGED shape is the root/3rd/5th -->
+    <div id="fb-caged-degrees-panel" style="display:none">
+      <div class="fb-options" id="fb-shapedeg-options"></div>
+      <div class="fb-subtabs" id="fb-shapedeg-mode-tabs" style="margin-bottom:12px">
+        <button class="fb-subtab active" data-degreemode="identify" onclick="fbShapeDegreeSetMode('identify')">Identify</button>
+        <button class="fb-subtab" data-degreemode="locate" onclick="fbShapeDegreeSetMode('locate')">Locate</button>
+      </div>
+
+      <!-- Identify: a position is highlighted, name its scale degree -->
+      <div id="fb-shapedeg-identify-panel">
+        <div class="fb-stats" id="fb-shapedeg-identify-stats"></div>
+        <div class="fb-prompt" id="fb-shapedeg-identify-prompt"></div>
+        <div id="fb-shapedeg-identify-board"></div>
+        <div class="fb-answer-grid" id="fb-shapedeg-identify-answers" style="max-width:220px"></div>
+        <div class="fb-feedback" id="fb-shapedeg-identify-feedback"></div>
+      </div>
+
+      <!-- Locate: given a scale degree, click a matching position on the shape -->
+      <div id="fb-shapedeg-locate-panel" style="display:none">
+        <div class="fb-stats" id="fb-shapedeg-locate-stats"></div>
+        <div class="fb-prompt" id="fb-shapedeg-locate-prompt"></div>
+        <div id="fb-shapedeg-locate-board"></div>
+        <div class="fb-feedback" id="fb-shapedeg-locate-feedback"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pitch Match (mic ear training) -->
+  <div class="fb-panel" id="fb-pitch">
+    <div class="fb-options" id="fb-pitch-options"></div>
+    <div class="fb-stats" id="fb-pitch-stats"></div>
+    <div class="fb-pitch-target" id="fb-pitch-target"></div>
+    <div class="fb-pitch-meter" id="fb-pitch-meter"></div>
+    <div id="fb-pitch-board"></div>
+    <div class="fb-caged-answer">
+      <button class="btn btn-primary btn-sm" id="fb-pitch-start-btn" onclick="fbPitchStart()">Start Listening</button>
+      <button class="btn btn-ghost btn-sm" id="fb-pitch-stop-btn" onclick="fbPitchStop()" style="display:none">Stop</button>
+      <button class="btn btn-ghost btn-sm" onclick="fbPitchNewNote()">New Note</button>
+    </div>
+    <div class="fb-feedback" id="fb-pitch-feedback"></div>
+    <div class="fb-stats-table-wrap" id="fb-pitch-stats-table"></div>
+  </div>
+
+  <!-- Tuner (mic-based, auto-detects nearest string) -->
+  <div class="fb-panel" id="fb-tuner">
+    <div class="fb-options" id="fb-tuner-options"></div>
+    <div class="fb-tuner-strings" id="fb-tuner-strings"></div>
+    <div class="fb-pitch-meter" id="fb-tuner-meter"></div>
+    <div class="fb-caged-answer">
+      <button class="btn btn-primary btn-sm" id="fb-tuner-start-btn" onclick="fbTunerStart()">Start Listening</button>
+      <button class="btn btn-ghost btn-sm" id="fb-tuner-stop-btn" onclick="fbTunerStop()" style="display:none">Stop</button>
+      <button class="btn btn-ghost btn-sm" onclick="fbTunerReset()">Reset</button>
+    </div>
+    <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
+  </div>
+
+  <!-- Chord Match (mic-based chord sight-reading: strum the named chord, get confirmation) -->
+  <div class="fb-panel" id="fb-chord">
+    <div class="fb-options" id="fb-chord-options"></div>
+
+    <div id="fb-chord-exam-panel">
+      <div class="fb-stats" id="fb-chord-stats"></div>
+      <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
+      <div class="fb-pitch-target" id="fb-chord-target"></div>
+      <div class="fb-chord-formula" id="fb-chord-formula"></div>
+      <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
+      <div class="fb-caged-answer">
+        <button class="btn btn-primary btn-sm" id="fb-chord-start-btn" onclick="fbChordStart()">Start Listening</button>
+        <button class="btn btn-ghost btn-sm" id="fb-chord-stop-btn" onclick="fbChordStop()" style="display:none">Stop</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
+      </div>
+      <div class="fb-feedback" id="fb-chord-feedback"></div>
+      <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
+      <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
+    </div>
+  </div>
+
+  <!-- Key Map: relative major/minor lookup + scale-degree-to-chord lookup, both timed -->
+  <div class="fb-panel" id="fb-keymap">
+    <div class="fb-subtabs" style="margin-bottom:12px">
+      <button class="fb-subtab active" data-keymapmode="relative" onclick="fbKeymapSetMode('relative')">Relative Key</button>
+      <button class="fb-subtab" data-keymapmode="degree" onclick="fbKeymapSetMode('degree')">Scale Degree</button>
+    </div>
+
+    <!-- Relative Key: given a chord, name the root of its relative major/minor -->
+    <div id="fb-keymap-relative-panel">
+      <div class="fb-stats" id="fb-keymap-relative-stats"></div>
+      <div class="fb-prompt" id="fb-keymap-relative-prompt"></div>
+      <div class="fb-answer-grid" id="fb-keymap-relative-answers"></div>
+      <div class="fb-feedback" id="fb-keymap-relative-feedback"></div>
+      <button class="btn btn-ghost btn-sm" onclick="fbRelativeNext()">Next →</button>
+    </div>
+
+    <!-- Scale Degree: given a major key + a Roman-numeral degree, name the chord -->
+    <div id="fb-keymap-degree-panel" style="display:none">
+      <div class="fb-options" id="fb-keymap-degree-options"></div>
+      <div class="fb-stats" id="fb-keymap-degree-stats"></div>
+      <div class="fb-prompt" id="fb-keymap-degree-prompt"></div>
+      <div class="fb-answer-grid" id="fb-keymap-degree-answers"></div>
+      <div class="fb-feedback" id="fb-keymap-degree-feedback"></div>
+      <button class="btn btn-ghost btn-sm" onclick="fbDegreeNext()">Next →</button>
+    </div>
+  </div>
+
+  <!-- Ear Training: interval recognition within a pentatonic/blues scale -->
+  <div class="fb-panel" id="fb-ear">
+    <div class="fb-options" id="fb-ear-options"></div>
+    <div class="fb-subtabs" id="fb-ear-mode-tabs" style="margin-bottom:12px">
+      <button class="fb-subtab active" data-earmode="two" onclick="fbEarSetMode('two')">2 Notes</button>
+      <button class="fb-subtab" data-earmode="three" onclick="fbEarSetMode('three')">3 Notes</button>
+    </div>
+
+    <div id="fb-ear-two-panel">
+      <div class="fb-stats" id="fb-ear-two-stats"></div>
+      <div class="fb-prompt" id="fb-ear-two-prompt"></div>
+      <div id="fb-ear-two-diagram"></div>
+      <div class="fb-caged-answer">
+        <button class="btn btn-primary btn-sm" onclick="fbEarPlayCurrent('two')">▶ Play</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbEarPlayScaffold('two')" title="Play every scale step from the lower note up to the higher one">▶ Fill the gap</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbEarManualNext('two')">Next →</button>
+      </div>
+      <div class="fb-answer-grid" id="fb-ear-two-answers"></div>
+      <div class="fb-feedback" id="fb-ear-two-feedback"></div>
+    </div>
+
+    <div id="fb-ear-three-panel" style="display:none">
+      <div class="fb-stats" id="fb-ear-three-stats"></div>
+      <div class="fb-prompt" id="fb-ear-three-prompt"></div>
+      <div id="fb-ear-three-diagram"></div>
+      <div class="fb-caged-answer">
+        <button class="btn btn-primary btn-sm" onclick="fbEarPlayCurrent('three')">▶ Play</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbEarPlayScaffold('three')" title="Play every scale step from the lowest note up to the highest one">▶ Fill the gap</button>
+        <button class="btn btn-ghost btn-sm" onclick="fbEarManualNext('three')">Next →</button>
+      </div>
+      <div class="fb-answer-grid" id="fb-ear-three-answers"></div>
+      <div class="fb-feedback" id="fb-ear-three-feedback"></div>
+    </div>
+  </div>
+</div>
+
+<!-- SPEED TRAINER PAGE -->
+<div class="page" id="page-speed">
+  <h2 style="font-size:18px;margin-bottom:16px;">Speed Trainer</h2>
+  <p style="font-size:13px;color:#888;margin-bottom:16px;max-width:640px;">
+    Practice a lick or solo you can't play at full speed yet: start the click at a
+    tempo you can already play cleanly, then bump it up a notch at a time — only once
+    you're actually clean at the current tempo, not on a timer.
+  </p>
+
+  <div class="st-options">
+    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:64px"></label>
+    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" style="width:64px"></label>
+    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" style="width:56px"> BPM</label>
+    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" style="width:56px"></label>
+    <label>Subdivision:
+      <select id="st-subdivision">
+        <option value="1" selected>Quarter notes</option>
+        <option value="2">Eighth notes</option>
+        <option value="4">Sixteenth notes</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="st-auto-advance"> Auto-advance every
+      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" style="width:48px"> bars</label>
+  </div>
+
+  <div class="st-display">
+    <div class="st-bpm-current" id="st-bpm-current">60</div>
+    <div class="st-bpm-label">BPM <span id="st-bpm-target-label">(target 120)</span></div>
+    <div class="st-beat-row" id="st-beat-row"></div>
+    <div class="st-progress" id="st-progress"></div>
+  </div>
+
+  <div class="fb-caged-answer">
+    <button class="btn btn-primary btn-sm" id="st-start-btn" onclick="stStart()">▶ Start</button>
+    <button class="btn btn-stop btn-sm" id="st-stop-btn" onclick="stStop()" style="display:none">■ Stop</button>
+    <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump up (+step)</button>
+    <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
+  </div>
+</div>
+
 <!-- PREFERENCES PAGE -->
 <div class="page" id="page-prefs">
   <h2 style="font-size:18px;margin-bottom:20px;">Preferences</h2>
@@ -82,11 +335,12 @@
   <span id="status-sf"></span>
 </div>
 
-<!-- modal (used for song title only) -->
+<!-- modal (song title, and chord entry from the chart's right-click menu) -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
   <div class="modal">
     <h3 id="modal-title">Song Title</h3>
     <input class="modal-input" id="modal-input" placeholder="My Song" autocomplete="off" />
+    <div class="modal-suggestions" id="modal-suggestions"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="confirmChord()">OK</button>
@@ -94,6 +348,9 @@
   </div>
 </div>
 
+<script src="vendor/svguitar.umd.js"></script>
+<script src="fretboard.js"></script>
+<script src="speed-trainer.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

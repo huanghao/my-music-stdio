@@ -84,6 +84,20 @@ def test_delete_song(client):
     assert r.status_code == 404
 
 
+def test_song_id_path_traversal_is_rejected(client, tmp_path):
+    # httpx/browsers normalize a literal ".." out of the URL before sending it,
+    # so use percent-encoding to exercise the raw path the server actually sees.
+    r = client.delete("/api/songs/%2e%2e")
+    assert r.status_code == 400
+    assert (tmp_path / "songs").exists()  # would be gone if the parent got rmtree'd
+
+    r = client.get("/api/songs/%2e%2e")
+    assert r.status_code == 400
+
+    r = client.put("/api/songs/%2e%2e", json={"title": "x"})
+    assert r.status_code == 400
+
+
 def test_get_status(client):
     r = client.get("/api/status")
     assert r.status_code == 200

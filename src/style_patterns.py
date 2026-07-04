@@ -53,6 +53,25 @@ class PianoPatternFamily:
     by_role: dict[str, tuple[PianoHitRule, ...]]
 
 
+@dataclass(frozen=True)
+class StyleProfile:
+    id: str
+    feel: str
+    tempo_range: tuple[int, int]
+    energy: str
+    density: str
+    groove_anchor: str
+    forbidden_traits: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class StylePattern:
+    profile: StyleProfile
+    drums: DrumPatternFamily | None = None
+    bass: BassPatternFamily | None = None
+    piano: PianoPatternFamily | None = None
+
+
 POP_DRUMS = DrumPatternFamily(
     grid_slots=16,
     required=(
@@ -126,8 +145,29 @@ PIANO_PATTERNS = {
     ),
 }
 
+POP_STYLE = StylePattern(
+    profile=StyleProfile(
+        id="pop",
+        feel="straight",
+        tempo_range=(90, 130),
+        energy="medium",
+        density="medium",
+        groove_anchor="backbeat",
+        forbidden_traits=("dense_double_kick", "heavy_crash", "shuffle_triplet"),
+    ),
+    drums=POP_DRUMS,
+    bass=BASS_PATTERNS["pop"],
+    piano=PIANO_PATTERNS["pop"],
+)
+
+STYLE_PATTERNS = {
+    "pop": POP_STYLE,
+}
+
 DRUM_PATTERNS = {
-    "pop": POP_DRUMS,
+    style_id: style.drums
+    for style_id, style in STYLE_PATTERNS.items()
+    if style.drums is not None
 }
 
 
@@ -154,10 +194,14 @@ def drum_bar_raw_events(
 
 
 def bass_rules(style: str, bar_role: str) -> tuple[BassHitRule, ...]:
-    pattern = BASS_PATTERNS[style]
+    pattern = STYLE_PATTERNS[style].bass
+    if pattern is None:
+        raise KeyError(f"No bass pattern for style: {style}")
     return pattern.by_role.get(bar_role, pattern.by_role["phrase_middle"])
 
 
 def piano_rules(style: str, bar_role: str) -> tuple[PianoHitRule, ...]:
-    pattern = PIANO_PATTERNS[style]
+    pattern = STYLE_PATTERNS[style].piano
+    if pattern is None:
+        raise KeyError(f"No piano pattern for style: {style}")
     return pattern.by_role.get(bar_role, pattern.by_role["phrase_middle"])

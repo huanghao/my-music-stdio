@@ -140,6 +140,8 @@ def _fill_half(bar_offset: int) -> list[tuple]:
 
 def _pick_fill(style: str, bar_offset: int) -> list[tuple]:
     """Choose fill variant by style, with randomisation."""
+    if style == 'ambient':
+        return []  # no drums, no fills
     r = random.random()
     if style in ('rock', 'metal'):
         return _fill_tom_cascade(bar_offset) if r < 0.6 else _fill_snare_roll(bar_offset)
@@ -266,6 +268,10 @@ def groove_funk(bar_offset: int, is_fill: bool) -> list[tuple]:
     return events
 
 
+def groove_ambient(bar_offset: int, is_fill: bool) -> list[tuple]:
+    return []  # no drums: sustained pad only
+
+
 def groove_bossa(bar_offset: int, is_fill: bool) -> list[tuple]:
     # rim shot pattern + kick on 1 and "and of 2"
     events = []
@@ -291,6 +297,12 @@ GROOVE_FN = {
     "rnb":     groove_rnb,
     "funk":    groove_funk,
     "bossa":   groove_bossa,
+    "ambient": groove_ambient,
+}
+
+# GM program per style for the piano/pad channel (channel 0); default is Acoustic Grand Piano (0)
+PIANO_PROGRAM = {
+    "ambient": 89,  # Warm Pad
 }
 
 # piano voicing style per style-group
@@ -325,6 +337,7 @@ def piano_bar_events(
     bar_offset: int,
     style: str = "pop",
     bar_role: str = "phrase_middle",
+    hold_bars: int = 1,
 ) -> list[tuple[int, mido.Message]]:
     notes = chord_midi_notes(chord)
     events = []
@@ -335,8 +348,8 @@ def piano_bar_events(
             events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
             events.append((t + dur, mido.Message("note_off", channel=0, note=n, velocity=0)))
 
-    if style in style_patterns.PIANO_PATTERNS:
-        pattern = style_patterns.PIANO_PATTERNS[style]
+    if style in style_patterns.STYLE_PATTERNS and style_patterns.STYLE_PATTERNS[style].piano:
+        pattern = style_patterns.STYLE_PATTERNS[style].piano
         ticks_per_slot = PPQ * 4 // pattern.grid_slots
         for rule in style_patterns.piano_rules(style, bar_role):
             hit(
@@ -365,6 +378,10 @@ def piano_bar_events(
         # Shuffle comping: beat 2, beat 4 (backbeat emphasis)
         hit(PPQ,       85, PPQ - 20)
         hit(PPQ * 3,   80, PPQ - 20)
+    elif style in ("ambient",):
+        # Sustained pad: one soft hit, held across `hold_bars` bars while the chord repeats
+        # (avoids re-triggering the slow pad attack every bar, which sounds like a heartbeat)
+        hit(0, 55, PPQ * 4 * hold_bars - 20)
     else:
         # pop default: beat 2 + beat 3-and
         hit(PPQ,                 82)
@@ -419,8 +436,8 @@ def bass_bar_events(
     events = []
     bass_notes = _bass_context(chord, next_chord)
 
-    if style in style_patterns.BASS_PATTERNS:
-        pattern = style_patterns.BASS_PATTERNS[style]
+    if style in style_patterns.STYLE_PATTERNS and style_patterns.STYLE_PATTERNS[style].bass:
+        pattern = style_patterns.STYLE_PATTERNS[style].bass
         ticks_per_slot = PPQ * 4 // pattern.grid_slots
         rules = style_patterns.bass_rules(style, bar_role)
         hits = [
@@ -432,6 +449,8 @@ def bass_bar_events(
             )
             for rule in rules
         ]
+    elif style == "ambient":
+        hits = []  # pure pad, no bass
     else:
         hits = [
             (0,       bass_notes["root"],          95, PPQ - 30),
@@ -491,17 +510,40 @@ def build_track(
     track = mido.MidiTrack()
     track.append(mido.MetaMessage("set_tempo", tempo=int(60_000_000 / bpm), time=0))
     track.append(mido.Message("program_change", channel=1, program=32, time=0))  # Acoustic Bass
+    piano_program = PIANO_PROGRAM.get(style)
+    if piano_program is not None:
+        track.append(mido.Message("program_change", channel=0, program=piano_program, time=0))
 
     all_events: list[tuple[int, mido.Message]] = []
     total_bars = loops * len(progression)
     flat = progression * loops  # all bars in order
+
+    # ambient: hold the pad across consecutive repeated bars instead of
+    # re-triggering every bar (re-triggering restarts the pad's slow attack,
+    # which produces an audible pulse in sync with the bar length)
+    hold_bars_at_start: dict[int, int] = {}
+    if style == "ambient":
+        bar = 0
+        while bar < total_bars:
+            run_end = bar
+            while run_end + 1 < total_bars and flat[run_end + 1] == flat[bar]:
+                run_end += 1
+            hold_bars_at_start[bar] = run_end - bar + 1
+            bar = run_end + 1
+
     for global_bar, chord in enumerate(flat):
         bar_offset = global_bar * TICKS_PER_BAR
         is_fill = (global_bar % fill_every == fill_every - 1) and (global_bar < total_bars - 1)
         bar_role = _bar_role(global_bar, is_fill, fill_every)
         next_chord = flat[global_bar + 1] if global_bar + 1 < total_bars else None
 
-        all_events += piano_bar_events(chord, bar_offset, style, bar_role)
+        if style == "ambient":
+            if global_bar in hold_bars_at_start:
+                all_events += piano_bar_events(
+                    chord, bar_offset, style, bar_role, hold_bars=hold_bars_at_start[global_bar]
+                )
+        else:
+            all_events += piano_bar_events(chord, bar_offset, style, bar_role)
         all_events += bass_bar_events(chord, bar_offset, next_chord, style, bar_role)
         all_events += drum_bar_events(groove_fn, bar_offset, is_fill, style, bar_role)
 

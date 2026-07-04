@@ -255,6 +255,24 @@ POP_PIANO
 
 这里的 `block` 表示当前和弦音同时按下，`stab` 表示短促和弦击打。第一版先不做复杂 `voicing`（和弦音排列）和 arpeggio（分解琶音），因为这些会引入更多演奏法问题。先让钢琴跟随同一套小节角色变化，验证整体听感是否比固定 hit 更自然。
 
+三类声部现在挂在同一个 `STYLE_PATTERNS["pop"]` 入口下：
+
+```text
+STYLE_PATTERNS["pop"]
+- profile:
+  - feel: straight
+  - tempo_range: 90-130
+  - energy: medium
+  - density: medium
+  - groove_anchor: backbeat
+  - forbidden_traits: dense_double_kick, heavy_crash, shuffle_triplet
+- drums: POP_DRUMS
+- bass: POP_BASS
+- piano: POP_PIANO
+```
+
+这层 profile 的作用不是直接生成音符，而是给后续扩展提供统一入口：如果要看 Pop 到底是什么，先看 profile；如果要调具体声部，再进入 drums、bass、piano。后续迁移 Ballad 时，也应该先写 Ballad profile，再挂对应声部 pattern。
+
 这说明“数据驱动”不是把完整 MIDI 事件塞进数据里，而是把音乐决策拆成：
 
 ```text
@@ -280,6 +298,10 @@ just dev
 ```
 
 打开 `http://localhost:8765`，在 Jam 或 Vamp 里选择 Pop 并播放。当前 Pop 播放会自动使用 `src/style_patterns.py` 里的 Pop 鼓、贝斯和钢琴规则；不需要在页面上额外打开开关。
+
+### 查看 Pop 整体定义
+
+先看 `src/style_patterns.py` 里的 `STYLE_PATTERNS["pop"]`。这里会列出 Pop 的风格画像，以及它使用的 drums、bass、piano pattern。不要从某一个声部反推整个风格；声部只是 profile 的实现细节。
 
 ### 调整 Pop 鼓
 
@@ -413,7 +435,7 @@ Ballad 不是“Pop 降低 BPM”。它还改变声部职责和密度。
 1. **Pop drums**：已完成最小切片。继续试听并调整 required/optional 的音乐性。
 2. **Pop bass**：已完成最小切片。继续试听 root、fifth、octave、approach_next 的密度和连接效果。
 3. **Pop piano**：已完成最小切片。下一步应补 voicing、音区和 broken chord。
-4. **统一 Pop style profile**：把 drums、bass、piano 放到同一个 Pop 风格画像下，明确 density、energy、forbidden traits。
+4. **统一 Pop style profile**：已完成。drums、bass、piano 已挂到同一个 Pop 风格画像下。
 5. **再迁移 Ballad**：Ballad 和 Pop 相邻，但约束不同，适合作为第二个风格验证模型是否能表达边界。
 
 这个顺序的目标不是快速增加风格数量，而是验证同一套可变空间和约束是否能同时控制多个声部。如果 Pop 的三个声部都能用这套模型表达，再扩风格才有意义。

@@ -1,9 +1,12 @@
 import ctypes
+import logging
 import threading
 import time as _time
 from pathlib import Path
 
 import mido
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SOUNDFONT = str(Path("~/music-practice/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2").expanduser())
 
@@ -47,6 +50,7 @@ class Player:
 
     def _ensure_synth(self) -> None:
         if self._fs is None:
+            logger.info("initialising FluidSynth with %s", self._soundfont)
             self._fs = fluidsynth.Synth(gain=0.7)
             self._fs.start(driver="coreaudio")
             sf = str(Path(self._soundfont).expanduser())
@@ -133,6 +137,7 @@ class Player:
         path = str(Path(path).expanduser())
         if path == str(Path(self._soundfont).expanduser()):
             return
+        logger.info("switching soundfont → %s", path)
         self._soundfont = path
         if self._fs is not None:
             self.stop()
@@ -153,6 +158,7 @@ class Player:
         bpm: float | None = None,
         session_meta: dict | None = None,
     ) -> None:
+        logger.info("play: %s (bpm=%s)", midi_file, bpm)
         self.stop()
         self._ensure_synth()
         self._init_gm_channels()  # reset channels on every play

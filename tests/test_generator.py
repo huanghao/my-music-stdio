@@ -1,3 +1,5 @@
+import pytest
+
 from src import gen_accompaniment_midi as gen
 from src import style_patterns
 
@@ -101,3 +103,34 @@ def test_pop_piano_rules_change_by_bar_role():
         (8, "stab"),
         (14, "stab"),
     ]
+
+
+def test_pop_style_profile_groups_all_pattern_parts():
+    pop = style_patterns.STYLE_PATTERNS["pop"]
+
+    assert pop.profile.feel == "straight"
+    assert pop.profile.groove_anchor == "backbeat"
+    assert "shuffle_triplet" in pop.profile.forbidden_traits
+    assert pop.drums is style_patterns.POP_DRUMS
+    assert pop.bass is style_patterns.BASS_PATTERNS["pop"]
+    assert pop.piano is style_patterns.PIANO_PATTERNS["pop"]
+
+
+def test_bass_rules_raises_for_style_missing_bass_pattern():
+    style_patterns.STYLE_PATTERNS["_no_bass"] = style_patterns.StylePattern(
+        profile=style_patterns.StyleProfile(
+            id="_no_bass",
+            feel="straight",
+            tempo_range=(90, 130),
+            energy="medium",
+            density="medium",
+            groove_anchor="backbeat",
+        ),
+    )
+    try:
+        with pytest.raises(KeyError):
+            style_patterns.bass_rules("_no_bass", "phrase_middle")
+        with pytest.raises(KeyError):
+            style_patterns.piano_rules("_no_bass", "phrase_middle")
+    finally:
+        del style_patterns.STYLE_PATTERNS["_no_bass"]

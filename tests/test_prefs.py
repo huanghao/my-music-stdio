@@ -1,4 +1,3 @@
-import pytest
 
 
 def test_load_defaults(tmp_path, monkeypatch):

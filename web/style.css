@@ -38,7 +38,7 @@ body {
 .nav-btn:hover { background: #f0f0f0; }
 .nav-btn.active { background: #e8e4d8; color: #2a2a2a; font-weight: 500; }
 
-.page { display: none; padding: 24px 20px 60px; max-width: 900px; margin: 0 auto; }
+.page { display: none; padding: 16px 16px 60px; }
 .page.active { display: block; }
 
 .btn {
@@ -226,6 +226,14 @@ input[type="number"] { width: 64px; text-align: center; }
 .beat-cell { position: relative; }
 .beat-cell:hover .chord-del { display: block; }
 
+/* Sight Read: read-only, bigger chord text for reading at a glance while playing */
+.sightread-readonly { font-size: 14px; color: #2a2a2a; }
+.sightread-wrap .chart-bar { min-height: 84px; }
+.sightread-wrap .beat-cell { cursor: default; }
+.sightread-wrap .beat-cell:hover { background: none; }
+.sightread-wrap .beat-cell .chord-name { font-size: 26px; cursor: default; }
+.sightread-wrap .beat-cell .chord-name:hover { color: #2a2a2a; }
+
 /* inline chord edit */
 .chord-inline-input {
   width: 100%; max-width: 80px; text-align: center;
@@ -298,9 +306,253 @@ input[type="number"] { width: 64px; text-align: center; }
 .suggestion:hover { background: #eee; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* Fretboard trainer */
+.fb-tabs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.fb-tabs { display: flex; gap: 2px; background: #f0efe8; border-radius: 6px; padding: 2px; width: fit-content; }
+.fb-ref-link { font-size: 12px; color: #4a7c4a; text-decoration: none; }
+.fb-ref-link:hover { text-decoration: underline; }
+.fb-tab {
+  background: none; border: none; cursor: pointer;
+  padding: 6px 16px; border-radius: 4px; font-size: 13px; color: #666;
+  transition: background 0.1s;
+}
+.fb-tab:hover { background: #e8e4d8; }
+.fb-tab.active { background: #fff; color: #2a2a2a; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+/* Sub-tabs nested inside a panel (e.g. Key Map's Relative Key / Scale Degree
+   toggle) — same look as .fb-tab, but a different class so fbShowMode()'s
+   global `.fb-tab` selector for the *top-level* mode tabs doesn't also touch
+   these and strip their active state on every top-level tab switch. */
+.fb-subtabs { display: flex; gap: 2px; background: #f0efe8; border-radius: 6px; padding: 2px; width: fit-content; }
+.fb-subtab {
+  background: none; border: none; cursor: pointer;
+  padding: 6px 16px; border-radius: 4px; font-size: 13px; color: #666;
+  transition: background 0.1s;
+}
+.fb-subtab:hover { background: #e8e4d8; }
+.fb-subtab.active { background: #fff; color: #2a2a2a; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.fb-panel { display: none; }
+.fb-panel.active { display: block; }
+
+.fb-options {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap;
+  gap: 16px; align-items: center; font-size: 12px; color: #666;
+}
+.fb-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+
+.fb-device-bar {
+  background: #f5f5f0; border: 1px solid #ddd; border-radius: 8px;
+  padding: 8px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap;
+  gap: 16px; align-items: center; font-size: 12px; color: #666;
+}
+.fb-device-bar:empty { display: none; }
+
+.fb-stats {
+  display: flex; gap: 24px; margin-bottom: 12px; font-size: 12px; color: #888;
+}
+.fb-stats b { color: #2a2a2a; font-size: 15px; }
+.fb-stats .fb-stat-ok b { color: #4a7c4a; }
+.fb-stats .fb-stat-streak b { color: #b8843a; }
+
+.fb-board {
+  background: #fdfaf2; border: 1px solid #d8d4c8; border-radius: 8px;
+  padding: 20px 24px; margin-bottom: 12px; overflow-x: auto;
+}
+.fb-board svg { display: block; }
+/* Override the .fb-board padding so the SVG fills the card properly. */
+.fb-svguitar-box { width: 100%; margin: 0 auto; padding: 4px !important; }
+.fb-svguitar-box svg { width: 100%; height: auto; display: block; }
+.fb-string { stroke: #999; stroke-width: 2; }
+.fb-fretline { stroke: #aaa; stroke-width: 2; }
+.fb-nut { stroke: #444; stroke-width: 5; }
+.fb-inlay { fill: #9c8f6a; }
+.fb-fret-num { font-size: 13px; fill: #666; font-family: sans-serif; }
+.fb-string-name { font-size: 13px; fill: #777; font-family: sans-serif; font-weight: 600; }
+.fb-open-marker { fill: none; stroke: #bbb; stroke-width: 2; }
+.fb-quiz-dot { fill: #c0503f; stroke: #fff; stroke-width: 2; }
+.fb-shape-dot { fill: #cfd8c8; stroke: #8a9a7a; stroke-width: 1.5; }
+.fb-shape-dot.clickable { cursor: pointer; }
+.fb-shape-dot.clickable:hover { stroke: #4a7c4a; stroke-width: 2.5; }
+.fb-shape-dot.correct { fill: #4a7c4a; stroke: #fff; }
+.fb-shape-dot.wrong { fill: #8f4a4a; stroke: #fff; }
+.fb-shape-degree-label { font-size: 12px; fill: #fff; font-family: sans-serif; font-weight: 700; pointer-events: none; }
+
+.fb-answer-grid {
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 480px;
+}
+.fb-answer-btn {
+  background: #fff; border: 1px solid #ccc; border-radius: 6px;
+  padding: 10px 0; font-size: 15px; font-weight: 600; cursor: pointer;
+  font-family: Georgia, serif; color: #2a2a2a; transition: background 0.1s, border-color 0.1s;
+}
+.fb-answer-btn:hover { border-color: #7a9a7a; }
+.fb-answer-btn.correct { background: #4a7c4a; color: #fff; border-color: #4a7c4a; }
+.fb-answer-btn.wrong { background: #8f4a4a; color: #fff; border-color: #8f4a4a; }
+
+.fb-feedback { font-size: 13px; color: #888; min-height: 20px; margin-top: 10px; }
+.fb-feedback.ok { color: #4a7c4a; }
+.fb-feedback.err { color: #8f4a4a; }
+
+/* Ear Training: both outcomes get a bigger, harder-to-miss callout than the
+   other drills' plain feedback line, since the player is often looking at
+   the keyboard/fretboard rather than the screen while listening. */
+#fb-ear-two-feedback.ok, #fb-ear-three-feedback.ok,
+#fb-ear-two-feedback.err, #fb-ear-three-feedback.err {
+  font-size: 20px;
+  font-weight: 700;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+#fb-ear-two-feedback.err, #fb-ear-three-feedback.err {
+  background: #fbe4e1;
+  border-color: #d98f84;
+}
+#fb-ear-two-feedback.ok, #fb-ear-three-feedback.ok {
+  background: #e6f0e6;
+  border-color: #9dc49d;
+}
+
+/* Ear Training scale diagram: notes laid out on an evenly-spaced semitone
+   axis (so a whole tone visibly spans twice the width of a half tone),
+   consecutive-interval labels below the line, and — once a question is
+   answered — an accent arc above the line spanning the notes actually being
+   tested. Every dot is clickable at any time (armed/explore = the separate
+   "click two notes to hear that interval" tool, not part of quiz scoring). */
+.fb-ear-diagram svg { display: block; }
+.fb-ear-tick-minor { stroke: #ccc; stroke-width: 1; }
+.fb-ear-tick-major { stroke: #888; stroke-width: 2; }
+.fb-ear-dot { fill: #cfd8c8; stroke: #8a9a7a; stroke-width: 1.5; cursor: pointer; }
+.fb-ear-dot:hover { stroke: #4a7c4a; }
+.fb-ear-dot.highlight { fill: #b8843a; stroke: #fff; stroke-width: 2; }
+.fb-ear-dot.armed { fill: #4a7ca0; stroke: #fff; stroke-width: 2; }
+.fb-ear-dot-label { font-size: 13px; fill: #555; font-family: Georgia, serif; font-weight: 700; text-anchor: middle; }
+.fb-ear-adj-line { stroke: #bbb; stroke-width: 1.5; }
+.fb-ear-adj-label { font-size: 10px; fill: #999; font-family: sans-serif; text-anchor: middle; }
+.fb-ear-highlight-line { stroke: #b8843a; stroke-width: 2.5; }
+.fb-ear-highlight-label { font-size: 15px; font-weight: 700; fill: #b8843a; font-family: sans-serif; text-anchor: middle; }
+.fb-ear-explore-line { stroke: #4a7ca0; stroke-width: 2; }
+.fb-ear-explore-label { font-size: 13px; font-weight: 700; fill: #4a7ca0; font-family: sans-serif; text-anchor: middle; }
+
+.fb-prompt {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 16px 20px; font-size: 16px; margin-bottom: 12px;
+}
+.fb-prompt b { font-family: Georgia, serif; font-size: 19px; }
+.fb-caged-answer { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.fb-caged-answer label { font-size: 12px; color: #888; }
+
+.fb-chord-progression-info {
+  text-align: center; font-size: 13px; color: #888; margin-top: 4px;
+}
+.fb-pitch-target {
+  font-family: Georgia, serif; font-size: 64px; font-weight: 700;
+  color: #2a2a2a; text-align: center; margin: 8px 0 20px;
+}
+.fb-pitch-meter {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 20px; margin-bottom: 14px; text-align: center;
+}
+.fb-pitch-detected { font-size: 24px; font-weight: 600; font-family: Georgia, serif; color: #888; }
+.fb-pitch-detected.match { color: #4a7c4a; }
+.fb-pitch-detected.held { opacity: 0.55; }
+.fb-pitch-cents-bar {
+  position: relative; height: 8px; background: #eee; border-radius: 4px;
+  margin: 12px auto 4px; max-width: 320px; overflow: hidden;
+}
+.fb-pitch-cents-bar::before {
+  content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #ccc;
+}
+.fb-pitch-cents-needle {
+  position: absolute; top: 0; bottom: 0; width: 4px; border-radius: 2px;
+  background: #4a7c4a; left: 50%; transform: translateX(-50%);
+  transition: left 0.08s linear;
+}
+.fb-pitch-hz { font-size: 11px; color: #aaa; margin-top: 4px; }
+.fb-pitch-octave { font-size: 13px; color: #aaa; margin-left: 4px; font-family: sans-serif; vertical-align: super; }
+
+.fb-stats-table-wrap { margin-top: 16px; }
+.fb-stats-table { width: 100%; max-width: 480px; border-collapse: collapse; font-size: 12px; }
+.fb-stats-table th, .fb-stats-table td { text-align: left; padding: 4px 10px; border-bottom: 1px solid #eee; }
+.fb-stats-table th { color: #aaa; font-weight: 500; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
+.fb-stats-table td:first-child { font-family: Georgia, serif; font-weight: 700; }
+
+.fb-tuner-strings { display: flex; gap: 8px; margin-bottom: 14px; }
+.fb-tuner-chip {
+  flex: 1; text-align: center; padding: 10px 0; border-radius: 6px;
+  background: #fff; border: 1px solid #ddd; font-family: Georgia, serif;
+  font-size: 15px; font-weight: 600; color: #999; transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.fb-tuner-chip.active { border-color: #7a9a7a; color: #2a2a2a; }
+.fb-tuner-chip.done { background: #e6f0e6; border-color: #4a7c4a; color: #4a7c4a; }
+
+.fb-chroma-bars {
+  display: flex; align-items: flex-end; gap: 4px; height: 140px;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 12px 14px 8px; margin-bottom: 14px;
+}
+.fb-chroma-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.fb-chroma-bar {
+  width: 100%; max-width: 26px; background: #ddd; border-radius: 2px 2px 0 0;
+  transition: height 0.08s linear, background 0.1s;
+  min-height: 2px;
+}
+.fb-chroma-col.chord-tone .fb-chroma-bar { background: #b8c8b8; }
+.fb-chroma-col.chord-tone.hit .fb-chroma-bar { background: #4a7c4a; }
+.fb-chroma-label { font-size: 10px; color: #aaa; margin-top: 4px; font-family: Georgia, serif; }
+.fb-chroma-col.chord-tone .fb-chroma-label { color: #4a7c4a; font-weight: 700; }
+.fb-chroma-sim { font-size: 11px; color: #aaa; text-align: right; margin-top: -6px; margin-bottom: 10px; }
+
+.fb-chord-type-groups { flex-basis: 100%; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.fb-chord-type-group { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.fb-chord-group-label { font-weight: 700; white-space: nowrap; }
+.fb-chord-type-children {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  padding-left: 10px; border-left: 2px solid #e0ddd0;
+}
+.fb-chord-type-children label { font-weight: 400; color: #777; font-size: 12.5px; white-space: nowrap; }
+
+.fb-shape-cards { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; }
+/* width controlled via --fb-diagram-size CSS variable (default 200px).
+   Slider in chord options panel updates this at runtime. */
+.fb-shape-card {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 14px; flex: 0 0 auto; width: var(--fb-diagram-size, 200px);
+}
+.fb-shape-card-title { font-family: Georgia, serif; font-size: 15px; font-weight: 700; color: #4a7c4a; margin-bottom: 8px; }
+.fb-shape-card-empty { font-size: 12px; color: #aaa; padding: 20px 0; }
+
+.fb-chord-formula {
+  text-align: center; font-family: Georgia, serif; font-size: 15px;
+  letter-spacing: 4px; color: #b8843a; margin-top: -8px; margin-bottom: 12px; min-height: 18px;
+}
+
 .statusbar {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: #e8e4d8; border-top: 1px solid #ccc;
   padding: 4px 20px; font-size: 11px; color: #888;
   display: flex; gap: 16px;
 }
+
+/* Speed Trainer */
+.st-options {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap;
+  gap: 16px; align-items: center; font-size: 12px; color: #666;
+}
+.st-display {
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 20px; margin-bottom: 12px; text-align: center;
+}
+.st-bpm-current {
+  font-family: Georgia, serif; font-size: 64px; font-weight: 700; color: #2a2a2a; line-height: 1;
+}
+.st-bpm-label { font-size: 13px; color: #888; margin-top: 4px; margin-bottom: 16px; }
+.st-beat-row { display: flex; justify-content: center; gap: 12px; margin-bottom: 12px; }
+.st-beat-dot {
+  width: 22px; height: 22px; border-radius: 50%; background: #e8e4d8;
+  border: 1px solid #ccc; transition: background 0.05s, transform 0.05s;
+}
+.st-beat-dot.active { background: #7a9a7a; transform: scale(1.15); }
+.st-beat-dot.downbeat.active { background: #4a7c4a; }
+.st-progress { font-size: 12px; color: #888; }

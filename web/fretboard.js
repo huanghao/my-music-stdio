@@ -898,7 +898,7 @@ function fbEarPlaySequence(midiNotes) {
     filter.type = 'lowpass';
     filter.frequency.value = 3200;
     filter.Q.value = 0.7;
-    const peak = 0.3 * fbMasterVolume;
+    const peak = 0.3 * fbMasterGain();
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, atTime);
     gain.gain.linearRampToValueAtTime(peak, atTime + 0.015);
@@ -1357,6 +1357,18 @@ function fbMasterVolumeChange(value) {
   fbMasterVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
   localStorage.setItem(FB_MASTER_VOLUME_KEY, String(fbMasterVolume));
   document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
+}
+
+// Human loudness perception is roughly logarithmic, not linear — a slider
+// wired straight to linear gain makes the top half of its travel feel like
+// it does almost nothing (moving 1.0 → 0.5 is only about -6dB) and squeezes
+// all the noticeable change into a sliver near the bottom. Squaring the
+// slider's 0-1 position before applying it as gain (a standard "audio taper"
+// approximation) spreads perceptible change more evenly across the travel.
+// fbMasterVolume itself stays the raw slider position (what's persisted and
+// displayed); this is what actually multiplies into every gain calculation.
+function fbMasterGain() {
+  return fbMasterVolume * fbMasterVolume;
 }
 
 // ── Shared output-device selection (which speaker/interface plays back any
@@ -3063,6 +3075,7 @@ function fbBendNext() {
   const targetMidi  = midi + Math.round(targetCents / 100);
   s.current = {
     string: ex.string, fret: ex.fret,
+    midi,              // expected starting MIDI note — used to validate the baseline
     startLabel: fbBendNoteLabel(midi),
     targetLabel: fbBendNoteLabel(targetMidi),
     targetCents, intLabel: fbBendIntervalLabel(s.interval),
@@ -3160,6 +3173,20 @@ function fbBendBendOnFrame(analyser, sampleRate) {
       }
       s._lastFreq = freq;
       if (s._stableFr >= FB_BEND_STABLE_FRAMES) {
+        // Validate: detected note must be within ±100¢ (1 semitone) of the
+        // exercise's expected starting note.  This catches completely wrong
+        // frets while still allowing for slightly out-of-tune strings.
+        const lockedMidi = 69 + 12 * Math.log2(s._lastFreq / 440);
+        const centsOff   = Math.abs((lockedMidi - s.current.midi) * 100);
+        if (centsOff > 100) {
+          fbBendFb(
+            `Wrong note — play ${s.current.startLabel} (${FB_STRING_DISPLAY[s.current.string]} string, fret ${s.current.fret})`,
+            'err'
+          );
+          s._stableFr = 0;
+          s._lastFreq  = null;
+          return;
+        }
         s.baseFreq      = s._lastFreq;
         s.phase         = 'bending';
         s._history      = [];

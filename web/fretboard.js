@@ -80,7 +80,7 @@ const fbState = {
          three: { correct: 0, total: 0, streak: 0, current: null, answered: false, step: 1, step1Correct: null, timeoutId: null,
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
-    subMode: 'bend', string: 4, interval: 'full',
+    subMode: 'bend', strings: {3: true, 4: true, 5: false}, intervals: {half: false, full: true, full_half: false},
     phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _readyAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
     current: null, correct: 0, total: 0, streak: 0,
   },
@@ -240,8 +240,19 @@ function fbPrefsLoad() {
   }
   if (saved.bend) {
     if (saved.bend.subMode === 'bend' || saved.bend.subMode === 'vibrato') fbState.bend.subMode = saved.bend.subMode;
-    if ([3, 4, 5].includes(+saved.bend.string)) fbState.bend.string = +saved.bend.string;
-    if (['half', 'full', 'full_half'].includes(saved.bend.interval)) fbState.bend.interval = saved.bend.interval;
+    if (saved.bend.strings && typeof saved.bend.strings === 'object') {
+      [3, 4, 5].forEach(i => {
+        if (typeof saved.bend.strings[i] === 'boolean') fbState.bend.strings[i] = saved.bend.strings[i];
+      });
+      // Keep at least one string enabled
+      if (!Object.values(fbState.bend.strings).some(Boolean)) fbState.bend.strings[4] = true;
+    }
+    if (saved.bend.intervals && typeof saved.bend.intervals === 'object') {
+      ['half', 'full', 'full_half'].forEach(k => {
+        if (typeof saved.bend.intervals[k] === 'boolean') fbState.bend.intervals[k] = saved.bend.intervals[k];
+      });
+      if (!Object.values(fbState.bend.intervals).some(Boolean)) fbState.bend.intervals.full = true;
+    }
   }
   if (saved.vibrato && [3, 5, 7].includes(+saved.vibrato.targetHz)) {
     fbState.vibrato.targetHz = +saved.vibrato.targetHz;
@@ -267,7 +278,7 @@ function fbPrefsSave() {
            wrongPauseSec: fbState.ear.wrongPauseSec, showDiagram: fbState.ear.showDiagram, waveform: fbState.ear.waveform,
            playbackStyle: fbState.ear.playbackStyle, noteGapSec: fbState.ear.noteGapSec, direction: fbState.ear.direction,
            range: fbState.ear.range },
-    bend: { subMode: fbState.bend.subMode, string: fbState.bend.string, interval: fbState.bend.interval },
+    bend: { subMode: fbState.bend.subMode, strings: fbState.bend.strings, intervals: fbState.bend.intervals },
     vibrato: { targetHz: fbState.vibrato.targetHz },
   }));
 }
@@ -2805,18 +2816,12 @@ function fbDegreeAnswer(note, btnEl) {
 
 // ── Bend & Vibrato ──
 
-// Exercise definitions: each entry gives a string (0=lowE…5=highE) and fret.
-// Notes come from FB_STRING_OPEN_MIDI[string] + fret.
-const FB_BEND_EXERCISES = [
-  { string: 4, fret:  7 },  // B-str fret 7  = F#4
-  { string: 4, fret:  9 },  // B-str fret 9  = G#4
-  { string: 4, fret: 12 },  // B-str fret 12 = B4
-  { string: 3, fret:  7 },  // G-str fret 7  = C#4
-  { string: 3, fret:  9 },  // G-str fret 9  = Eb4
-  { string: 3, fret: 12 },  // G-str fret 12 = G4
-  { string: 5, fret:  9 },  // hiE-str fret 9  = C#5
-  { string: 5, fret: 12 },  // hiE-str fret 12 = E5
-];
+// Bend exercises: G (3), B (4), high-E (5) strings, frets 5-17.
+// Frets 1-4 are skipped (high tension near nut, awkward to bend);
+// frets 5-17 covers all five pentatonic box positions in any key.
+const FB_BEND_STRINGS   = [3, 4, 5];  // G=3, B=4, high-E=5
+const FB_BEND_FRET_MIN  = 5;
+const FB_BEND_FRET_MAX  = 17;
 
 const FB_BEND_STABLE_FRAMES   = 4;    // frames of stable pitch to lock baseline
 const FB_BEND_HOLD_FRAMES     = 8;    // frames in target zone → success
@@ -2847,10 +2852,35 @@ function fbBendIntervalLabel(interval) {
 }
 
 function fbBendPickExercise() {
-  const str = parseInt(fbState.bend.string);
-  const pool = FB_BEND_EXERCISES.filter(e => e.string === str);
-  const arr = pool.length ? pool : FB_BEND_EXERCISES;
-  return arr[Math.floor(Math.random() * arr.length)];
+  const s = fbState.bend;
+  // Pick a random enabled string (fall back to B if none selected)
+  const enabledStrings = FB_BEND_STRINGS.filter(i => s.strings[i]);
+  const string = (enabledStrings.length ? enabledStrings : [4])[
+    Math.floor(Math.random() * (enabledStrings.length || 1))
+  ];
+  // Pick a random fret in the common-bending range
+  const fret = FB_BEND_FRET_MIN + Math.floor(Math.random() * (FB_BEND_FRET_MAX - FB_BEND_FRET_MIN + 1));
+  return { string, fret };
+}
+
+function fbBendPickInterval() {
+  const s = fbState.bend;
+  const enabled = Object.keys(s.intervals).filter(k => s.intervals[k]);
+  return (enabled.length ? enabled : ['full'])[Math.floor(Math.random() * (enabled.length || 1))];
+}
+
+function fbBendToggleString(idx, checked) {
+  fbState.bend.strings[idx] = checked;
+  // Keep at least one string enabled
+  if (!Object.values(fbState.bend.strings).some(Boolean)) fbState.bend.strings[idx] = true;
+  fbPrefsSave();
+}
+
+function fbBendToggleInterval(key, checked) {
+  fbState.bend.intervals[key] = checked;
+  // Keep at least one interval enabled
+  if (!Object.values(fbState.bend.intervals).some(Boolean)) fbState.bend.intervals[key] = true;
+  fbPrefsSave();
 }
 
 // ── Render helpers ──
@@ -2860,21 +2890,23 @@ function fbBendRenderOptions() {
   const el = document.getElementById('fb-bend-options');
   if (!el) return;
   el.innerHTML = `
-    <div class="fb-options">
-      <label>String:
-        <select onchange="fbState.bend.string=parseInt(this.value); fbPrefsSave(); fbBendNext()">
-          <option value="3" ${+s.string===3?'selected':''}>G</option>
-          <option value="4" ${+s.string===4?'selected':''}>B</option>
-          <option value="5" ${+s.string===5?'selected':''}>high E</option>
-        </select>
-      </label>
-      <label>Interval:
-        <select onchange="fbState.bend.interval=this.value; fbPrefsSave(); fbBendNext()">
-          <option value="half"      ${s.interval==='half'     ?'selected':''}>½ step</option>
-          <option value="full"      ${s.interval==='full'     ?'selected':''}>1 full step</option>
-          <option value="full_half" ${s.interval==='full_half'?'selected':''}>1½ steps</option>
-        </select>
-      </label>
+    <div class="fb-chord-type-groups">
+      <div class="fb-chord-type-group">
+        <label class="fb-chord-group-label">String:</label>
+        <span class="fb-chord-type-children">
+          <label><input type="checkbox" ${s.strings[3]?'checked':''} onchange="fbBendToggleString(3,this.checked)"> G</label>
+          <label><input type="checkbox" ${s.strings[4]?'checked':''} onchange="fbBendToggleString(4,this.checked)"> B <small style="color:#888">(most common)</small></label>
+          <label><input type="checkbox" ${s.strings[5]?'checked':''} onchange="fbBendToggleString(5,this.checked)"> high E</label>
+        </span>
+      </div>
+      <div class="fb-chord-type-group">
+        <label class="fb-chord-group-label">Interval:</label>
+        <span class="fb-chord-type-children">
+          <label><input type="checkbox" ${s.intervals.half?'checked':''} onchange="fbBendToggleInterval('half',this.checked)"> ½ step</label>
+          <label><input type="checkbox" ${s.intervals.full?'checked':''} onchange="fbBendToggleInterval('full',this.checked)"> 1 full step <small style="color:#888">(most common)</small></label>
+          <label><input type="checkbox" ${s.intervals.full_half?'checked':''} onchange="fbBendToggleInterval('full_half',this.checked)"> 1½ steps</label>
+        </span>
+      </div>
     </div>`;
 }
 
@@ -3071,14 +3103,15 @@ function fbBendNext() {
   s._readyAt = performance.now() + 500;
   const ex = fbBendPickExercise();
   const midi = FB_STRING_OPEN_MIDI[ex.string] + ex.fret;
-  const targetCents = fbBendIntervalCents(s.interval);
+  const interval    = fbBendPickInterval();
+  const targetCents = fbBendIntervalCents(interval);
   const targetMidi  = midi + Math.round(targetCents / 100);
   s.current = {
     string: ex.string, fret: ex.fret,
     midi,              // expected starting MIDI note — used to validate the baseline
     startLabel: fbBendNoteLabel(midi),
     targetLabel: fbBendNoteLabel(targetMidi),
-    targetCents, intLabel: fbBendIntervalLabel(s.interval),
+    targetCents, intLabel: fbBendIntervalLabel(interval),
   };
   fbBendRenderPrompt();
   fbBendRenderGraph();

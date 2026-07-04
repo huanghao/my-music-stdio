@@ -62,7 +62,7 @@ const fbState = {
   chord: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            qualities: { '': true, m: true, maj7: true, '7': true, m7: true, dim7: true, m7b5: true, sus2: false, sus4: false },
            notationStyle: 'standard', showFormula: false, showDegreesOnDiagram: false, showChordDiagram: false, diagramSize: 200,
-           source: 'random', progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0 },
+           source: 'random', fixedRoot: 0, progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0 },
            stats: {},
            _holdCount: 0, _wrongSymbol: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity,
            _hiddenMs: 0, _hiddenSince: null },
@@ -186,7 +186,8 @@ function fbPrefsLoad() {
   if (saved.chord && typeof saved.chord.showDegreesOnDiagram === 'boolean') fbState.chord.showDegreesOnDiagram = saved.chord.showDegreesOnDiagram;
   if (saved.chord && typeof saved.chord.showChordDiagram === 'boolean') fbState.chord.showChordDiagram = saved.chord.showChordDiagram;
   if (saved.chord && typeof saved.chord.diagramSize === 'number') fbState.chord.diagramSize = saved.chord.diagramSize;
-  if (saved.chord && (saved.chord.source === 'random' || saved.chord.source === 'progression')) fbState.chord.source = saved.chord.source;
+  if (saved.chord && ['random', 'progression', 'fixed_root'].includes(saved.chord.source)) fbState.chord.source = saved.chord.source;
+  if (saved.chord && Number.isInteger(saved.chord.fixedRoot) && saved.chord.fixedRoot >= 0 && saved.chord.fixedRoot < 12) fbState.chord.fixedRoot = saved.chord.fixedRoot;
   if (saved.keymap && (saved.keymap.mode === 'relative' || saved.keymap.mode === 'degree')) {
     fbState.keymap.mode = saved.keymap.mode;
   }
@@ -252,7 +253,7 @@ function fbPrefsSave() {
       showFormula: fbState.chord.showFormula, showDegreesOnDiagram: fbState.chord.showDegreesOnDiagram,
       showChordDiagram: fbState.chord.showChordDiagram,
       diagramSize: fbState.chord.diagramSize,
-      source: fbState.chord.source,
+      source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot,
     },
     keymap: { mode: fbState.keymap.mode, degreeFullSet: fbState.keymap.degree.fullSet },
     caged: { mode: fbState.caged.mode },
@@ -2133,9 +2134,16 @@ function fbRenderChordOptions() {
     </select>
     <span style="margin-left:12px">Chord source:</span>
     <select onchange="fbChordSetSource(this.value)">
-      <option value="random" ${s.source==='random'?'selected':''}>Random</option>
+      <option value="random"      ${s.source==='random'     ?'selected':''}>Random</option>
+      <option value="fixed_root"  ${s.source==='fixed_root' ?'selected':''}>Fixed root — same root, random quality</option>
       <option value="progression" ${s.source==='progression'?'selected':''}>Progressions (I-V-vi-IV, ii-V-I, etc.)</option>
     </select>
+    ${s.source === 'fixed_root' ? `
+    <label style="margin-left:8px">Root:
+      <select onchange="fbState.chord.fixedRoot=parseInt(this.value); fbPrefsSave(); fbChordNewChord()">
+        ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.fixedRoot===i?'selected':''}>${n}</option>`).join('')}
+      </select>
+    </label>` : ''}
     <div class="fb-chord-type-groups">
       ${Object.keys(FB_CHORD_GROUPS).map(g => `
         <div class="fb-chord-type-group">
@@ -2191,6 +2199,7 @@ function fbChordSetSource(source) {
   fbState.chord.source = source;
   fbState.chord.progression.chords = null;
   fbPrefsSave();
+  fbRenderChordOptions();  // re-render to show/hide root picker
   fbChordNewChord();
 }
 
@@ -2324,6 +2333,18 @@ function fbChordPickTargetRandom() {
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
+function fbChordPickTargetFixedRoot() {
+  const s = fbState.chord;
+  const root = s.fixedRoot;
+  const enabledQ = Object.keys(FB_CHORD_QUALITIES).filter(q => s.qualities[q]);
+  if (!enabledQ.length) return fbChordPickTargetRandom();
+  // Avoid repeating the same quality consecutively
+  const prevQ = s.target ? s.target.quality : null;
+  const pool  = enabledQ.length > 1 ? enabledQ.filter(q => q !== prevQ) : enabledQ;
+  const quality = pool[Math.floor(Math.random() * pool.length)];
+  return { root, quality, symbol: fbChordSymbol(root, quality) };
+}
+
 function fbChordPickTargetProgression() {
   const s = fbState.chord;
   const p = s.progression;
@@ -2339,7 +2360,9 @@ function fbChordPickTargetProgression() {
 }
 
 function fbChordPickTarget() {
-  return fbState.chord.source === 'progression' ? fbChordPickTargetProgression() : fbChordPickTargetRandom();
+  if (fbState.chord.source === 'fixed_root') return fbChordPickTargetFixedRoot();
+  if (fbState.chord.source === 'progression') return fbChordPickTargetProgression();
+  return fbChordPickTargetRandom();
 }
 
 function fbRenderChordStats() {

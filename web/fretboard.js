@@ -1,6 +1,19 @@
 // ── Fretboard trainer: note names + CAGED chord shapes ──
 // Standalone module, no server dependency. Hooked from showPage('fretboard') in app.js.
 
+// Leading-edge debounce for action buttons.  Fires immediately on first call,
+// then blocks for `ms` ms to prevent rapid double-clicks from double-advancing
+// or double-playing.  Used to wrap "Next →", "Play", "New …" functions below.
+function guarded(fn, ms = 400) {
+  let blocked = false;
+  return function(...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+
 const FB_NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 // low string (6th) → high string (1st)
 const FB_STRING_NAMES = ['E','A','D','G','B','E'];
@@ -68,9 +81,10 @@ const fbState = {
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
 };
 
-// Shared across every mode below (they all share the fbMic/fbOutput
-// singletons) — rendered once into the toolbar above the mode tabs instead
-// of being duplicated inside each mode's own options panel.
+// Global, not scoped to the Fretboard page — every mic-based drill here and
+// Speed Trainer's metronome all share the same fbMic/fbOutput singletons, so
+// this is rendered once at app startup (see init() in app.js), not gated
+// behind visiting any particular page.
 function fbRenderDeviceBar() {
   document.getElementById('fb-device-bar').innerHTML = `
     <span>Input device:</span>
@@ -86,7 +100,6 @@ function initFretboardPage() {
   fbPrefsLoad();
   fbApplyDiagramSize();  // apply saved diagram size as CSS variable
   fbPitchLoadStats();
-  fbRenderDeviceBar();
   fbRenderNotesOptions();
   fbNotesNext();
   fbCagedNext();
@@ -829,7 +842,7 @@ let fbEarAudioCtx = null;
 function fbEarGetAudioCtx() {
   if (!fbEarAudioCtx) {
     fbEarAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    fbApplySinkId(fbEarAudioCtx);
+    fbRegisterAudioContext(fbEarAudioCtx);
   }
   if (fbEarAudioCtx.state === 'suspended') fbEarAudioCtx.resume();
   return fbEarAudioCtx;
@@ -1298,16 +1311,29 @@ const fbMic = {
 };
 
 // ── Shared output-device selection (which speaker/interface plays back any
-// audio the app generates — currently just Ear Training, but shared here so
-// every page with an input-device picker also gets an output one) ──
+// audio the app generates — Ear Training and Speed Trainer's metronome so
+// far, each with its own AudioContext) ──
 // AudioContext.setSinkId() is a newer, Chromium-only API; everywhere else this
 // silently no-ops and audio just keeps playing through the system default.
 const FB_SETSINKID_SUPPORTED = typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype;
 const fbOutput = { deviceId: '', userSelectedDevice: false };
+// Every AudioContext any feature creates registers itself here, so a single
+// output-device change applies to all of them at once instead of just
+// whichever one happened to exist when fbOutputDeviceChange last ran.
+const fbRegisteredAudioContexts = new Set();
+
+function fbRegisterAudioContext(ctx) {
+  fbRegisteredAudioContexts.add(ctx);
+  fbApplySinkId(ctx);
+}
 
 async function fbApplySinkId(ctx) {
   if (!ctx || !FB_SETSINKID_SUPPORTED || !fbOutput.deviceId) return;
   try { await ctx.setSinkId(fbOutput.deviceId); } catch (_) { /* device gone, or not permitted */ }
+}
+
+function fbApplySinkIdToAll() {
+  fbRegisteredAudioContexts.forEach(fbApplySinkId);
 }
 
 // Output device labels only become readable after mic permission has been
@@ -1322,7 +1348,7 @@ async function fbRefreshOutputDevices() {
       const preferred = outputs.find(d => /scarlett|focusrite/i.test(d.label));
       if (preferred && preferred.deviceId !== fbOutput.deviceId) {
         fbOutput.deviceId = preferred.deviceId;
-        await fbApplySinkId(fbEarAudioCtx);
+        fbApplySinkIdToAll();
       }
     }
     document.querySelectorAll('.fb-output-select').forEach(sel => {
@@ -1337,7 +1363,7 @@ async function fbOutputDeviceChange(deviceId) {
   fbOutput.userSelectedDevice = true;
   fbOutput.deviceId = deviceId;
   document.querySelectorAll('.fb-output-select').forEach(sel => { sel.value = deviceId; });
-  await fbApplySinkId(fbEarAudioCtx);
+  fbApplySinkIdToAll();
 }
 
 async function fbMicStart(owner, onFrame, fftSize = 2048) {
@@ -2688,6 +2714,22 @@ function fbDegreeAnswer(note, btnEl) {
   fbRenderDegreeStats();
   setTimeout(fbDegreeNext, 900);
 }
+
+// ── Guard action buttons against rapid double-click ──
+// Answer functions (fbNotesAnswer, fbEarTwoAnswer, etc.) already have an
+// internal `locked`/`answered` flag — only the bare "Next" and "Play"
+// functions need wrapping here.
+fbCagedNext               = guarded(fbCagedNext);
+fbNotesNext               = guarded(fbNotesNext);
+fbShapeDegreeIdentifyNext = guarded(fbShapeDegreeIdentifyNext);
+fbShapeDegreeLocateNext   = guarded(fbShapeDegreeLocateNext);
+fbEarManualNext           = guarded(fbEarManualNext);
+fbEarPlayCurrent          = guarded(fbEarPlayCurrent);
+fbEarPlayScaffold         = guarded(fbEarPlayScaffold);
+fbPitchNewNote            = guarded(fbPitchNewNote);
+fbChordNewChord           = guarded(fbChordNewChord);
+fbRelativeNext            = guarded(fbRelativeNext);
+fbDegreeNext              = guarded(fbDegreeNext);
 
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {

@@ -52,6 +52,53 @@ function initFooPage() {
 
 ---
 
+## 操作按钮防抖（强制）
+
+**会触发播放、下一题、提交之类副作用的按钮，必须防抖，防止快速双击重复执行。**
+
+### 适用范围
+
+需要防抖的按钮类型：
+- "Next →" / "下一题" / "New …" — 快速双击会跳过题目或重置当前题
+- "▶ Play" / 播放音频 — 快速双击会重叠播放或打断音频队列
+- "Check" / "Submit" / 答题确认 — 重复提交会错误地累计统计
+
+**不需要防抖的**：
+- 播放页面的 Play/Stop/Pause/Resume — `setPlaybackUI()` 已立即切换按钮可见性，天然防止双击
+- 答题按钮（如 `fbNotesAnswer`、`fbEarTwoAnswer`）— 已有内部 `locked`/`answered` flag
+
+### 实现方式
+
+使用 `fretboard.js` 顶部定义的 `guarded()` 工具函数：
+
+```js
+// fretboard.js 顶部已有
+function guarded(fn, ms = 400) {
+  let blocked = false;
+  return function(...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+
+// 在文件末尾（module.exports 之前）包装：
+fbCagedNext = guarded(fbCagedNext);
+fbEarPlayCurrent = guarded(fbEarPlayCurrent);
+// ... 其他需要防抖的函数
+```
+
+`guarded()` 是 leading-edge 防抖：**第一次调用立即执行**，`ms` 毫秒内的重复调用被丢弃。这与 trailing-edge debounce 不同，后者会延迟执行。
+
+### 新增按钮时的规则
+
+1. 判断该按钮是否属于上述"需要防抖"的类型
+2. 如果是，在 `fretboard.js` 末尾的包装列表里加上对应函数
+3. `app.js` 里的新 play/stop 按钮通常已通过 UI 状态切换隐式保护，但若有疑问，也用 `guarded()` 包装
+
+---
+
 ## 代码风格
 
 - 前端：Vanilla JS，无构建工具，保持和现有代码一致的风格

@@ -9,7 +9,7 @@
 <body>
 
 <nav class="nav">
-  <img class="nav-title-icon" src="favicon.svg" alt="Music Practice">
+  <span class="nav-title">🎵</span>
   <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
   <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
@@ -342,8 +342,13 @@
   </div>
 
   <div class="st-display">
-    <div class="st-bpm-current" id="st-bpm-current">60</div>
-    <div class="st-bpm-label">BPM <span id="st-bpm-target-label">(target 120)</span></div>
+    <div class="st-bpm-row">
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-stState.stepBpm)">−</button>
+      <input type="number" class="st-bpm-current" id="st-bpm-current" min="20" max="300" value="60"
+        onchange="stSetCurrentBpm(this.value)">
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(stState.stepBpm)">+</button>
+    </div>
+    <div class="st-bpm-label">BPM <span id="st-bpm-target-label">(target 120)</span> — type a number, or use +/− (step size below), to change tempo instantly</div>
     <div class="st-beat-row" id="st-beat-row"></div>
     <div class="st-progress" id="st-progress"></div>
   </div>
@@ -351,7 +356,7 @@
   <div class="fb-caged-answer">
     <button class="btn btn-primary btn-sm" id="st-start-btn" onclick="stStart()">▶ Start</button>
     <button class="btn btn-stop btn-sm" id="st-stop-btn" onclick="stStop()" style="display:none">■ Stop</button>
-    <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump up (+step)</button>
+    <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump toward target (+step)</button>
     <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
   </div>
 

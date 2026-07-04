@@ -81,7 +81,7 @@ const fbState = {
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
     subMode: 'bend', string: 4, interval: 'full',
-    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
+    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _readyAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
     current: null, correct: 0, total: 0, streak: 0,
   },
   vibrato: {
@@ -96,10 +96,15 @@ const fbState = {
 // this is rendered once at app startup (see init() in app.js), not gated
 // behind visiting any particular page.
 function fbRenderDeviceBar() {
+  fbMasterVolumeLoad();
   document.getElementById('fb-device-bar').innerHTML = `
     <span>Input device:</span>
     <select class="fb-device-select" onchange="fbMicDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
     ${fbOutputDeviceSelectHtml()}
+    <span style="margin-left:12px">🔊 Volume:</span>
+    <input type="range" class="fb-master-volume-slider" min="0" max="1" step="0.01" value="${fbMasterVolume}"
+      style="width:100px" oninput="fbMasterVolumeChange(this.value)"
+      title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">
   `;
   fbRefreshOutputDevices();
 }
@@ -893,10 +898,11 @@ function fbEarPlaySequence(midiNotes) {
     filter.type = 'lowpass';
     filter.frequency.value = 3200;
     filter.Q.value = 0.7;
+    const peak = 0.3 * fbMasterVolume;
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, atTime);
-    gain.gain.linearRampToValueAtTime(0.3, atTime + 0.015);
-    gain.gain.setValueAtTime(0.3, atTime + noteDur - 0.05);
+    gain.gain.linearRampToValueAtTime(peak, atTime + 0.015);
+    gain.gain.setValueAtTime(peak, atTime + noteDur - 0.05);
     gain.gain.linearRampToValueAtTime(0, atTime + noteDur);
     osc.connect(filter);
     filter.connect(gain);
@@ -1332,6 +1338,26 @@ const fbMic = {
   stream: null, audioCtx: null, analyser: null, rafId: null,
   deviceId: '', userSelectedDevice: false, listening: false, onFrame: null, owner: null,
 };
+
+// ── Shared master volume (0-1) — scales every gain this app generates ──
+// Many audio interfaces (Focusrite Scarlett etc.) drive their line/headphone
+// output from a physical hardware knob and don't expose a software volume
+// control at all — the OS volume keys/slider silently do nothing for that
+// output. This is the one loudness control guaranteed to work regardless,
+// since it's applied before any audio ever leaves the app.
+const FB_MASTER_VOLUME_KEY = 'fb_master_volume';
+let fbMasterVolume = 1;
+
+function fbMasterVolumeLoad() {
+  const saved = parseFloat(localStorage.getItem(FB_MASTER_VOLUME_KEY));
+  if (Number.isFinite(saved) && saved >= 0 && saved <= 1) fbMasterVolume = saved;
+}
+
+function fbMasterVolumeChange(value) {
+  fbMasterVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
+  localStorage.setItem(FB_MASTER_VOLUME_KEY, String(fbMasterVolume));
+  document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
+}
 
 // ── Shared output-device selection (which speaker/interface plays back any
 // audio the app generates — Ear Training and Speed Trainer's metronome so
@@ -3028,6 +3054,9 @@ function fbBendNext() {
   s._history = [];
   s._lastFreqTs = null;
   s._smoothedCents = null;
+  // Cooldown: block baseline detection for 500 ms so a still-ringing string
+  // from the previous exercise doesn't immediately lock as the new baseline.
+  s._readyAt = performance.now() + 500;
   const ex = fbBendPickExercise();
   const midi = FB_STRING_OPEN_MIDI[ex.string] + ex.fret;
   const targetCents = fbBendIntervalCents(s.interval);
@@ -3114,6 +3143,13 @@ function fbBendBendOnFrame(analyser, sampleRate) {
 
     if (!s.baseFreq) {
       // ── Phase 1: lock baseline ──
+      // During the cooldown window (just after fbBendNext), ignore all incoming
+      // signal so a still-ringing previous note can't contaminate the baseline.
+      if (s._readyAt && now < s._readyAt) {
+        s._stableFr = 0;
+        s._lastFreq  = null;
+        return;
+      }
       // Accumulate N frames with < 25¢ pitch drift to confirm the note is stable.
       if (s._lastFreq) {
         const delta = Math.abs(1200 * Math.log2(freq / s._lastFreq));
@@ -3179,12 +3215,7 @@ fbState.bend._recordCents = function(now) {
       s.correct++; s.total++; s.streak++;
       fbBendRenderStats();
       s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
-      // Show success feedback with immediate Next button
-      const fb = document.getElementById('fb-bend-feedback');
-      if (fb) {
-        fb.className = 'fb-feedback ok';
-        fb.innerHTML = '✓ 推准了！ &nbsp;<button class="btn btn-primary btn-sm" onclick="fbBendNext()">Next →</button>';
-      }
+      fbBendFb('✓ 推准了！按 Next → 继续', 'ok');
     }
   } else {
     // Decay slowly so short excursions don't reset all progress.
@@ -3374,6 +3405,7 @@ function fbVibratoRenderStats() {
 // Answer functions (fbNotesAnswer, fbEarTwoAnswer, etc.) already have an
 // internal `locked`/`answered` flag — only the bare "Next" and "Play"
 // functions need wrapping here.
+fbBendNext                = guarded(fbBendNext);
 fbCagedNext               = guarded(fbCagedNext);
 fbNotesNext               = guarded(fbNotesNext);
 fbShapeDegreeIdentifyNext = guarded(fbShapeDegreeIdentifyNext);

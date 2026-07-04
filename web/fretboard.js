@@ -2937,7 +2937,8 @@ function fbBendRenderGraph() {
 
   // Pitch trace
   const now = performance.now();
-  ctx.strokeStyle = '#b8843a';
+  const succeeded = s.phase === 'success';
+  ctx.strokeStyle = succeeded ? '#27ae60' : '#b8843a';
   ctx.lineWidth = 2.5;
   ctx.lineJoin = 'round';
   ctx.beginPath();
@@ -2952,7 +2953,7 @@ function fbBendRenderGraph() {
   // Current dot
   const last = s._history[s._history.length - 1];
   if (last) {
-    const inZone = Math.abs(last.cents - targetCents) <= FB_BEND_TOLERANCE;
+    const inZone = succeeded || Math.abs(last.cents - targetCents) <= FB_BEND_TOLERANCE;
     ctx.fillStyle = inZone ? '#27ae60' : '#b8843a';
     const dx = PAD_L + (W - PAD_L - PAD_R) * (1 - (now - last.ts) / FB_BEND_HISTORY_MS);
     const dy = cy(Math.max(-20, Math.min(maxCents, last.cents)));
@@ -2966,6 +2967,18 @@ function fbBendRenderGraph() {
     ctx.textAlign = 'right';
     ctx.fillText((last.cents >= 0 ? '+' : '') + last.cents + '¢', W - 8, 4);
     ctx.textAlign = 'left';
+  }
+
+  // Success: countdown bar at the bottom of the canvas
+  if (succeeded && s._nextAt) {
+    const remaining = Math.max(0, s._nextAt - now);
+    const frac = remaining / FB_BEND_NEXT_DELAY_MS;
+    // Background track
+    ctx.fillStyle = '#e0f0e0';
+    ctx.fillRect(0, H - 6, W, 6);
+    // Shrinking fill
+    ctx.fillStyle = '#4a7c4a';
+    ctx.fillRect(0, H - 6, W * frac, 6);
   }
 }
 
@@ -3154,6 +3167,8 @@ fbState.bend._recordCents = function(now) {
   const cutoff = now - FB_BEND_HISTORY_MS;
   while (s._history.length > 0 && s._history[0].ts < cutoff) s._history.shift();
 
+  // In success state: keep history alive so the graph stays live (shows the
+  // pitch dropping back as the string releases), but don't re-trigger success.
   if (s.phase === 'success') return;
 
   const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
@@ -3162,9 +3177,14 @@ fbState.bend._recordCents = function(now) {
     if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
       s.phase = 'success';
       s.correct++; s.total++; s.streak++;
-      fbBendFb('✓ Perfect bend!', 'ok');
       fbBendRenderStats();
       s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
+      // Show success feedback with immediate Next button
+      const fb = document.getElementById('fb-bend-feedback');
+      if (fb) {
+        fb.className = 'fb-feedback ok';
+        fb.innerHTML = '✓ 推准了！ &nbsp;<button class="btn btn-primary btn-sm" onclick="fbBendNext()">Next →</button>';
+      }
     }
   } else {
     // Decay slowly so short excursions don't reset all progress.

@@ -79,6 +79,16 @@ const fbState = {
                 playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null },
          three: { correct: 0, total: 0, streak: 0, current: null, answered: false, step: 1, step1Correct: null, timeoutId: null,
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
+  bend: {
+    subMode: 'bend', string: 4, interval: 'full',
+    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null,
+    current: null, correct: 0, total: 0, streak: 0,
+  },
+  vibrato: {
+    targetHz: 5, phase: 'idle', baseFreq: null,
+    _history: [], _stableFr: 0, _lastFreq: null, _successFr: 0, _startTime: null,
+    correct: 0, total: 0, speed: null, depth: null,
+  },
 };
 
 // Global, not scoped to the Fretboard page — every mic-based drill here and
@@ -124,6 +134,7 @@ function initFretboardPage() {
   fbRenderDegreeOptions();
   fbDegreeNext();
   fbKeymapSetMode(fbState.keymap.mode);
+  fbBendInit();
 }
 
 function fbShowMode(mode) {
@@ -132,6 +143,7 @@ function fbShowMode(mode) {
     fbSyncMicButtons('pitch');
     fbSyncMicButtons('tuner');
     fbSyncMicButtons('chord');
+    fbSyncMicButtons('bend');
     document.getElementById('fb-pitch-meter').innerHTML = '';
     document.getElementById('fb-tuner-meter').innerHTML = '';
     fbRenderChroma(new Array(12).fill(0), null);
@@ -220,6 +232,14 @@ function fbPrefsLoad() {
   if (saved.ear && Object.prototype.hasOwnProperty.call(FB_EAR_RANGE_BASE, saved.ear.range)) {
     fbState.ear.range = saved.ear.range;
   }
+  if (saved.bend) {
+    if (saved.bend.subMode === 'bend' || saved.bend.subMode === 'vibrato') fbState.bend.subMode = saved.bend.subMode;
+    if ([3, 4, 5].includes(+saved.bend.string)) fbState.bend.string = +saved.bend.string;
+    if (['half', 'full', 'full_half'].includes(saved.bend.interval)) fbState.bend.interval = saved.bend.interval;
+  }
+  if (saved.vibrato && [3, 5, 7].includes(+saved.vibrato.targetHz)) {
+    fbState.vibrato.targetHz = +saved.vibrato.targetHz;
+  }
 }
 
 function fbPrefsSave() {
@@ -241,6 +261,8 @@ function fbPrefsSave() {
            wrongPauseSec: fbState.ear.wrongPauseSec, showDiagram: fbState.ear.showDiagram, waveform: fbState.ear.waveform,
            playbackStyle: fbState.ear.playbackStyle, noteGapSec: fbState.ear.noteGapSec, direction: fbState.ear.direction,
            range: fbState.ear.range },
+    bend: { subMode: fbState.bend.subMode, string: fbState.bend.string, interval: fbState.bend.interval },
+    vibrato: { targetHz: fbState.vibrato.targetHz },
   }));
 }
 
@@ -2713,6 +2735,474 @@ function fbDegreeAnswer(note, btnEl) {
   fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
   fbRenderDegreeStats();
   setTimeout(fbDegreeNext, 900);
+}
+
+
+// ── Bend & Vibrato ──
+
+// Exercise definitions: each entry gives a string (0=lowE…5=highE) and fret.
+// Notes come from FB_STRING_OPEN_MIDI[string] + fret.
+const FB_BEND_EXERCISES = [
+  { string: 4, fret:  7 },  // B-str fret 7  = F#4
+  { string: 4, fret:  9 },  // B-str fret 9  = G#4
+  { string: 4, fret: 12 },  // B-str fret 12 = B4
+  { string: 3, fret:  7 },  // G-str fret 7  = C#4
+  { string: 3, fret:  9 },  // G-str fret 9  = Eb4
+  { string: 3, fret: 12 },  // G-str fret 12 = G4
+  { string: 5, fret:  9 },  // hiE-str fret 9  = C#5
+  { string: 5, fret: 12 },  // hiE-str fret 12 = E5
+];
+
+const FB_BEND_STABLE_FRAMES  = 3;
+const FB_BEND_HOLD_FRAMES    = 12;   // ~0.5 s at 60 fps
+const FB_BEND_TOLERANCE      = 22;   // cents around target → success
+const FB_BEND_NEXT_DELAY_MS  = 2000;
+
+const FB_VIBRATO_HISTORY_MS    = 4000;
+const FB_VIBRATO_SUCCESS_MS    = 3000;
+const FB_VIBRATO_MIN_DEPTH     = 25;   // cents peak amplitude
+const FB_VIBRATO_SUCCESS_FR    = 180;  // 3 s × ~60 fps
+
+const FB_VIBRATO_TARGET_RANGES = { 3: [2, 4.5], 5: [3.5, 6.5], 7: [5.5, 9] };
+
+const FB_STRING_DISPLAY = ['low E', 'A', 'D', 'G', 'B', 'high E'];
+
+function fbBendNoteLabel(midi) {
+  return FB_NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+}
+
+function fbBendIntervalCents(interval) {
+  return interval === 'half' ? 100 : interval === 'full' ? 200 : 300;
+}
+
+function fbBendIntervalLabel(interval) {
+  return interval === 'half' ? '½ step' : interval === 'full' ? '1 full step' : '1½ steps';
+}
+
+function fbBendPickExercise() {
+  const str = parseInt(fbState.bend.string);
+  const pool = FB_BEND_EXERCISES.filter(e => e.string === str);
+  const arr = pool.length ? pool : FB_BEND_EXERCISES;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// ── Render helpers ──
+
+function fbBendRenderOptions() {
+  const s = fbState.bend;
+  const el = document.getElementById('fb-bend-options');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="fb-options">
+      <label>String:
+        <select onchange="fbState.bend.string=parseInt(this.value); fbPrefsSave(); fbBendNext()">
+          <option value="3" ${+s.string===3?'selected':''}>G</option>
+          <option value="4" ${+s.string===4?'selected':''}>B</option>
+          <option value="5" ${+s.string===5?'selected':''}>high E</option>
+        </select>
+      </label>
+      <label>Interval:
+        <select onchange="fbState.bend.interval=this.value; fbPrefsSave(); fbBendNext()">
+          <option value="half"      ${s.interval==='half'     ?'selected':''}>½ step</option>
+          <option value="full"      ${s.interval==='full'     ?'selected':''}>1 full step</option>
+          <option value="full_half" ${s.interval==='full_half'?'selected':''}>1½ steps</option>
+        </select>
+      </label>
+    </div>`;
+}
+
+function fbVibratoRenderOptions() {
+  const v = fbState.vibrato;
+  const el = document.getElementById('fb-vibrato-options');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="fb-options">
+      <label>Target speed:
+        <select onchange="fbState.vibrato.targetHz=parseInt(this.value); fbPrefsSave()">
+          <option value="3" ${v.targetHz===3?'selected':''}>Slow (~3 Hz)</option>
+          <option value="5" ${v.targetHz===5?'selected':''}>Medium (~5 Hz)</option>
+          <option value="7" ${v.targetHz===7?'selected':''}>Fast (~7 Hz)</option>
+        </select>
+      </label>
+    </div>`;
+}
+
+function fbBendRenderPrompt() {
+  const s = fbState.bend;
+  const c = s.current;
+  if (!c) return;
+  const el = document.getElementById('fb-bend-prompt');
+  if (!el) return;
+  el.innerHTML = `
+    <div class="fb-bend-exercise-row">
+      <span class="fb-bend-location">${FB_STRING_DISPLAY[c.string]} string &nbsp;·&nbsp; fret ${c.fret}</span>
+      <span class="fb-bend-arrow">→</span>
+      <span class="fb-bend-intlabel">bend <strong>${c.intLabel}</strong></span>
+    </div>
+    <div class="fb-bend-notes-row">${c.startLabel} &nbsp;→&nbsp; <span class="fb-bend-target-note">${c.targetLabel}</span></div>`;
+}
+
+function fbBendRenderMeter(centsOrNull) {
+  const s = fbState.bend;
+  const el = document.getElementById('fb-bend-meter');
+  if (!el) return;
+  const targetCents = s.current ? s.current.targetCents : 200;
+  const maxCents = targetCents + 60;
+  const toY = c => 100 - Math.max(0, Math.min(100, (c / maxCents) * 100));  // % from top
+  const targetY = toY(targetCents);
+  const halfY   = toY(100);
+  const fillH   = centsOrNull !== null ? Math.max(0, Math.min(100, (centsOrNull / maxCents) * 100)) : 0;
+  const inZone  = centsOrNull !== null && Math.abs(centsOrNull - targetCents) <= FB_BEND_TOLERANCE;
+  el.innerHTML = `
+    <div class="fb-bend-meter-col">
+      <div class="fb-bend-meter-track">
+        <div class="fb-bend-meter-fill ${inZone ? 'in-zone' : ''}" style="height:${fillH}%"></div>
+        <div class="fb-bend-meter-target-line" style="top:${targetY}%">
+          <span class="fb-bend-marker-label right">${targetCents}¢ &nbsp;${s.current ? s.current.targetLabel : ''}</span>
+        </div>
+        ${targetCents > 105 ? `<div class="fb-bend-meter-half-line" style="top:${halfY}%">
+          <span class="fb-bend-marker-label right">100¢</span>
+        </div>` : ''}
+        <div class="fb-bend-meter-base-line">
+          <span class="fb-bend-marker-label right">0¢ &nbsp;${s.current ? s.current.startLabel : ''}</span>
+        </div>
+      </div>
+      <div class="fb-bend-cents-val">${centsOrNull !== null ? (centsOrNull > 0 ? '+' : '') + centsOrNull + '¢' : '—'}</div>
+    </div>`;
+}
+
+function fbBendRenderStats() {
+  const s = fbState.bend;
+  const el = document.getElementById('fb-bend-stats');
+  if (!el) return;
+  const acc = s.total ? Math.round(s.correct / s.total * 100) + '%' : '—';
+  el.innerHTML = `<span class="fb-stat-item">${s.correct}/${s.total}</span>
+    <span class="fb-stat-item">streak ${s.streak}</span>
+    <span class="fb-stat-item">acc ${acc}</span>`;
+}
+
+function fbBendFb(msg, cls) {
+  const el = document.getElementById('fb-bend-feedback');
+  if (el) { el.textContent = msg; el.className = 'fb-feedback ' + (cls || ''); }
+}
+
+// ── Lifecycle ──
+
+function fbBendInit() {
+  fbBendSetSubMode(fbState.bend.subMode, false);
+}
+
+function fbBendSetSubMode(mode, save = true) {
+  fbState.bend.subMode = mode;
+  if (save) fbPrefsSave();
+  document.querySelectorAll('#fb-bend .fb-subtab').forEach(b =>
+    b.classList.toggle('active', b.dataset.bendmode === mode));
+  document.getElementById('fb-bend-bend-panel').style.display    = mode === 'bend'    ? '' : 'none';
+  document.getElementById('fb-bend-vibrato-panel').style.display  = mode === 'vibrato' ? '' : 'none';
+  if (fbMic.listening && fbMic.owner === 'bend') fbBendMicStop();
+  fbBendRenderOptions();
+  fbVibratoRenderOptions();
+  if (mode === 'bend')    fbBendNext();
+  if (mode === 'vibrato') fbVibratoNext();
+}
+
+function fbBendNext() {
+  const s = fbState.bend;
+  s.phase = 'idle';
+  s.baseFreq = null;
+  s._stableFr = 0;
+  s._holdFr = 0;
+  s._lastFreq = null;
+  s._nextAt = null;
+  const ex = fbBendPickExercise();
+  const midi = FB_STRING_OPEN_MIDI[ex.string] + ex.fret;
+  const targetCents = fbBendIntervalCents(s.interval);
+  const targetMidi  = midi + Math.round(targetCents / 100);
+  s.current = {
+    string: ex.string, fret: ex.fret,
+    startLabel: fbBendNoteLabel(midi),
+    targetLabel: fbBendNoteLabel(targetMidi),
+    targetCents, intLabel: fbBendIntervalLabel(s.interval),
+  };
+  fbBendRenderPrompt();
+  fbBendRenderMeter(null);
+  fbBendRenderStats();
+  fbBendFb(fbMic.owner === 'bend' ? 'Pluck the string…' : '', '');
+}
+
+async function fbBendMicStart() {
+  try {
+    await fbMicStart('bend', fbBendOnFrame);
+  } catch (e) {
+    fbBendFb('Mic error: ' + e.message, 'err');
+    return;
+  }
+  if (fbState.bend.subMode === 'bend') {
+    fbState.bend.phase = 'pluck';
+    fbBendFb('Pluck the string and then bend…', '');
+  } else {
+    fbState.vibrato.phase = 'pluck';
+    document.getElementById('fb-vibrato-feedback').textContent = 'Pluck any note and apply vibrato…';
+    document.getElementById('fb-vibrato-feedback').className = 'fb-feedback';
+  }
+  fbSyncMicButtons('bend');
+}
+
+function fbBendMicStop() {
+  fbMicStop();
+  fbState.bend.phase = 'idle';
+  fbState.vibrato.phase = 'idle';
+  fbBendRenderMeter(null);
+  fbSyncMicButtons('bend');
+}
+
+// ── onFrame dispatcher ──
+
+function fbBendOnFrame(analyser, sampleRate) {
+  if (fbState.bend.subMode === 'vibrato') {
+    fbVibratoOnFrame(analyser, sampleRate);
+  } else {
+    fbBendBendOnFrame(analyser, sampleRate);
+  }
+}
+
+// ── Bending onFrame ──
+
+function fbBendBendOnFrame(analyser, sampleRate) {
+  const s = fbState.bend;
+  if (s._nextAt && performance.now() >= s._nextAt) {
+    s._nextAt = null;
+    fbBendNext();
+    return;
+  }
+  if (s.phase === 'success') return;
+
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  const freq = fbAutoCorrelate(buf, sampleRate);
+
+  if (!(freq > 60 && freq < 2000)) {
+    if (s.phase === 'bending') fbBendRenderMeter(null);
+    return;
+  }
+
+  if (s.phase === 'pluck') {
+    // Accumulate stable frames at roughly the same pitch
+    if (s._lastFreq) {
+      const delta = Math.abs(1200 * Math.log2(freq / s._lastFreq));
+      if (delta < 30) s._stableFr++;
+      else { s._stableFr = 0; }
+    } else {
+      s._stableFr = 1;
+    }
+    s._lastFreq = freq;
+    if (s._stableFr >= FB_BEND_STABLE_FRAMES) {
+      s.baseFreq  = freq;
+      s.phase     = 'bending';
+      s._stableFr = 0;
+      s._holdFr   = 0;
+      s._lastFreq = null;
+      fbBendFb('Got it! Now bend up…', '');
+      fbBendRenderMeter(0);
+    }
+    return;
+  }
+
+  if (s.phase === 'bending') {
+    const cents = Math.round(1200 * Math.log2(freq / s.baseFreq));
+    fbBendRenderMeter(Math.max(-20, cents));  // clamp negative briefly
+    const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
+    if (inZone) {
+      s._holdFr++;
+      if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
+        s.phase = 'success';
+        s.correct++; s.total++; s.streak++;
+        fbBendFb('✓ Perfect bend!', 'ok');
+        fbBendRenderStats();
+        s._nextAt = performance.now() + FB_BEND_NEXT_DELAY_MS;
+      }
+    } else {
+      if (s._holdFr > 0) s._holdFr = Math.max(0, s._holdFr - 2);
+    }
+  }
+}
+
+// ── Vibrato ──
+
+function fbVibratoNext() {
+  const v = fbState.vibrato;
+  v.phase = 'idle';
+  v.baseFreq = null;
+  v._history = [];
+  v._stableFr = 0;
+  v._lastFreq = null;
+  v._successFr = 0;
+  v._startTime = null;
+  v.speed = null;
+  v.depth = null;
+  const fb = document.getElementById('fb-vibrato-feedback');
+  if (fb) { fb.textContent = fbMic.owner === 'bend' ? 'Pluck any note and apply vibrato…' : ''; fb.className = 'fb-feedback'; }
+  fbVibratoRenderWaveform();
+  fbVibratoRenderReadout(null, null);
+  fbVibratoRenderProgress(0);
+  fbVibratoRenderStats();
+}
+
+function fbVibratoOnFrame(analyser, sampleRate) {
+  const v = fbState.vibrato;
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  const freq = fbAutoCorrelate(buf, sampleRate);
+
+  if (!(freq > 60 && freq < 2000)) return;
+
+  if (v.phase === 'pluck') {
+    if (!v._lastFreq) { v._lastFreq = freq; return; }
+    const delta = Math.abs(1200 * Math.log2(freq / v._lastFreq));
+    v._lastFreq = freq;
+    if (delta < 40) {
+      v._stableFr++;
+      if (v._stableFr >= FB_BEND_STABLE_FRAMES) {
+        v.baseFreq = freq;
+        v.phase = 'sustain';
+        v._history = [];
+        v._successFr = 0;
+        v._startTime = performance.now();
+        const fb = document.getElementById('fb-vibrato-feedback');
+        if (fb) { fb.textContent = 'Now apply vibrato!'; fb.className = 'fb-feedback'; }
+      }
+    } else {
+      v._stableFr = 0;
+    }
+    return;
+  }
+
+  if (v.phase === 'sustain' || v.phase === 'success') {
+    const now  = performance.now();
+    const cents = Math.round(1200 * Math.log2(freq / v.baseFreq));
+    v._history.push({ cents, ts: now });
+    // Trim to window
+    const cutoff = now - FB_VIBRATO_HISTORY_MS;
+    while (v._history.length > 0 && v._history[0].ts < cutoff) v._history.shift();
+
+    fbVibratoRenderWaveform();
+
+    const { speed, depth } = fbVibratoAnalyze(v._history);
+    v.speed = speed;
+    v.depth = depth;
+    fbVibratoRenderReadout(speed, depth);
+
+    if (v.phase === 'success') return;  // stay in success until next()
+
+    const [lo, hi] = FB_VIBRATO_TARGET_RANGES[v.targetHz] || FB_VIBRATO_TARGET_RANGES[5];
+    const ok = speed >= lo && speed <= hi && depth >= FB_VIBRATO_MIN_DEPTH;
+    if (ok) {
+      v._successFr++;
+      fbVibratoRenderProgress(v._successFr / FB_VIBRATO_SUCCESS_FR);
+      if (v._successFr >= FB_VIBRATO_SUCCESS_FR) {
+        v.phase = 'success';
+        v.correct++; v.total++;
+        const fb = document.getElementById('fb-vibrato-feedback');
+        if (fb) { fb.textContent = '✓ Great vibrato!'; fb.className = 'fb-feedback ok'; }
+        fbVibratoRenderStats();
+        setTimeout(() => { if (fbMic.listening && fbMic.owner === 'bend') fbVibratoNext(); }, 2000);
+      }
+    } else {
+      v._successFr = Math.max(0, v._successFr - 1);
+      fbVibratoRenderProgress(v._successFr / FB_VIBRATO_SUCCESS_FR);
+    }
+  }
+}
+
+function fbVibratoAnalyze(history) {
+  if (history.length < 8) return { speed: 0, depth: 0 };
+  const vals    = history.map(h => h.cents);
+  const mean    = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const centered = vals.map(v => v - mean);
+  const depth   = Math.round((Math.max(...centered) - Math.min(...centered)) / 2);
+  let crossings = 0;
+  for (let i = 1; i < centered.length; i++) {
+    if (centered[i - 1] * centered[i] < 0) crossings++;
+  }
+  const durSec = (history[history.length - 1].ts - history[0].ts) / 1000;
+  const speed  = durSec > 0.3 ? Math.round(crossings / 2 / durSec * 10) / 10 : 0;
+  return { speed, depth };
+}
+
+function fbVibratoRenderWaveform() {
+  const canvas = document.getElementById('fb-vibrato-canvas');
+  if (!canvas) return;
+  const v   = fbState.vibrato;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const CENTS_RANGE = 150;  // ±150¢ displayed
+  const cy2 = c => H / 2 - (c / CENTS_RANGE) * (H / 2 - 4);
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#f8f7f0';
+  ctx.fillRect(0, 0, W, H);
+
+  // ±50¢ green zone
+  const y50 = cy2(50), y50n = cy2(-50);
+  ctx.fillStyle = 'rgba(74,124,74,0.1)';
+  ctx.fillRect(0, y50, W, y50n - y50);
+
+  // Dashed center
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 4]);
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (v._history.length < 2) return;
+
+  const now = performance.now();
+  ctx.strokeStyle = '#4a7c4a';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let first = true;
+  for (const { cents, ts } of v._history) {
+    const x = W - (now - ts) / FB_VIBRATO_HISTORY_MS * W;
+    const y = cy2(Math.max(-CENTS_RANGE, Math.min(CENTS_RANGE, cents)));
+    if (first) { ctx.moveTo(x, y); first = false; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Current dot
+  const last = v._history[v._history.length - 1];
+  if (last) {
+    ctx.fillStyle = '#b8843a';
+    ctx.beginPath();
+    ctx.arc(W - 2, cy2(Math.max(-CENTS_RANGE, Math.min(CENTS_RANGE, last.cents))), 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function fbVibratoRenderReadout(speed, depth) {
+  const el = document.getElementById('fb-vibrato-readout');
+  if (!el) return;
+  if (speed !== null) {
+    el.innerHTML = `<span class="fb-vib-stat">Speed: <strong>${speed} Hz</strong></span>
+      &nbsp;·&nbsp; <span class="fb-vib-stat">Depth: <strong>±${depth}¢</strong></span>`;
+  } else {
+    el.innerHTML = '<span style="color:#aaa">listening…</span>';
+  }
+}
+
+function fbVibratoRenderProgress(frac) {
+  const el = document.getElementById('fb-vibrato-progress');
+  if (!el) return;
+  const pct  = Math.round(Math.min(1, frac) * 100);
+  const secs = (frac * FB_VIBRATO_SUCCESS_MS / 1000).toFixed(1);
+  el.innerHTML = `<div class="fb-vibrato-prog-bar"><div class="fb-vibrato-prog-fill" style="width:${pct}%"></div></div>
+    <span class="fb-vibrato-prog-label">${secs} / ${FB_VIBRATO_SUCCESS_MS / 1000}s</span>`;
+}
+
+function fbVibratoRenderStats() {
+  const v  = fbState.vibrato;
+  const el = document.getElementById('fb-vibrato-stats');
+  if (!el) return;
+  el.innerHTML = `<span class="fb-stat-item">${v.correct}/${v.total} sessions completed</span>`;
 }
 
 // ── Guard action buttons against rapid double-click ──

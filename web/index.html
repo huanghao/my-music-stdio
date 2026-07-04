@@ -9,7 +9,7 @@
 <body>
 
 <nav class="nav">
-  <span class="nav-title">🎵</span>
+  <img class="nav-title-icon" src="favicon.svg" alt="Music Practice">
   <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
   <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
@@ -23,6 +23,11 @@
     <span class="conn-label" id="conn-label">connecting…</span>
   </div>
 </nav>
+
+<!-- Shared mic/speaker device pickers — global (not page-scoped): the
+     underlying fbMic/fbOutput singletons drive audio for both Fretboard's
+     mic-based drills and Speed Trainer's metronome. -->
+<div class="fb-device-bar" id="fb-device-bar"></div>
 
 <!-- VAMP PAGE -->
 <div class="page active" id="page-vamp">
@@ -106,13 +111,10 @@
       <button class="fb-tab" data-fbmode="chord" onclick="fbShowMode('chord')">Chord Match</button>
       <button class="fb-tab" data-fbmode="keymap" onclick="fbShowMode('keymap')">Key Map</button>
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
+      <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
     </div>
     <a class="fb-ref-link" href="chord-reference-sheet-by-chord.html" target="_blank">📄 和弦指型参考表 ↗</a>
   </div>
-
-  <!-- Shared mic/speaker device pickers — apply across every mode below,
-       since they all share the same underlying fbMic/fbOutput singletons. -->
-  <div class="fb-device-bar" id="fb-device-bar"></div>
 
   <!-- Note Names drill -->
   <div class="fb-panel active" id="fb-notes">
@@ -282,16 +284,46 @@
       <div class="fb-feedback" id="fb-ear-three-feedback"></div>
     </div>
   </div>
+
+  <!-- Bend & Vibrato -->
+  <div class="fb-panel" id="fb-bend">
+    <div class="fb-subtabs" style="margin-bottom:12px">
+      <button class="fb-subtab active" data-bendmode="bend"    onclick="fbBendSetSubMode('bend')">推弦 Bending</button>
+      <button class="fb-subtab"        data-bendmode="vibrato" onclick="fbBendSetSubMode('vibrato')">揉弦 Vibrato</button>
+    </div>
+
+    <!-- shared mic start/stop -->
+    <div class="fb-caged-answer" style="margin-bottom:16px">
+      <button class="btn btn-primary btn-sm" id="fb-bend-start-btn" onclick="fbBendMicStart()">Start Listening</button>
+      <button class="btn btn-ghost btn-sm"   id="fb-bend-stop-btn"  onclick="fbBendMicStop()" style="display:none">Stop</button>
+    </div>
+
+    <!-- Bending panel -->
+    <div id="fb-bend-bend-panel">
+      <div id="fb-bend-options"></div>
+      <div class="fb-stats" id="fb-bend-stats"></div>
+      <div class="fb-prompt" id="fb-bend-prompt"></div>
+      <div class="fb-bend-meter-area">
+        <div id="fb-bend-meter"></div>
+      </div>
+      <div class="fb-feedback" id="fb-bend-feedback"></div>
+    </div>
+
+    <!-- Vibrato panel -->
+    <div id="fb-bend-vibrato-panel" style="display:none">
+      <div id="fb-vibrato-options"></div>
+      <div class="fb-stats" id="fb-vibrato-stats"></div>
+      <canvas id="fb-vibrato-canvas" class="fb-vibrato-canvas" width="480" height="140"></canvas>
+      <div id="fb-vibrato-readout" class="fb-vibrato-readout"></div>
+      <div id="fb-vibrato-progress" class="fb-vibrato-progress-row"></div>
+      <div class="fb-feedback" id="fb-vibrato-feedback"></div>
+    </div>
+  </div>
 </div>
 
 <!-- SPEED TRAINER PAGE -->
 <div class="page" id="page-speed">
   <h2 style="font-size:18px;margin-bottom:16px;">Speed Trainer</h2>
-  <p style="font-size:13px;color:#888;margin-bottom:16px;max-width:640px;">
-    Practice a lick or solo you can't play at full speed yet: start the click at a
-    tempo you can already play cleanly, then bump it up a notch at a time — only once
-    you're actually clean at the current tempo, not on a timer.
-  </p>
 
   <div class="st-options">
     <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:64px"></label>
@@ -322,6 +354,30 @@
     <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump up (+step)</button>
     <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
   </div>
+
+  <hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">
+
+  <h3 style="font-size:15px;margin-bottom:8px;">🎤 Rhythm Analysis</h3>
+
+  <div class="st-options">
+    <label><input type="checkbox" id="st-analyze-enabled" checked> Analyze my playing while running</label>
+    <label>Mic sensitivity:
+      <input type="range" id="st-sensitivity" min="1.5" max="4" step="0.1" value="2.2" style="width:100px">
+    </label>
+    <button class="btn btn-ghost btn-sm" onclick="stStartCalibration()">🎯 Calibrate latency</button>
+  </div>
+  <div class="st-progress" id="st-calibration-status" style="margin-bottom:10px"></div>
+
+  <p style="font-size:11px;color:#aaa;margin-bottom:4px;">Live mic waveform (sanity-check that your playing is actually being picked up):</p>
+  <canvas id="st-waveform-canvas" class="st-waveform-canvas" width="640" height="60"></canvas>
+
+  <div class="st-mic-level"><div class="st-mic-level-fill" id="st-mic-level-fill"></div></div>
+  <canvas id="st-analysis-canvas" class="st-analysis-canvas" width="640" height="120"></canvas>
+  <div class="st-analysis-verdict" id="st-analysis-verdict"></div>
+
+  <div class="fb-feedback" id="st-analysis-msg"></div>
+  <div class="fb-stats-table-wrap" id="st-analysis-table"></div>
+  <button class="btn btn-ghost btn-sm" onclick="stResetAnalysis()">Reset analysis</button>
 </div>
 
 <!-- PREFERENCES PAGE -->

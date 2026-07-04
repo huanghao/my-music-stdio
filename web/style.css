@@ -20,6 +20,7 @@ body {
   z-index: 10;
 }
 .nav-title { font-size: 14px; font-weight: 600; color: #555; margin-right: 12px; }
+.nav-title-icon { width: 24px; height: 24px; border-radius: 6px; margin-right: 12px; flex-shrink: 0; }
 .nav-spacer { flex: 1; }
 .conn-indicator { display: flex; align-items: center; gap: 5px; }
 .conn-dot {
@@ -340,9 +341,11 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .fb-options label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
 
+/* Global bar, sits directly under <nav> (outside any .page), so it needs its
+   own horizontal padding to line up with the page content below it. */
 .fb-device-bar {
-  background: #f5f5f0; border: 1px solid #ddd; border-radius: 8px;
-  padding: 8px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap;
+  background: #f5f5f0; border-bottom: 1px solid #ddd;
+  padding: 8px 20px; display: flex; flex-wrap: wrap;
   gap: 16px; align-items: center; font-size: 12px; color: #666;
 }
 .fb-device-bar:empty { display: none; }
@@ -556,3 +559,89 @@ input[type="number"] { width: 64px; text-align: center; }
 .st-beat-dot.active { background: #7a9a7a; transform: scale(1.15); }
 .st-beat-dot.downbeat.active { background: #4a7c4a; }
 .st-progress { font-size: 12px; color: #888; }
+
+.st-mic-level {
+  width: 100%; max-width: 640px; height: 8px; background: #e8e4d8;
+  border-radius: 4px; overflow: hidden; margin-bottom: 10px;
+}
+.st-mic-level-fill {
+  height: 100%; width: 0%; background: #7a9a7a; transition: width 0.05s linear;
+}
+.st-analysis-canvas {
+  display: block; width: 100%; max-width: 640px; height: 120px;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 8px;
+}
+.st-waveform-canvas {
+  display: block; width: 100%; max-width: 640px; height: 60px;
+  background: #fafaf7; border: 1px solid #ddd; border-radius: 8px; margin-bottom: 10px;
+}
+.st-analysis-verdict { font-size: 13px; font-weight: 600; margin-bottom: 12px; min-height: 18px; }
+.st-analysis-verdict.steady { color: #4a7c4a; }
+.st-analysis-verdict.uneven { color: #b8843a; }
+
+/* ── Bend & Vibrato ─────────────────────────────────────────────────────── */
+
+.fb-bend-exercise-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; margin-bottom: 4px;
+}
+.fb-bend-location { color: #6a8caa; }
+.fb-bend-arrow    { color: #aaa; }
+.fb-bend-intlabel { }
+.fb-bend-notes-row {
+  font-size: 20px; font-weight: 700; font-family: Georgia, serif;
+  margin-bottom: 14px; color: #2a2a2a;
+}
+.fb-bend-target-note { color: #4a7c4a; }
+
+/* Vertical meter */
+.fb-bend-meter-area { display: flex; gap: 24px; margin-bottom: 12px; align-items: flex-start; }
+.fb-bend-meter-col  { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.fb-bend-meter-track {
+  position: relative; width: 36px; height: 200px;
+  background: #ede; border-radius: 6px; overflow: visible;
+}
+.fb-bend-meter-fill {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: #4a7c4a; border-radius: 6px; transition: height 0.05s;
+}
+.fb-bend-meter-fill.in-zone { background: #27ae60; }
+
+.fb-bend-meter-target-line,
+.fb-bend-meter-half-line,
+.fb-bend-meter-base-line {
+  position: absolute; left: 0; right: 0; height: 2px; background: #b8843a;
+}
+.fb-bend-meter-half-line  { background: #aaa; }
+.fb-bend-meter-base-line  { bottom: 0; background: #6a8caa; }
+
+.fb-bend-marker-label {
+  position: absolute; top: -8px; font-size: 11px; white-space: nowrap;
+  color: #666;
+}
+.fb-bend-marker-label.right { left: 44px; }
+
+.fb-bend-cents-val {
+  font-size: 15px; font-weight: 600; font-family: 'Courier New', monospace;
+  color: #2a2a2a; min-width: 60px; text-align: center;
+}
+
+/* Vibrato canvas */
+.fb-vibrato-canvas {
+  display: block; max-width: 100%; border: 1px solid #ddd;
+  border-radius: 6px; margin-bottom: 8px;
+}
+.fb-vibrato-readout {
+  font-size: 15px; font-weight: 500; margin-bottom: 10px; min-height: 22px;
+}
+.fb-vibrato-progress-row {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.fb-vibrato-prog-bar {
+  flex: 1; height: 8px; background: #ddd; border-radius: 4px; overflow: hidden;
+}
+.fb-vibrato-prog-fill {
+  height: 100%; background: #4a7c4a; border-radius: 4px; transition: width 0.1s;
+}
+.fb-vibrato-prog-label { font-size: 12px; color: #666; white-space: nowrap; }
+

@@ -289,7 +289,8 @@ test('fbEarAdjacentIntervals reads the two consecutive intervals in playback ord
 
 // ── Bend & Vibrato ────────────────────────────────────────────────────────
 
-test('fbBendIntervalCents: half=100, full=200, full_half=300', () => {
+test('fbBendIntervalCents: quarter=50, half=100, full=200, full_half=300', () => {
+  assert.equal(fb.fbBendIntervalCents('quarter'),   50);
   assert.equal(fb.fbBendIntervalCents('half'),      100);
   assert.equal(fb.fbBendIntervalCents('full'),      200);
   assert.equal(fb.fbBendIntervalCents('full_half'), 300);

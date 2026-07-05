@@ -80,7 +80,7 @@ const fbState = {
          three: { correct: 0, total: 0, streak: 0, current: null, answered: false, step: 1, step1Correct: null, timeoutId: null,
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
-    subMode: 'bend', strings: {3: true, 4: true, 5: false}, intervals: {half: false, full: true, full_half: false},
+    subMode: 'bend', strings: {3: true, 4: true, 5: false}, intervals: {quarter: false, half: false, full: true, full_half: false},
     phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _readyAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
     current: null, correct: 0, total: 0, streak: 0,
   },
@@ -248,7 +248,7 @@ function fbPrefsLoad() {
       if (!Object.values(fbState.bend.strings).some(Boolean)) fbState.bend.strings[4] = true;
     }
     if (saved.bend.intervals && typeof saved.bend.intervals === 'object') {
-      ['half', 'full', 'full_half'].forEach(k => {
+      ['quarter', 'half', 'full', 'full_half'].forEach(k => {
         if (typeof saved.bend.intervals[k] === 'boolean') fbState.bend.intervals[k] = saved.bend.intervals[k];
       });
       if (!Object.values(fbState.bend.intervals).some(Boolean)) fbState.bend.intervals.full = true;
@@ -2844,10 +2844,12 @@ function fbBendNoteLabel(midi) {
 }
 
 function fbBendIntervalCents(interval) {
+  if (interval === 'quarter') return 50;
   return interval === 'half' ? 100 : interval === 'full' ? 200 : 300;
 }
 
 function fbBendIntervalLabel(interval) {
+  if (interval === 'quarter') return '¼ step';
   return interval === 'half' ? '½ step' : interval === 'full' ? '1 full step' : '1½ steps';
 }
 
@@ -2902,6 +2904,7 @@ function fbBendRenderOptions() {
       <div class="fb-chord-type-group">
         <label class="fb-chord-group-label">Interval:</label>
         <span class="fb-chord-type-children">
+          <label><input type="checkbox" ${s.intervals.quarter?'checked':''} onchange="fbBendToggleInterval('quarter',this.checked)"> ¼ step <small style="color:#888">(blues touch)</small></label>
           <label><input type="checkbox" ${s.intervals.half?'checked':''} onchange="fbBendToggleInterval('half',this.checked)"> ½ step</label>
           <label><input type="checkbox" ${s.intervals.full?'checked':''} onchange="fbBendToggleInterval('full',this.checked)"> 1 full step <small style="color:#888">(most common)</small></label>
           <label><input type="checkbox" ${s.intervals.full_half?'checked':''} onchange="fbBendToggleInterval('full_half',this.checked)"> 1½ steps</label>
@@ -2978,8 +2981,9 @@ function fbBendRenderGraph() {
   ctx.textBaseline = 'bottom';
   ctx.fillText(`${targetCents}¢  ${s.current ? s.current.targetLabel : ''}`, 6, yt - 1);
 
-  // Half-step guide (if target > 100¢)
+  // Guide lines
   if (targetCents > 105) {
+    // For ½/full/1½-step bends: subtle grey guide at the half-step mark
     const yh = cy(100);
     ctx.save();
     ctx.strokeStyle = '#ddd';
@@ -2991,6 +2995,19 @@ function fbBendRenderGraph() {
     ctx.font = '10px sans-serif';
     ctx.textBaseline = 'bottom';
     ctx.fillText('100¢', 6, yh - 1);
+  } else if (targetCents <= 60) {
+    // For ¼-step bends: red ceiling at 100¢ — crossing it means you overshot
+    const yc = cy(100);
+    ctx.save();
+    ctx.strokeStyle = '#e04040';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.moveTo(0, yc); ctx.lineTo(W, yc); ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#e04040';
+    ctx.font = '10px sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('100¢ — too far (½ step)', 6, yc - 1);
   }
 
   // Baseline
@@ -3267,6 +3284,14 @@ fbState.bend._recordCents = function(now) {
   // pitch dropping back as the string releases), but don't re-trigger success.
   if (s.phase === 'success') return;
 
+  // Quarter-bend overshoot: if you push past 100¢ you've gone too far
+  const isQuarter = s.current.targetCents <= 60;
+  if (isQuarter && cents > 100) {
+    s._holdFr = 0;
+    fbBendFb('太多了！停在 ¼ 音（30–70¢），不要推到半音', 'err');
+    return;
+  }
+
   const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
   if (inZone) {
     s._holdFr++;
@@ -3280,6 +3305,9 @@ fbState.bend._recordCents = function(now) {
   } else {
     // Decay slowly so short excursions don't reset all progress.
     s._holdFr = Math.max(0, s._holdFr - 2);
+    if (s._holdFr === 0 && s.phase === 'bending') {
+      fbBendFb(isQuarter ? '推一点点，停在两音之间…' : 'Got it — now bend up!', '');
+    }
   }
 };
 

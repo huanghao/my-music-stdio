@@ -5,6 +5,7 @@ DEFAULTS = {
     "bars_per_row": 4,
     "soundfont_path": "~/music-practice/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2",
     "songs_dir": "~/music-practice/songs/",
+    "licks_dir": "~/music-practice/licks/",
 }
 
 

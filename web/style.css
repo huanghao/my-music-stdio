@@ -623,20 +623,56 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .fb-vibrato-prog-label { font-size: 12px; color: #666; white-space: nowrap; }
 
-/* ── Speed Trainer: real-time note display ───────────────────────────────── */
 
-.st-note-row {
-  display: flex; align-items: baseline; gap: 10px;
-  margin: 8px 0; min-height: 40px;
-}
-.st-note-label {
-  font-size: 12px; color: #aaa; white-space: nowrap;
-}
-.st-note-display {
-  font-size: 28px; font-weight: 700; font-family: Georgia, serif;
-  color: #ccc; letter-spacing: 1px; transition: color 0.1s;
-}
-.st-note-display.active {
-  color: #4a7c4a;
-}
 
+/* ── Lick Tracker ────────────────────────────────────────────────────────── */
+
+.lick-card {
+  display: flex; align-items: center; gap: 12px;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px;
+  padding: 12px 16px; margin-bottom: 10px; cursor: pointer;
+  transition: box-shadow .15s;
+}
+.lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.lick-card-body { flex: 1; min-width: 0; }
+.lick-card-title { font-size: 15px; font-weight: 600; color: #2a2a2a; }
+.lick-card-meta  { font-size: 12px; color: #888; margin-top: 2px; }
+.lick-practice-btn { flex-shrink: 0; }
+
+/* Detail page */
+.lick-detail-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  margin-bottom: 8px;
+}
+.lick-detail-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+.lick-target { font-size: 12px; color: #b8843a; font-weight: 600; }
+.lick-notes  { font-size: 13px; color: #666; margin-bottom: 16px; }
+
+/* Progress chart */
+.lick-chart-wrap   { margin: 12px 0 20px; }
+.lick-chart-svg    { width: 100%; max-width: 520px; height: auto; display: block; overflow: visible; }
+.lick-chart-label  { font-size: 10px; fill: #999; }
+.lick-chart-grid   { stroke: #eee; stroke-width: 1; }
+.lick-chart-line   { fill: none; stroke: #4a7c4a; stroke-width: 2; }
+.lick-chart-dot    { fill: #4a7c4a; cursor: pointer; }
+.lick-chart-dot:hover { fill: #27ae60; r: 6; }
+.lick-chart-target { stroke: #b8843a; stroke-width: 1.5; stroke-dasharray: 5 4; }
+.lick-chart-empty  { color: #aaa; font-size: 13px; padding: 20px 0; }
+
+/* Session list */
+.lick-sessions-header { margin-bottom: 8px; }
+.lick-session-row {
+  display: flex; gap: 16px; padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0; font-size: 13px;
+}
+.lick-session-bpm  { font-weight: 600; color: #4a7c4a; min-width: 70px; }
+.lick-session-dur  { color: #888; min-width: 50px; }
+.lick-session-date { color: #aaa; }
+
+/* Speed Trainer active lick banner */
+.st-active-lick-banner {
+  display: flex; align-items: center; gap: 12px;
+  background: #f0f8f0; border: 1px solid #c0dbc0; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 16px;
+}
+.st-lick-banner-text { flex: 1; font-size: 14px; }

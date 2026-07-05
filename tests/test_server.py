@@ -144,3 +144,57 @@ def test_play_bpm_validated(client):
         "bpm": 5, "style": "pop", "loops": 2,
     })
     assert r.status_code == 422
+
+
+# ── Lick API ──────────────────────────────────────────────────────────────
+
+def test_create_and_list_lick(client):
+    r = client.post("/api/licks", json={"title": "Test Lick", "notes": "hi", "target_bpm": 120})
+    assert r.status_code == 200
+    lick_id = r.json()["id"]
+
+    r = client.get("/api/licks")
+    assert r.status_code == 200
+    ids = [l["id"] for l in r.json()]
+    assert lick_id in ids
+
+
+def test_get_lick(client):
+    lick_id = client.post("/api/licks", json={"title": "Get Me"}).json()["id"]
+    r = client.get(f"/api/licks/{lick_id}")
+    assert r.status_code == 200
+    assert r.json()["title"] == "Get Me"
+    assert r.json()["sessions"] == []
+
+
+def test_update_lick(client):
+    lick_id = client.post("/api/licks", json={"title": "Old"}).json()["id"]
+    r = client.put(f"/api/licks/{lick_id}", json={"title": "New", "notes": "", "target_bpm": None})
+    assert r.status_code == 200
+    assert client.get(f"/api/licks/{lick_id}").json()["title"] == "New"
+
+
+def test_delete_lick(client):
+    lick_id = client.post("/api/licks", json={"title": "Del"}).json()["id"]
+    assert client.delete(f"/api/licks/{lick_id}").status_code == 200
+    assert client.get(f"/api/licks/{lick_id}").status_code == 404
+
+
+def test_add_lick_session(client):
+    lick_id = client.post("/api/licks", json={"title": "Practice"}).json()["id"]
+    r = client.post(f"/api/licks/{lick_id}/sessions", json={"bpm": 90, "duration_min": 5})
+    assert r.status_code == 200
+    sessions = r.json()["sessions"]
+    assert len(sessions) == 1
+    assert sessions[0]["bpm"] == 90
+
+
+def test_lick_session_bpm_validated(client):
+    lick_id = client.post("/api/licks", json={"title": "V"}).json()["id"]
+    assert client.post(f"/api/licks/{lick_id}/sessions",
+                       json={"bpm": 5, "duration_min": 5}).status_code == 422
+
+
+def test_lick_id_path_traversal_rejected(client):
+    assert client.get("/api/licks/%2e%2e").status_code == 400
+    assert client.delete("/api/licks/%2e%2e").status_code == 400

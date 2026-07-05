@@ -50,6 +50,16 @@ class SongBody(BaseModel):
     id: Optional[str] = None
 
 
+class LickSession(BaseModel):
+    bpm: float = Field(ge=20.0, le=300.0)
+    duration_min: float = Field(ge=0.5, le=180.0)
+
+class LickBody(BaseModel):
+    title: str = "Untitled"
+    notes: str = ""
+    target_bpm: Optional[float] = Field(default=None, ge=20.0, le=300.0)
+
+
 _player = Player()
 
 
@@ -93,6 +103,31 @@ def _write_song(song_id: str, data: dict) -> None:
     d.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     (d / "song.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+def _licks_dir() -> Path:
+    d = Path(prefs.load()["licks_dir"]).expanduser()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _lick_path(lick_id: str) -> Path:
+    base = _licks_dir()
+    p = (base / lick_id).resolve()
+    if not p.is_relative_to(base.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid lick id")
+    return p
+
+def _read_lick(lick_id: str) -> dict:
+    p = _lick_path(lick_id) / "lick.json"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Lick not found")
+    return json.loads(p.read_text())
+
+def _write_lick(lick_id: str, data: dict) -> None:
+    d = _lick_path(lick_id)
+    d.mkdir(parents=True, exist_ok=True)
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    (d / "lick.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
 
 # ── API ──
@@ -218,6 +253,75 @@ def api_play(song: SongBody):
             pass
 
     return {"playing": True, "file": midi_path, "duration_sec": duration_sec, "loops": loops}
+
+
+@app.get("/api/licks")
+def api_list_licks():
+    licks = []
+    for d in _licks_dir().iterdir():
+        p = d / "lick.json"
+        if p.exists():
+            data = json.loads(p.read_text())
+            data["id"] = d.name
+            # Summary: omit sessions array, add computed fields
+            sessions = data.pop("sessions", [])
+            data["session_count"] = len(sessions)
+            data["last_bpm"] = sessions[-1]["bpm"] if sessions else None
+            data["last_date"] = sessions[-1]["date"] if sessions else None
+            licks.append(data)
+    licks.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    return licks
+
+
+@app.post("/api/licks")
+def api_create_lick(lick: LickBody):
+    data = lick.model_dump()
+    data["sessions"] = []
+    data["created_at"] = datetime.now(timezone.utc).isoformat()
+    lick_id = _slugify(data.get("title", "lick"))
+    base = lick_id
+    i = 1
+    while _lick_path(lick_id).exists():
+        lick_id = f"{base}-{i}"
+        i += 1
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
+
+
+@app.get("/api/licks/{lick_id}")
+def api_get_lick(lick_id: str):
+    data = _read_lick(lick_id)
+    data["id"] = lick_id
+    return data
+
+
+@app.put("/api/licks/{lick_id}")
+def api_update_lick(lick_id: str, lick: LickBody):
+    data = _read_lick(lick_id)
+    data.update(lick.model_dump())
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
+
+
+@app.delete("/api/licks/{lick_id}")
+def api_delete_lick(lick_id: str):
+    p = _lick_path(lick_id)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Lick not found")
+    shutil.rmtree(p)
+    return {"ok": True}
+
+
+@app.post("/api/licks/{lick_id}/sessions")
+def api_add_lick_session(lick_id: str, session: LickSession):
+    data = _read_lick(lick_id)
+    data.setdefault("sessions", []).append({
+        "date": datetime.now(timezone.utc).isoformat(),
+        "bpm": session.bpm,
+        "duration_min": session.duration_min,
+    })
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
 
 
 @app.post("/api/bpm")

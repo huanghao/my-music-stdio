@@ -13,6 +13,7 @@
   <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
   <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
+  <button class="nav-btn"        data-page="licks" onclick="showPage('licks')">Licks</button>
   <button class="nav-btn"        data-page="sightread" onclick="showPage('sightread')">Sight Read</button>
   <button class="nav-btn"        data-page="fretboard" onclick="showPage('fretboard')">Fretboard</button>
   <button class="nav-btn"        data-page="speed" onclick="showPage('speed')">Speed Trainer</button>
@@ -323,8 +324,26 @@
 </div>
 
 <!-- SPEED TRAINER PAGE -->
+<!-- LICKS LIST PAGE -->
+<div class="page" id="page-licks">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+    <h2 style="font-size:18px;">Licks</h2>
+    <button class="btn btn-primary" onclick="newLick()">+ New Lick</button>
+  </div>
+  <div id="licks-list"></div>
+</div>
+
+<!-- LICK DETAIL PAGE -->
+<div class="page" id="page-lick-detail">
+  <div style="margin-bottom:12px;">
+    <button class="btn btn-ghost btn-sm" onclick="showPage('licks')">← Licks</button>
+  </div>
+  <div id="lick-detail-content"></div>
+</div>
+
 <div class="page" id="page-speed">
   <h2 style="font-size:18px;margin-bottom:16px;">Speed Trainer</h2>
+  <div class="st-active-lick-banner" id="st-active-lick-banner" style="display:none"></div>
 
   <div class="st-options">
     <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:64px"></label>
@@ -361,36 +380,6 @@
     <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
   </div>
 
-  <hr style="border:none;border-top:1px solid #ddd;margin:24px 0;">
-
-  <h3 style="font-size:15px;margin-bottom:8px;">🎤 Rhythm Analysis</h3>
-
-  <div class="st-options">
-    <label><input type="checkbox" id="st-analyze-enabled" checked> Analyze my playing while running</label>
-    <label>Mic sensitivity:
-      <input type="range" id="st-sensitivity" min="1.5" max="4" step="0.1" value="2.2" style="width:100px">
-    </label>
-    <button class="btn btn-ghost btn-sm" onclick="stStartCalibration()">🎯 Calibrate latency</button>
-  </div>
-  <div class="st-progress" id="st-calibration-status" style="margin-bottom:10px"></div>
-
-  <p style="font-size:11px;color:#aaa;margin-bottom:4px;">Live mic waveform (sanity-check that your playing is actually being picked up):</p>
-  <canvas id="st-waveform-canvas" class="st-waveform-canvas" width="640" height="60"></canvas>
-
-  <div class="st-mic-level"><div class="st-mic-level-fill" id="st-mic-level-fill"></div></div>
-
-  <div class="st-note-row">
-    <span class="st-note-label">Now:</span>
-    <span class="st-note-display" id="st-note-display">—</span>
-  </div>
-
-  <p style="font-size:11px;color:#aaa;margin-bottom:4px;">Timing chart — dots show each onset; note name above the dot; color: <span style="color:#4a7c4a">green=on time</span>, <span style="color:#c04040">red=late</span>, <span style="color:#4a6ac0">blue=early</span></p>
-  <canvas id="st-analysis-canvas" class="st-analysis-canvas" width="640" height="160"></canvas>
-  <div class="st-analysis-verdict" id="st-analysis-verdict"></div>
-
-  <div class="fb-feedback" id="st-analysis-msg"></div>
-  <div class="fb-stats-table-wrap" id="st-analysis-table"></div>
-  <button class="btn btn-ghost btn-sm" onclick="stResetAnalysis()">Reset analysis</button>
 </div>
 
 <!-- PREFERENCES PAGE -->
@@ -417,9 +406,29 @@
   </div>
 </div>
 
+<!-- Lick session log modal -->
+<div id="lick-log-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center">
+  <div class="modal" style="min-width:300px">
+    <h3 style="margin-bottom:16px;font-size:15px;">Log Practice Session</h3>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
+      <label style="font-size:13px">BPM
+        <input type="number" id="lick-log-bpm" min="20" max="300" style="width:80px;margin-left:8px">
+      </label>
+      <label style="font-size:13px">Duration (min)
+        <input type="number" id="lick-log-dur" min="0.5" max="180" step="0.5" style="width:80px;margin-left:8px">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeLickLogModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitLickSession()">Log</button>
+    </div>
+  </div>
+</div>
+
 <script src="vendor/svguitar.umd.js"></script>
 <script src="fretboard.js"></script>
 <script src="speed-trainer.js"></script>
+<script src="licks.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

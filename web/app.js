@@ -117,10 +117,16 @@ async function loadApp() {
 }
 
 // ── Init ──
+const CURRENT_PAGE_KEY = 'mps_current_page';
+const NAV_PAGES = ['vamp', 'jam', 'songs', 'licks', 'sightread', 'fretboard', 'speed', 'prefs'];
+
 async function init() {
+  fbRenderDeviceBar(); // global mic/speaker pickers — no server dependency, so this works even if the backend is down
   await pingServer();
   setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();
+  const savedPage = localStorage.getItem(CURRENT_PAGE_KEY);
+  if (savedPage && NAV_PAGES.includes(savedPage) && savedPage !== 'vamp') showPage(savedPage);
 }
 
 // Stop polling when the tab is hidden; resume when it becomes visible again.
@@ -144,16 +150,18 @@ document.addEventListener('visibilitychange', function() {
 function showPage(name) {
   if (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active')) fbLeavePage();
   if (name !== 'speed' && document.getElementById('page-speed')?.classList.contains('active')) stStop();
+  localStorage.setItem(CURRENT_PAGE_KEY, name);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.page === name);
   });
-  if (name === 'songs') loadSongs();
-  if (name === 'prefs') renderPrefsForm();
+  if (name === 'songs')     loadSongs();
+  if (name === 'licks')     loadLicks();
+  if (name === 'prefs')     renderPrefsForm();
   if (name === 'fretboard') initFretboardPage();
   if (name === 'sightread') loadSightReadPicker();
-  if (name === 'speed') initSpeedPage();
+  if (name === 'speed')     { initSpeedPage(); renderActiveLickBanner(); }
 }
 
 // ── API helper ──

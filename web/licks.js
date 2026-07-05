@@ -9,7 +9,9 @@
 // ── State ──
 
 const licksState = {
-  activeLick: null,  // { id, title, lastBpm } — set when practicing a lick
+  activeLick: null,   // { id, title, lastBpm } — set when practicing a lick
+  currentLick: null,  // full lick object currently in detail view
+  licksById: {},      // id → { title, last_bpm } cache from list response
 };
 
 // ── List page ──
@@ -23,6 +25,7 @@ async function loadLicks() {
     el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">No licks yet — click "+ New Lick" to start tracking.</p>';
     return;
   }
+  licks.forEach(l => { licksState.licksById[l.id] = l; });
   el.innerHTML = licks.map(l => {
     const lastBpm  = l.last_bpm  ? `${l.last_bpm} BPM` : 'no sessions yet';
     const lastDate = l.last_date ? timeAgo(l.last_date) : '—';
@@ -34,7 +37,7 @@ async function loadLicks() {
           <div class="lick-card-meta">${lastBpm} &nbsp;·&nbsp; last: ${lastDate} &nbsp;·&nbsp; ${count} session${count !== 1 ? 's' : ''}</div>
         </div>
         <button class="btn btn-primary btn-sm lick-practice-btn"
-          onclick="event.stopPropagation(); practiceLick('${l.id}', ${l.last_bpm || 60}, ${JSON.stringify(htmlEsc(l.title))})">
+          onclick="event.stopPropagation(); practiceLick('${l.id}')">
           Practice →
         </button>
       </div>`;
@@ -52,6 +55,8 @@ async function newLick() {
 
 async function openLick(id) {
   const lick = await api(`/api/licks/${id}`);
+  licksState.currentLick = lick;
+  licksState.licksById[id] = lick;
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-lick-detail').classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -100,7 +105,7 @@ function renderLickDetail(lick) {
     </div>
 
     <div style="margin-top:20px">
-      <button class="btn btn-primary" onclick="practiceLick('${lick.id}', ${lastBpm}, ${JSON.stringify(htmlEsc(lick.title))})">
+      <button class="btn btn-primary" onclick="practiceLick('${lick.id}')">
         🎯 Practice Now — ${lastBpm} BPM
       </button>
     </div>
@@ -202,15 +207,20 @@ async function deleteLick(id) {
 
 // ── Speed Trainer integration ──
 
-function practiceLick(id, bpm, title) {
+function practiceLick(id) {
+  const cached = licksState.licksById[id] || {};
+  // Use last_bpm from list summary, or last session's bpm from full detail
+  const sessions = cached.sessions || [];
+  const bpm = sessions.length ? sessions[sessions.length - 1].bpm
+              : (cached.last_bpm || 60);
+  const title = cached.title || id;
   licksState.activeLick = { id, title, lastBpm: bpm };
-  // Pre-load the Speed Trainer with the lick's last BPM
+  // Pre-load Speed Trainer with the lick's last BPM
   stState.startBpm = bpm;
   stState.currentBpm = bpm;
   stApplyStateToUI();
   stPrefsSave();
   showPage('speed');
-  renderActiveLickBanner();
 }
 
 function renderActiveLickBanner() {

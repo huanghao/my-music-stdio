@@ -49,6 +49,7 @@ const stState = {
   _currentNote: null,   // last detected pitch (e.g. 'A4') — shown in real-time display
   _noteHoldUntil: 0,    // keep showing _currentNote for 1 s after signal drops
   _pendingNote: null,   // most recently detected pitch, captured into onsetLog on next onset
+  _prevRms: 0,          // previous frame RMS for rise-based onset detection
 };
 
 // ── Persistence ──
@@ -310,8 +311,9 @@ function stReset() {
 // compares each one against the nearest logged click time. Purely a timing
 // check: it has no idea what note you played, only when you played *something*.
 
-const ST_ONSET_MIN_RMS = 0.02;       // ignore near-silence (room noise, hum)
-const ST_ONSET_REFRACTORY_MS = 120;  // don't re-trigger on the same note's sustain/decay
+const ST_ONSET_MIN_RMS = 0.015;      // ignore near-silence (room noise, hum)
+const ST_ONSET_REFRACTORY_MS = 80;   // don't re-trigger on the same note's sustain/decay
+const ST_ONSET_RISE_THRESHOLD = 0.03; // min RMS rise per frame to count as an attack
 const ST_ONSET_MAX_MATCH_MS = 400;   // an onset further than this from any click isn't useful feedback
 const ST_CHART_WINDOW_BARS = 4;      // how much history the scrolling chart shows, in bars (not a fixed time)
 const ST_CHART_MAX_DEV_MS = 150;     // deviation magnitude that maxes out the chart's y-axis
@@ -364,9 +366,15 @@ function stOnMicFrame(analyser, sampleRate) {
   }
   stUpdateNoteDisplay();
 
-  if (rms > ST_ONSET_MIN_RMS && rms > baseline * stState.onsetRatio && now >= stState._onsetRefractoryUntil) {
+  // Hybrid onset: fire on large energy RISE (attack transient) OR ratio above baseline.
+  // Rise-based detection handles dense 8th-note playing where the baseline adapts upward
+  // with sustain and ratio alone misses onsets.
+  const rise = rms - (stState._prevRms || 0);
+  stState._prevRms = rms;
+  const onsetByRise  = rms > ST_ONSET_MIN_RMS && rise > ST_ONSET_RISE_THRESHOLD;
+  const onsetByRatio = rms > ST_ONSET_MIN_RMS && rms > baseline * stState.onsetRatio;
+  if ((onsetByRise || onsetByRatio) && now >= stState._onsetRefractoryUntil) {
     stState._onsetRefractoryUntil = now + ST_ONSET_REFRACTORY_MS;
-    // Capture the pitch at onset time (stState._pendingNote was just updated above)
     stRecordOnset(now, stState._pendingNote);
   }
 
@@ -466,16 +474,31 @@ function stDrawChart() {
   const canvas = document.getElementById('st-analysis-canvas');
   if (!canvas || !canvas.getContext) return;
   const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height, midY = h / 2;
-  const windowMs = stChartWindowMs();
-  const nowRel = performance.now() - stState.sessionStartMs;
+  const w = canvas.width, h = canvas.height;
+
+  // Layout: top NOTE_STRIP_H px = note name strip; rest = timing deviation dots
+  const NOTE_STRIP_H = 36;
+  const chartTop = NOTE_STRIP_H + 4;
+  const chartH    = h - chartTop;
+  const midY      = chartTop + chartH / 2;
+  const windowMs  = stChartWindowMs();
+  const nowRel    = performance.now() - stState.sessionStartMs;
 
   ctx.clearRect(0, 0, w, h);
+
+  // Note name strip background
+  ctx.fillStyle = '#f5f4ee';
+  ctx.fillRect(0, 0, w, NOTE_STRIP_H);
+
+  // Separator line between note strip and timing chart
   ctx.strokeStyle = '#ddd';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, NOTE_STRIP_H); ctx.lineTo(w, NOTE_STRIP_H); ctx.stroke();
+
+  // Center line for timing chart
   ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(w, midY); ctx.stroke();
 
-  // Bar-boundary gridlines, so you can see which notes clustered around
-  // which bar rather than just a shapeless scatter of dots.
+  // Bar-boundary gridlines
   ctx.strokeStyle = '#eee';
   stState.barLineLog.forEach(barWallMs => {
     const relMs = barWallMs - stState.sessionStartMs;
@@ -488,22 +511,31 @@ function stDrawChart() {
     .filter(o => nowRel - o.tMs < windowMs)
     .forEach(o => {
       const x = w * (1 - (nowRel - o.tMs) / windowMs);
-      const clamped = Math.max(-ST_CHART_MAX_DEV_MS, Math.min(ST_CHART_MAX_DEV_MS, o.deviation));
-      const y = midY - (clamped / ST_CHART_MAX_DEV_MS) * (midY - 8);
       const color = Math.abs(o.deviation) < 15 ? '#4a7c4a' : (o.deviation > 0 ? '#c04040' : '#4a6ac0');
+
+      // ── Note name pill in the top strip ──
+      if (o.note) {
+        ctx.font = 'bold 13px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        const tw = ctx.measureText(o.note).width;
+        const pw = tw + 8, ph = 20, py = (NOTE_STRIP_H - ph) / 2;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.roundRect(x - pw / 2, py, pw, ph, 4);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(o.note, x, NOTE_STRIP_H / 2);
+        ctx.textAlign = 'left';
+      }
+
+      // ── Timing dot in the chart area ──
+      const clamped = Math.max(-ST_CHART_MAX_DEV_MS, Math.min(ST_CHART_MAX_DEV_MS, o.deviation));
+      const y = midY - (clamped / ST_CHART_MAX_DEV_MS) * (chartH / 2 - 8);
       ctx.beginPath();
       ctx.fillStyle = color;
       ctx.arc(x, y, 4, 0, Math.PI * 2);
       ctx.fill();
-      // Note name above the dot (or below if dot is near the top)
-      if (o.note) {
-        ctx.fillStyle = color;
-        ctx.font = '10px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = y < 20 ? 'top' : 'bottom';
-        ctx.fillText(o.note, x, y < 20 ? y + 7 : y - 7);
-        ctx.textAlign = 'left';
-      }
     });
 }
 
@@ -523,6 +555,7 @@ async function stStartListening() {
   stState._currentNote = null;
   stState._noteHoldUntil = 0;
   stState._pendingNote = null;
+  stState._prevRms = 0;
 }
 
 function stStopListening() {

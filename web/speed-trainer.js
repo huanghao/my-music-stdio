@@ -50,6 +50,7 @@ const stState = {
   _noteHoldUntil: 0,    // keep showing _currentNote for 1 s after signal drops
   _pendingNote: null,   // most recently detected pitch, captured into onsetLog on next onset
   _prevRms: 0,          // previous frame RMS for rise-based onset detection
+  _prevMagnitudes: null, // previous frame linear magnitude spectrum for spectral flux
 };
 
 // ── Persistence ──
@@ -312,8 +313,9 @@ function stReset() {
 // check: it has no idea what note you played, only when you played *something*.
 
 const ST_ONSET_MIN_RMS = 0.015;      // ignore near-silence (room noise, hum)
-const ST_ONSET_REFRACTORY_MS = 80;   // don't re-trigger on the same note's sustain/decay
-const ST_ONSET_RISE_THRESHOLD = 0.03; // min RMS rise per frame to count as an attack
+const ST_ONSET_REFRACTORY_MS = 50;   // don't re-trigger on same note's attack — 50ms handles ~120BPM sextuplets
+const ST_ONSET_RISE_THRESHOLD = 0.025; // min RMS rise per frame to count as an attack (energy-based)
+const ST_ONSET_FLUX_THRESHOLD = 2.5;  // spectral flux threshold (sum of positive bin increases, linear scale)
 const ST_ONSET_MAX_MATCH_MS = 400;   // an onset further than this from any click isn't useful feedback
 const ST_CHART_WINDOW_BARS = 4;      // how much history the scrolling chart shows, in bars (not a fixed time)
 const ST_CHART_MAX_DEV_MS = 150;     // deviation magnitude that maxes out the chart's y-axis
@@ -366,14 +368,27 @@ function stOnMicFrame(analyser, sampleRate) {
   }
   stUpdateNoteDisplay();
 
-  // Hybrid onset: fire on large energy RISE (attack transient) OR ratio above baseline.
-  // Rise-based detection handles dense 8th-note playing where the baseline adapts upward
-  // with sustain and ratio alone misses onsets.
+  // ── Triple-mode onset detection ──
+  // 1. Spectral flux: sum of positive magnitude increases across all FFT bins.
+  //    Detects when new frequency energy appears (new note attack).
+  //    Most reliable for dense passages — not fooled by sustained previous notes.
+  const freqBuf = new Float32Array(analyser.frequencyBinCount);
+  analyser.getFloatFrequencyData(freqBuf);       // dB values, already computed by the analyser
+  if (!stState._prevMagnitudes) stState._prevMagnitudes = new Float32Array(freqBuf.length);
+  let flux = 0;
+  for (let i = 0; i < freqBuf.length; i++) {
+    const lin = Math.pow(10, freqBuf[i] / 20);   // dB → linear amplitude
+    flux += Math.max(0, lin - stState._prevMagnitudes[i]);
+    stState._prevMagnitudes[i] = lin;
+  }
+  // 2. RMS rise: large per-frame energy jump (strong attack transient)
   const rise = rms - (stState._prevRms || 0);
   stState._prevRms = rms;
-  const onsetByRise  = rms > ST_ONSET_MIN_RMS && rise > ST_ONSET_RISE_THRESHOLD;
-  const onsetByRatio = rms > ST_ONSET_MIN_RMS && rms > baseline * stState.onsetRatio;
-  if ((onsetByRise || onsetByRatio) && now >= stState._onsetRefractoryUntil) {
+  // 3. Ratio: current level significantly above rolling baseline
+  const onsetByFlux  = rms > ST_ONSET_MIN_RMS && flux  > ST_ONSET_FLUX_THRESHOLD;
+  const onsetByRise  = rms > ST_ONSET_MIN_RMS && rise  > ST_ONSET_RISE_THRESHOLD;
+  const onsetByRatio = rms > ST_ONSET_MIN_RMS && rms   > baseline * stState.onsetRatio;
+  if ((onsetByFlux || onsetByRise || onsetByRatio) && now >= stState._onsetRefractoryUntil) {
     stState._onsetRefractoryUntil = now + ST_ONSET_REFRACTORY_MS;
     stRecordOnset(now, stState._pendingNote);
   }
@@ -556,6 +571,7 @@ async function stStartListening() {
   stState._noteHoldUntil = 0;
   stState._pendingNote = null;
   stState._prevRms = 0;
+  stState._prevMagnitudes = null;
 }
 
 function stStopListening() {

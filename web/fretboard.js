@@ -53,7 +53,7 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 const fbState = {
   inited: false,
   activeMode: 'notes',
-  notes: { strings: [true, true, true, true, true, true], maxFret: 12, correct: 0, total: 0, streak: 0, current: null, locked: false, stats: {} },
+  notes: { strings: [true, true, true, true, true, true], maxFret: 12, practiceMode: 'all', correct: 0, total: 0, streak: 0, current: null, locked: false, stats: {} },
   caged: { mode: 'barre', correct: 0, total: 0, streak: 0, current: null, answered: false },
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            strings: [true, true, true, true, true, true], practiceMode: 'all', stats: {},
@@ -182,6 +182,7 @@ function fbPrefsLoad() {
   if (saved.notes) {
     if (Array.isArray(saved.notes.strings) && saved.notes.strings.length === 6) fbState.notes.strings = saved.notes.strings;
     if (saved.notes.maxFret === 5 || saved.notes.maxFret === 12) fbState.notes.maxFret = saved.notes.maxFret;
+    if (saved.notes.practiceMode === 'all' || saved.notes.practiceMode === 'weak') fbState.notes.practiceMode = saved.notes.practiceMode;
   }
   if (saved.pitch) {
     if (Array.isArray(saved.pitch.strings) && saved.pitch.strings.length === 6) fbState.pitch.strings = saved.pitch.strings;
@@ -283,7 +284,7 @@ function fbPrefsLoad() {
 
 function fbPrefsSave() {
   localStorage.setItem(FB_PREFS_KEY, JSON.stringify({
-    notes: { strings: fbState.notes.strings, maxFret: fbState.notes.maxFret },
+    notes: { strings: fbState.notes.strings, maxFret: fbState.notes.maxFret, practiceMode: fbState.notes.practiceMode },
     pitch: { strings: fbState.pitch.strings, practiceMode: fbState.pitch.practiceMode, showBoard: fbState.pitch.showBoard,
              naturalsOnly: fbState.pitch.naturalsOnly },
     chord: {
@@ -412,6 +413,11 @@ function fbRenderNotesOptions() {
       <option value="5" ${fbState.notes.maxFret===5?'selected':''}>0–5</option>
       <option value="12" ${fbState.notes.maxFret===12?'selected':''}>0–12</option>
     </select>
+    <span style="margin-left:12px">Practice:</span>
+    <select onchange="fbState.notes.practiceMode=this.value; fbPrefsSave(); fbNotesNext()">
+      <option value="all"  ${fbState.notes.practiceMode === 'all'  ? 'selected' : ''}>All notes</option>
+      <option value="weak" ${fbState.notes.practiceMode === 'weak' ? 'selected' : ''}>Focus on weak</option>
+    </select>
   `;
 }
 
@@ -468,9 +474,40 @@ function fbNotesNext() {
   s.locked = false;
   const eligible = [];
   for (let i = 0; i < 6; i++) if (s.strings[i]) eligible.push(i);
-  const stringIdx = eligible[Math.floor(Math.random() * eligible.length)];
-  const fret = Math.floor(Math.random() * (s.maxFret + 1));
-  s.current = { stringIdx, fret, note: fbNoteAt(stringIdx, fret) };
+  // In 'weak' mode: pick a note name weighted by (1 – accuracy), then find
+  // a random position on an eligible string within the fret range that
+  // sounds that note. Falls back to uniform random if no stats yet.
+  let targetNote = null;
+  if (s.practiceMode === 'weak') {
+    const candidates = FB_NOTE_NAMES.map(n => {
+      const st = s.stats[n];
+      const acc = st && st.presented > 0 ? st.correct / st.presented : 0.5;
+      return { n, w: Math.max(0.1, 1 - acc) };
+    });
+    const total = candidates.reduce((sum, c) => sum + c.w, 0);
+    let r = Math.random() * total;
+    for (const c of candidates) { r -= c.w; if (r <= 0) { targetNote = c.n; break; } }
+  }
+  let stringIdx, fret, note;
+  if (targetNote) {
+    // Collect all (string, fret) positions matching the target note
+    const positions = [];
+    for (const si of eligible) {
+      for (let f = 0; f <= s.maxFret; f++) {
+        if (fbNoteAt(si, f) === targetNote) positions.push({ si, f });
+      }
+    }
+    if (positions.length) {
+      const pick = positions[Math.floor(Math.random() * positions.length)];
+      stringIdx = pick.si; fret = pick.f; note = targetNote;
+    }
+  }
+  if (note === undefined) {
+    stringIdx = eligible[Math.floor(Math.random() * eligible.length)];
+    fret = Math.floor(Math.random() * (s.maxFret + 1));
+    note = fbNoteAt(stringIdx, fret);
+  }
+  s.current = { stringIdx, fret, note };
 
   fbRenderNotesStats();
   fbRenderNotesStatsTable();

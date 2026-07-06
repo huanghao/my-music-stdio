@@ -60,8 +60,8 @@
 
 <!-- SONGS PAGE -->
 <div class="page" id="page-songs">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <h2 style="font-size:18px;">Songs</h2>
+  <div class="page-header">
+    <h2 class="page-title">Songs</h2>
     <button class="btn btn-primary" onclick="newSong()">+ New Song</button>
   </div>
   <div id="songs-list"></div>
@@ -84,7 +84,7 @@
 <!-- SIGHT READ PAGE -->
 <div class="page" id="page-sightread">
   <div id="sightread-picker">
-    <h2 style="font-size:18px;margin-bottom:16px;">Sight Read — pick a song</h2>
+    <div class="page-header"><h2 class="page-title">Sight Read — pick a song</h2></div>
     <div id="sightread-song-list"></div>
   </div>
   <div id="sightread-view" style="display:none">
@@ -128,7 +128,7 @@
 
   <!-- CAGED Shapes drill -->
   <div class="fb-panel" id="fb-caged">
-    <div class="fb-subtabs" id="fb-caged-mode-tabs" style="margin-bottom:12px">
+    <div class="fb-subtabs" id="fb-caged-mode-tabs">
       <button class="fb-subtab active" data-cagedmode="barre" onclick="fbCagedSetMode('barre')">Barre Position</button>
       <button class="fb-subtab" data-cagedmode="degrees" onclick="fbCagedSetMode('degrees')">Shape Degrees</button>
     </div>
@@ -150,7 +150,7 @@
     <!-- Shape Degrees: which finger position in a CAGED shape is the root/3rd/5th -->
     <div id="fb-caged-degrees-panel" style="display:none">
       <div class="fb-options" id="fb-shapedeg-options"></div>
-      <div class="fb-subtabs" id="fb-shapedeg-mode-tabs" style="margin-bottom:12px">
+      <div class="fb-subtabs" id="fb-shapedeg-mode-tabs">
         <button class="fb-subtab active" data-degreemode="identify" onclick="fbShapeDegreeSetMode('identify')">Identify</button>
         <button class="fb-subtab" data-degreemode="locate" onclick="fbShapeDegreeSetMode('locate')">Locate</button>
       </div>
@@ -227,7 +227,7 @@
 
   <!-- Key Map: relative major/minor lookup + scale-degree-to-chord lookup, both timed -->
   <div class="fb-panel" id="fb-keymap">
-    <div class="fb-subtabs" style="margin-bottom:12px">
+    <div class="fb-subtabs">
       <button class="fb-subtab active" data-keymapmode="relative" onclick="fbKeymapSetMode('relative')">Relative Key</button>
       <button class="fb-subtab" data-keymapmode="degree" onclick="fbKeymapSetMode('degree')">Scale Degree</button>
     </div>
@@ -255,7 +255,7 @@
   <!-- Ear Training: interval recognition within a pentatonic/blues scale -->
   <div class="fb-panel" id="fb-ear">
     <div class="fb-options" id="fb-ear-options"></div>
-    <div class="fb-subtabs" id="fb-ear-mode-tabs" style="margin-bottom:12px">
+    <div class="fb-subtabs" id="fb-ear-mode-tabs">
       <button class="fb-subtab active" data-earmode="two" onclick="fbEarSetMode('two')">2 Notes</button>
       <button class="fb-subtab" data-earmode="three" onclick="fbEarSetMode('three')">3 Notes</button>
     </div>
@@ -289,13 +289,13 @@
 
   <!-- Bend & Vibrato -->
   <div class="fb-panel" id="fb-bend">
-    <div class="fb-subtabs" style="margin-bottom:12px">
+    <div class="fb-subtabs">
       <button class="fb-subtab active" data-bendmode="bend"    onclick="fbBendSetSubMode('bend')">推弦 Bending</button>
       <button class="fb-subtab"        data-bendmode="vibrato" onclick="fbBendSetSubMode('vibrato')">揉弦 Vibrato</button>
     </div>
 
     <!-- shared mic start/stop -->
-    <div class="fb-caged-answer" style="margin-bottom:16px">
+    <div class="fb-caged-answer">
       <button class="btn btn-primary btn-sm" id="fb-bend-start-btn" onclick="fbBendMicStart()">Start Listening</button>
       <button class="btn btn-ghost btn-sm"   id="fb-bend-stop-btn"  onclick="fbBendMicStop()" style="display:none">Stop</button>
     </div>
@@ -327,8 +327,8 @@
 <!-- SPEED TRAINER PAGE -->
 <!-- LICKS LIST PAGE -->
 <div class="page" id="page-licks">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <h2 style="font-size:18px;">Licks</h2>
+  <div class="page-header">
+    <h2 class="page-title">Licks</h2>
     <button class="btn btn-primary" onclick="newLick()">+ New Lick</button>
   </div>
   <div id="licks-list"></div>
@@ -336,14 +336,14 @@
 
 <!-- LICK DETAIL PAGE -->
 <div class="page" id="page-lick-detail">
-  <div style="margin-bottom:12px;">
+  <div class="page-back-row">
     <button class="btn btn-ghost btn-sm" onclick="showPage('licks')">← Licks</button>
   </div>
   <div id="lick-detail-content"></div>
 </div>
 
 <div class="page" id="page-speed">
-  <h2 style="font-size:18px;margin-bottom:16px;">Speed Trainer</h2>
+  <div class="page-header"><h2 class="page-title">Speed Trainer</h2></div>
   <div class="st-active-lick-banner" id="st-active-lick-banner" style="display:none"></div>
 
   <div class="st-options">
@@ -374,7 +374,7 @@
     <div class="st-progress" id="st-progress"></div>
   </div>
 
-  <div class="fb-caged-answer">
+  <div class="st-controls-row">
     <button class="btn btn-primary btn-sm" id="st-start-btn" onclick="stStart()">▶ Start</button>
     <button class="btn btn-stop btn-sm" id="st-stop-btn" onclick="stStop()" style="display:none">■ Stop</button>
     <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump toward target (+step)</button>
@@ -385,7 +385,7 @@
 
 <!-- PREFERENCES PAGE -->
 <div class="page" id="page-prefs">
-  <h2 style="font-size:18px;margin-bottom:20px;">Preferences</h2>
+  <div class="page-header"><h2 class="page-title">Preferences</h2></div>
   <div id="prefs-form"></div>
 </div>
 
@@ -409,14 +409,14 @@
 
 <!-- Lick session log modal -->
 <div id="lick-log-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center">
-  <div class="modal" style="min-width:300px">
-    <h3 style="margin-bottom:16px;font-size:15px;">Log Practice Session</h3>
-    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">
-      <label style="font-size:13px">BPM
-        <input type="number" id="lick-log-bpm" min="20" max="300" style="width:80px;margin-left:8px">
+  <div class="modal">
+    <h3 class="modal-subtitle">Log Practice Session</h3>
+    <div class="lick-log-form">
+      <label>BPM
+        <input type="number" id="lick-log-bpm" min="20" max="300">
       </label>
-      <label style="font-size:13px">Duration (min)
-        <input type="number" id="lick-log-dur" min="0.5" max="180" step="0.5" style="width:80px;margin-left:8px">
+      <label>Duration (min)
+        <input type="number" id="lick-log-dur" min="0.5" max="180" step="0.5">
       </label>
     </div>
     <div class="modal-actions">

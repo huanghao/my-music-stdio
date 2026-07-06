@@ -370,7 +370,7 @@ input[type="number"] { width: 64px; text-align: center; }
    toggle) — same look as .fb-tab, but a different class so fbShowMode()'s
    global `.fb-tab` selector for the *top-level* mode tabs doesn't also touch
    these and strip their active state on every top-level tab switch. */
-.fb-subtabs { display: flex; gap: 2px; background: var(--bg-page); border-radius: 6px; padding: 2px; width: fit-content; }
+.fb-subtabs { display: flex; gap: 2px; background: var(--bg-page); border-radius: 6px; padding: 2px; width: fit-content; margin-bottom: 12px; }
 .fb-subtab {
   background: none; border: none; cursor: pointer;
   padding: 6px 16px; border-radius: 4px; font-size: 13px; color: var(--text-dim);
@@ -489,7 +489,7 @@ input[type="number"] { width: 64px; text-align: center; }
   padding: 16px 20px; font-size: 16px; margin-bottom: 12px;
 }
 .fb-prompt b { font-family: Georgia, serif; font-size: 19px; }
-.fb-caged-answer { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.fb-caged-answer { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .fb-caged-answer label { font-size: 12px; color: var(--text-muted); }
 
 .fb-chord-progression-info {
@@ -673,6 +673,21 @@ input[type="number"] { width: 64px; text-align: center; }
 .fb-vibrato-prog-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
 
 
+/* ── Page structure ─────────────────────────────────────────────────────── */
+
+/* Standard page-level header: title left, optional primary CTA right */
+.page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.page-title { font-size: 18px; font-weight: 600; color: var(--text); }
+
+/* Back-navigation row (e.g. "← Licks" above a detail view) */
+.page-back-row { margin-bottom: 12px; }
+
+/* Speed Trainer: the Start/Stop/Bump/Reset row of controls */
+.st-controls-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+
 /* ── Lick Tracker ────────────────────────────────────────────────────────── */
 
 .lick-card {
@@ -716,6 +731,12 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-session-bpm  { font-weight: 600; color: var(--primary); min-width: 70px; }
 .lick-session-dur  { color: var(--text-muted); min-width: 50px; }
 .lick-session-date { color: var(--text-faint); }
+
+/* Lick session log modal form */
+.lick-log-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.lick-log-form label { font-size: 13px; }
+.lick-log-form input { width: 80px; margin-left: 8px; }
+.modal-subtitle { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
 
 /* Speed Trainer active lick banner */
 .st-active-lick-banner {

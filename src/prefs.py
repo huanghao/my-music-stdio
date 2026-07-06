@@ -4,13 +4,23 @@ from pathlib import Path
 DEFAULTS = {
     "bars_per_row": 4,
     "soundfont_path": "~/music-practice/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2",
-    "songs_dir": "~/music-practice/songs/",
-    "licks_dir": "~/music-practice/licks/",
+    # Data directories default to the macOS Application Support location so a
+    # future Mac App Store build can comply with App Sandbox requirements without
+    # a migration step.  Existing installs keep their saved paths from prefs.json
+    # and are not affected.
+    "songs_dir": "~/Library/Application Support/MyMusic/songs/",
+    "licks_dir": "~/Library/Application Support/MyMusic/licks/",
 }
 
 
 def _prefs_path() -> Path:
-    return Path.home() / ".config" / "music-practice" / "prefs.json"
+    new = Path.home() / "Library" / "Application Support" / "MyMusic" / "prefs.json"
+    old = Path.home() / ".config" / "music-practice" / "prefs.json"
+    # One-time migration: copy old location → new on first run after this change.
+    if old.exists() and not new.exists():
+        new.parent.mkdir(parents=True, exist_ok=True)
+        new.write_text(old.read_text())
+    return new
 
 
 def load() -> dict:

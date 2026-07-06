@@ -10,14 +10,21 @@
 
 <nav class="nav">
   <span class="nav-title">🎵</span>
-  <button class="nav-btn active" data-page="vamp"  onclick="showPage('vamp')">Vamp</button>
-  <button class="nav-btn"        data-page="jam"   onclick="showPage('jam')">Jam</button>
-  <button class="nav-btn"        data-page="songs" onclick="showPage('songs')">Songs</button>
-  <button class="nav-btn"        data-page="licks" onclick="showPage('licks')">Licks</button>
-  <button class="nav-btn"        data-page="sightread" onclick="showPage('sightread')">Sight Read</button>
-  <button class="nav-btn"        data-page="fretboard" onclick="showPage('fretboard')">Fretboard</button>
-  <button class="nav-btn"        data-page="speed" onclick="showPage('speed')">Speed Trainer</button>
-  <button class="nav-btn"        data-page="prefs" onclick="showPage('prefs')">Preferences</button>
+  <!-- Backing tracks -->
+  <button class="nav-btn active" data-page="vamp"      onclick="showPage('vamp')">Vamp</button>
+  <button class="nav-btn"        data-page="jam"        onclick="showPage('jam')">Jam</button>
+  <span class="nav-sep"></span>
+  <!-- Chart-based -->
+  <button class="nav-btn"        data-page="songs"      onclick="showPage('songs')">Songs</button>
+  <button class="nav-btn"        data-page="sightread"  onclick="showPage('sightread')">Sight Read</button>
+  <span class="nav-sep"></span>
+  <!-- Practice tools -->
+  <button class="nav-btn"        data-page="licks"      onclick="showPage('licks')">Licks</button>
+  <button class="nav-btn"        data-page="fretboard"  onclick="showPage('fretboard')">Fretboard</button>
+  <button class="nav-btn"        data-page="speed"      onclick="showPage('speed')">Speed Trainer</button>
+  <span class="nav-sep"></span>
+  <!-- Settings -->
+  <button class="nav-btn"        data-page="prefs"      onclick="showPage('prefs')">Preferences</button>
   <div class="nav-spacer"></div>
   <div class="conn-indicator" id="conn-indicator" title="Server connection">
     <div class="conn-dot" id="conn-dot"></div>

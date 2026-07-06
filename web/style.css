@@ -69,6 +69,8 @@ body {
 .nav-title { font-size: 14px; font-weight: 600; color: var(--text-dim); margin-right: 12px; }
 .nav-title-icon { width: 24px; height: 24px; border-radius: 6px; margin-right: 12px; flex-shrink: 0; }
 .nav-spacer { flex: 1; }
+/* Thin vertical rule between nav button groups */
+.nav-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; align-self: center; }
 .conn-indicator { display: flex; align-items: center; gap: 5px; }
 .conn-dot {
   width: 8px; height: 8px; border-radius: 50%;

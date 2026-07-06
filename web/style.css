@@ -88,7 +88,11 @@ body {
 .nav-btn:hover { background: var(--bg-faint); }
 .nav-btn.active { background: var(--bg-raised); color: var(--text); font-weight: 500; }
 
-.page { display: none; padding: 16px 16px 60px; max-width: 960px; margin: 0 auto; }
+/* Page container: full-width (no max-width) so wide content like chord charts
+   and fretboard SVGs can use the whole viewport.  Narrow reading content
+   (forms, stats tables, lick charts) constrains itself via their own
+   max-width on the element, not the page. */
+.page { display: none; padding: 16px 24px 60px; }
 .page.active { display: block; }
 
 .btn {
@@ -234,6 +238,7 @@ input[type="number"] { width: 64px; text-align: center; }
   border-radius: 8px;
   padding: 16px;
   font-family: Georgia, "Times New Roman", serif;
+  overflow-x: auto; /* very long charts scroll inside the card, not the page */
 }
 .chart-row {
   display: grid;

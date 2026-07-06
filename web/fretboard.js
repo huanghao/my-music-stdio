@@ -53,7 +53,7 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 const fbState = {
   inited: false,
   activeMode: 'notes',
-  notes: { strings: [true, true, true, true, true, true], maxFret: 12, correct: 0, total: 0, streak: 0, current: null, locked: false },
+  notes: { strings: [true, true, true, true, true, true], maxFret: 12, correct: 0, total: 0, streak: 0, current: null, locked: false, stats: {} },
   caged: { mode: 'barre', correct: 0, total: 0, streak: 0, current: null, answered: false },
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            strings: [true, true, true, true, true, true], practiceMode: 'all', stats: {},
@@ -119,6 +119,7 @@ function initFretboardPage() {
   fbPrefsLoad();
   fbApplyDiagramSize();  // apply saved diagram size as CSS variable
   fbPitchLoadStats();
+  fbNotesLoadStats();
   fbRenderNotesOptions();
   fbNotesNext();
   fbCagedNext();
@@ -429,6 +430,39 @@ function fbRenderNotesStats() {
   `;
 }
 
+// Per-note accuracy tracking for the Note Names drill — same pattern as
+// Pitch Match's stats table.  Keyed by note name (e.g. 'A#', 'Eb').
+const FB_NOTES_STATS_KEY = 'fb_notes_stats';
+function fbNotesLoadStats() {
+  try { fbState.notes.stats = JSON.parse(localStorage.getItem(FB_NOTES_STATS_KEY)) || {}; }
+  catch (_) { fbState.notes.stats = {}; }
+}
+function fbNotesSaveStats() {
+  localStorage.setItem(FB_NOTES_STATS_KEY, JSON.stringify(fbState.notes.stats));
+}
+function fbRenderNotesStatsTable() {
+  const el = document.getElementById('fb-notes-stats-table');
+  if (!el) return;
+  const rows = FB_NOTE_NAMES.map(n => {
+    const st = fbState.notes.stats[n];
+    const presented = st?.presented || 0;
+    const correct = st?.correct || 0;
+    const acc = presented ? Math.round((correct / presented) * 100) : null;
+    return { n, presented, acc };
+  }).filter(r => r.presented > 0)
+    .sort((a, b) => (a.acc ?? 999) - (b.acc ?? 999));
+  if (!rows.length) {
+    el.innerHTML = '<span class="empty-state" style="padding:8px 0">No attempts yet.</span>';
+    return;
+  }
+  el.innerHTML = `
+    <table class="fb-stats-table">
+      <tr><th>Note</th><th>Tries</th><th>Accuracy</th></tr>
+      ${rows.map(r => `<tr><td>${r.n}</td><td>${r.presented}</td><td>${r.acc}%</td></tr>`).join('')}
+    </table>
+  `;
+}
+
 function fbNotesNext() {
   const s = fbState.notes;
   s.locked = false;
@@ -439,6 +473,7 @@ function fbNotesNext() {
   s.current = { stringIdx, fret, note: fbNoteAt(stringIdx, fret) };
 
   fbRenderNotesStats();
+  fbRenderNotesStatsTable();
   document.getElementById('fb-notes-feedback').textContent = '';
   document.getElementById('fb-notes-feedback').className = 'fb-feedback';
 
@@ -470,6 +505,11 @@ function fbNotesAnswer(note, btnEl) {
   s.total++;
   const correct = note === s.current.note;
   if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
+  // Per-note accuracy tracking
+  const st = s.stats[s.current.note] || (s.stats[s.current.note] = { presented: 0, correct: 0 });
+  st.presented++;
+  if (correct) st.correct++;
+  fbNotesSaveStats();
 
   document.querySelectorAll('#fb-notes-answers .fb-answer-btn').forEach(b => {
     if (b.textContent === s.current.note) b.classList.add('correct');
@@ -481,6 +521,7 @@ function fbNotesAnswer(note, btnEl) {
   fb.textContent = correct ? `Correct — ${posLabel} = ${s.current.note}` : `${posLabel} = ${s.current.note}, not ${note}`;
   fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
   fbRenderNotesStats();
+  fbRenderNotesStatsTable();
 
   setTimeout(fbNotesNext, correct ? 500 : 1300);
 }

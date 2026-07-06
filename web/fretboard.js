@@ -77,7 +77,7 @@ const fbState = {
                  identify: { correct: 0, total: 0, streak: 0, current: null, locked: false },
                  locate: { correct: 0, total: 0, streak: 0, current: null, answered: false } },
   ear: { scale: 'minor', mode: 'two', autoAdvance: true, wrongPauseSec: 3, showDiagram: true, waveform: 'sine',
-         playbackStyle: 'melodic', noteGapSec: 0.25, direction: 'both', range: 'mid', stats: {},
+         playbackStyle: 'melodic', noteGapSec: 0.25, direction: 'both', range: 'mid', practiceMode: 'all', stats: {},
          two: { correct: 0, total: 0, streak: 0, current: null, answered: false, timeoutId: null,
                 playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null },
          three: { correct: 0, total: 0, streak: 0, current: null, answered: false, step: 1, step1Correct: null, timeoutId: null,
@@ -253,6 +253,9 @@ function fbPrefsLoad() {
   if (saved.ear && Object.prototype.hasOwnProperty.call(FB_EAR_RANGE_BASE, saved.ear.range)) {
     fbState.ear.range = saved.ear.range;
   }
+  if (saved.ear && ['all', 'weak'].includes(saved.ear.practiceMode)) {
+    fbState.ear.practiceMode = saved.ear.practiceMode;
+  }
   if (saved.bend) {
     if (saved.bend.subMode === 'bend' || saved.bend.subMode === 'vibrato') fbState.bend.subMode = saved.bend.subMode;
     if (saved.bend.strings && typeof saved.bend.strings === 'object') {
@@ -299,7 +302,7 @@ function fbPrefsSave() {
     ear: { scale: fbState.ear.scale, mode: fbState.ear.mode, autoAdvance: fbState.ear.autoAdvance,
            wrongPauseSec: fbState.ear.wrongPauseSec, showDiagram: fbState.ear.showDiagram, waveform: fbState.ear.waveform,
            playbackStyle: fbState.ear.playbackStyle, noteGapSec: fbState.ear.noteGapSec, direction: fbState.ear.direction,
-           range: fbState.ear.range },
+           range: fbState.ear.range, practiceMode: fbState.ear.practiceMode },
     bend: { subMode: fbState.bend.subMode, strings: fbState.bend.strings, intervals: fbState.bend.intervals },
     vibrato: { targetHz: fbState.vibrato.targetHz },
     activeMode: fbState.activeMode,
@@ -1042,6 +1045,12 @@ function fbRenderEarOptions() {
         ${Object.keys(FB_EAR_RANGE_BASE).map(k => `<option value="${k}" ${fbState.ear.range === k ? 'selected' : ''}>${FB_EAR_RANGE_LABELS[k]}</option>`).join('')}
       </select>
     </label>
+    <label>Practice:
+      <select onchange="fbState.ear.practiceMode=this.value; fbPrefsSave()">
+        <option value="all"  ${fbState.ear.practiceMode === 'all'  ? 'selected' : ''}>All intervals</option>
+        <option value="weak" ${fbState.ear.practiceMode === 'weak' ? 'selected' : ''}>Focus on weak</option>
+      </select>
+    </label>
     <label><input type="checkbox" ${fbState.ear.autoAdvance ? 'checked' : ''}
       onchange="fbEarSetAutoAdvance(this.checked)"> Auto-advance</label>
     <label>Pause after wrong answer:
@@ -1260,6 +1269,35 @@ function fbEarPickOrder(ascOrder, descOrder) {
   return Math.random() < 0.5 ? descOrder : ascOrder;
 }
 
+// Weighted pair selection: all pairs have at least 10% chance even if perfect,
+// and weak intervals are up-weighted by (1 – accuracy). Falls back to uniform
+// random when no stats exist or practiceMode is 'all'.
+function fbEarPickPair(degrees) {
+  const pairs = [];
+  for (let a = 0; a < degrees.length; a++) {
+    for (let b = a + 1; b < degrees.length; b++) {
+      pairs.push([a, b]);
+    }
+  }
+  if (fbState.ear.practiceMode !== 'weak') {
+    return pairs[Math.floor(Math.random() * pairs.length)];
+  }
+  // Weighted selection
+  const weights = pairs.map(([a, b]) => {
+    const name = fbEarIntervalName(degrees[b] - degrees[a]);
+    const st = fbState.ear.stats[name];
+    const acc = st && st.presented > 0 ? st.correct / st.presented : 0.5;
+    return Math.max(0.1, 1 - acc);  // floor at 0.1 so perfect intervals still appear
+  });
+  const total = weights.reduce((s, w) => s + w, 0);
+  let r = Math.random() * total;
+  for (let k = 0; k < pairs.length; k++) {
+    r -= weights[k];
+    if (r <= 0) return pairs[k];
+  }
+  return pairs[pairs.length - 1];
+}
+
 function fbEarTwoNext() {
   const s = fbState.ear.two;
   fbEarClearTimeout('two');
@@ -1268,10 +1306,7 @@ function fbEarTwoNext() {
   s.exploreArc = null;
   s.playingUntil = 0;
   const degrees = FB_EAR_SCALES[fbState.ear.scale].degrees;
-  let i = Math.floor(Math.random() * degrees.length);
-  let j = Math.floor(Math.random() * degrees.length);
-  while (j === i) j = Math.floor(Math.random() * degrees.length);
-  if (i > j) [i, j] = [j, i];
+  const [i, j] = fbEarPickPair(degrees);
   const rootMidi = FB_EAR_RANGE_BASE[fbState.ear.range] + Math.floor(Math.random() * 12);
   // i/j stay low-to-high (for the diagram and interval math); `order` is the
   // actual playback/reveal direction, which is independent — an interval

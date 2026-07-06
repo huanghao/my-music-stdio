@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>和弦级数与和弦性质关系图（独立页面，未接入系统）</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f0efe8; color: #2a2a2a; margin: 0; padding: 24px 32px 60px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 24px; }
+  .card {
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px; font-family: Georgia, serif; }
+  .note { font-size: 12.5px; color: #666; line-height: 1.6; margin-top: 10px; }
+  .note b { color: #2a2a2a; }
+  svg text { font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  .deg-label { font-family: Georgia, serif; font-weight: 700; }
+  .legend { display: flex; gap: 18px; font-size: 12px; color: #666; margin-top: 10px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .diagrams-row { display: flex; gap: 32px; align-items: flex-start; }
+</style>
+</head>
+<body>
+
+<h1>🎵 和弦级数 &amp; 五种七和弦性质的关系</h1>
+<div class="sub">独立页面，仅用于理解概念，没有接入 Music Practice 系统 · 竖排：高音在上，低音在下</div>
+
+<div class="card">
+  <h2>1) 八个级数按半音从低到高竖着排开</h2>
+  <div id="axis-root"></div>
+  <div class="legend">
+    <span><span class="swatch" style="background:#888"></span>根音</span>
+    <span><span class="swatch" style="background:#b8843a"></span>三度类（b3 / 3）</span>
+    <span><span class="swatch" style="background:#4a7c9c"></span>五度类（b5 / 5）</span>
+    <span><span class="swatch" style="background:#4a7c4a"></span>七度类（bb7 / b7 / 7）</span>
+  </div>
+  <div class="note">
+    竖轴是半音数（从下往上 0~12，最上面 12 就是高八度的根音）。可以看到 <b>b3 和 3 只差一个半音</b>，
+    <b>b5 和 5 只差一个半音</b>，<b>bb7、b7、7 是连续三个半音</b>（bb7=9, b7=10, 7=11）——
+    这也是为什么 bb7 听起来"就是"一个全音阶记法古怪的 6 度音，实际按半音算跟 b7 只差一步。
+  </div>
+</div>
+
+<div class="card">
+  <h2>2) 五种七和弦性质——每一步只移动一个音（降半音）</h2>
+  <div id="chain"></div>
+  <div class="note">
+    这五个和弦排成一条链：<b>maj7 → 7 → m7 → m7b5 → dim7</b>，相邻两列之间<b>只有一个音差半音</b>，
+    其余音完全不变（图中灰色虚线是"没变的音"，红色斜线是"这一步降了半音的那个音"，箭头指向下方——
+    降半音在竖排图里就是"往下移一格"）：
+    <br>• maj7 → 7：只把 <b>7 度</b>从大七（7）降成小七（b7）——这就是"大七和弦"变"属七和弦"。
+    <br>• 7 → m7：只把 <b>3 度</b>从大三（3）降成小三（b3）——属七变小七。
+    <br>• m7 → m7b5：只把 <b>5 度</b>从纯五（5）降成减五（b5）——小七变半减七（导七的感觉）。
+    <br>• m7b5 → dim7：只把 <b>7 度</b>从小七（b7）再降成减七（bb7）——半减七变全减七。
+    <br>
+    你给的顺序是 maj7, 7, m7b5, dim7, m7——这个顺序里 7→m7b5、dim7→m7 都要同时改两个音，
+    不是"一步一动"关系，所以我按 <b>maj7 → 7 → m7 → m7b5 → dim7</b> 这个真正"每步只挪一个音"的顺序画，
+    这样比较容易记：全程只有 7 度、3 度、5 度轮流被降半音，而且降的顺序是
+    <b>7 度 → 3 度 → 5 度 → 7 度</b>，等于把每个音依次往下"拧紧"一格。
+  </div>
+</div>
+
+<div class="card">
+  <h2>3) 另一个看法：dim7 是"每三个半音一个音"的对称和弦</h2>
+  <div class="note">
+    dim7 = 0, 3, 6, 9——四个音之间全部相隔 3 个半音，是十二个半音里唯一"完全对称"的七和弦（转位后还是
+    dim7 和弦，只是换了个根音的叫法）。m7b5 = 0, 3, 6, 10，可以理解成"把 dim7 最高音抬高一个半音"；
+    反过来 dim7 也可以理解成"m7b5 把最高音再压低一个半音"——跟上面链条里 m7b5 → dim7 那一步是同一件事，
+    只是这里换个角度看：<b>dim7 是唯一从任何一个音开始听都一样的和弦</b>，其他四个都不是。
+  </div>
+</div>
+
+<div class="card">
+  <h2>4) 吉他上看：隔 3 步 = 根音不动，其余三指统一挪一品</h2>
+  <div class="note">
+    链条里降半音的顺序是循环的 <b>7 度 → 3 度 → 5 度 → 7 度 → …</b>，所以任意连续 3 步，一定会把
+    7 度、3 度、5 度这三个音各碰一次、且只碰一次。结果就是：<b>凡是在链条上相隔 3 格的两个和弦</b>
+    （maj7↔m7b5，或 7↔dim7），<b>根音完全不动，其余三个音统一各降半音</b>——如果这三个音分别按在
+    不同弦上，吉他指型上就是"根音那根手指不动，其他三根手指整体往品丝方向挪一格"，不需要重新记指型，
+    挪一下就行。
+    <br><br>
+    对比一下"隔几步"的效果差别就很清楚：隔 1 步（比如 maj7→7）只需要动一根手指；隔 2 步（比如
+    maj7→m7）要动两根手指，但幅度还都是 −1 半音；隔 3 步（maj7→m7b5、7→dim7）三根手指都要动，
+    但依然统一是 −1 半音，所以整体感觉像"平移"；隔 4 步——也就是链条首尾 maj7→dim7——三根手指也都要动，
+    但 <b>7 度被连降了两次（共 −2 半音）</b>，3 度、5 度只降一次，幅度不统一了，就不再是简单的"平移"。
+  </div>
+</div>
+
+<div class="card">
+  <h2>5) 补上 mMaj7：3 度、7 度各自独立开关，组成一个方格</h2>
+  <div id="grid"></div>
+  <div class="note">
+    mMaj7（小大七，1, b3, 5, 7）是小调爵士里常见的 i 级和弦，听感有点"谍战片"味道。
+    它跟 maj7 只差 <b>3 度</b>（4→3），跟 m7 只差 <b>7 度</b>（11→10）——正好把 maj7、7、m7 这三个
+    补成一个完整的方格：横向是 <b>3 度</b>（大三 / 小三），纵向是 <b>7 度</b>（大七 / 小七）。
+    对角线（maj7↔m7，mMaj7↔7）要同时改两个音，图上没画，因为不是"一步"关系。
+    <br><br>
+    m7 沿着"5 度"这个方向继续往下走，就接回卡片 2 里的 m7b5 → dim7——所以完整的关系其实是一个
+    <b>3 度 × 7 度</b>的方格，再加上从 m7 那个角往外伸出去的"5 度"这一条尾巴，一共 6 个和弦、
+    3 个独立方向（3 度、5 度、7 度各自升降半音）。
+  </div>
+</div>
+
+<script>
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+
+// ── Shared: semitone → color, low→high vertical mapping ──
+const DEGREES = [
+  { label: '1',   semi: 0,  cat: 'root' },
+  { label: 'b3',  semi: 3,  cat: '3rd'  },
+  { label: '3',   semi: 4,  cat: '3rd'  },
+  { label: 'b5',  semi: 6,  cat: '5th'  },
+  { label: '5',   semi: 7,  cat: '5th'  },
+  { label: 'bb7', semi: 9,  cat: '7th'  },
+  { label: 'b7',  semi: 10, cat: '7th'  },
+  { label: '7',   semi: 11, cat: '7th'  },
+];
+const CAT_COLOR = { root: '#888', '3rd': '#b8843a', '5th': '#4a7c9c', '7th': '#4a7c4a' };
+function catFor(semi) {
+  if (semi === 0) return 'root';
+  if (semi === 3 || semi === 4) return '3rd';
+  if (semi === 6 || semi === 7) return '5th';
+  return '7th'; // 9, 10, 11
+}
+
+const UNIT = 46;        // px per semitone, vertically
+const PAD_T = 30, PAD_B = 50;
+const AXIS_H = PAD_T + 12 * UNIT + PAD_B;
+// semi=0 (root) at the bottom, semi=12 (octave) at the top
+const y = semi => PAD_T + (12 - semi) * UNIT;
+
+// ── Part 1: degree axis (vertical) ──
+(function drawAxis() {
+  const W = 160;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${AXIS_H}`, height: AXIS_H, style: `display:block` });
+  const baseX = 70;
+
+  for (let s = 0; s <= 12; s++) {
+    svg.appendChild(el('line', { x1: baseX - 6, y1: y(s), x2: baseX + 6, y2: y(s), stroke: '#ddd', 'stroke-width': 1 }));
+  }
+  svg.appendChild(el('line', { x1: baseX, y1: y(0), x2: baseX, y2: y(12), stroke: '#ccc', 'stroke-width': 1.5 }));
+
+  DEGREES.forEach(d => {
+    const cy = y(d.semi);
+    svg.appendChild(el('circle', { cx: baseX, cy, r: 15, fill: CAT_COLOR[d.cat] }));
+    const t = el('text', { x: baseX, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#fff', 'font-size': 13, class: 'deg-label' });
+    t.textContent = d.label;
+    svg.appendChild(t);
+    const semiLbl = el('text', { x: baseX + 26, y: cy, 'text-anchor': 'start', 'dominant-baseline': 'central', fill: '#aaa', 'font-size': 10 });
+    semiLbl.textContent = d.semi;
+    svg.appendChild(semiLbl);
+  });
+  // octave marker
+  const ocy = y(12);
+  svg.appendChild(el('circle', { cx: baseX, cy: ocy, r: 15, fill: '#888' }));
+  const ot = el('text', { x: baseX, y: ocy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#fff', 'font-size': 13, class: 'deg-label' });
+  ot.textContent = "1'";
+  svg.appendChild(ot);
+  const semiLbl2 = el('text', { x: baseX + 26, y: ocy, 'text-anchor': 'start', 'dominant-baseline': 'central', fill: '#aaa', 'font-size': 10 });
+  semiLbl2.textContent = '12';
+  svg.appendChild(semiLbl2);
+
+  document.getElementById('axis-root').appendChild(svg);
+})();
+
+// ── Part 2: chain of chord qualities (vertical columns, high pitch on top) ──
+const CHAIN = [
+  { name: 'maj7',  tones: [0, 4, 7, 11], labels: ['1', '3', '5', '7']   },
+  { name: '7',     tones: [0, 4, 7, 10], labels: ['1', '3', '5', 'b7']  },
+  { name: 'm7',    tones: [0, 3, 7, 10], labels: ['1', 'b3', '5', 'b7'] },
+  { name: 'm7b5',  tones: [0, 3, 6, 10], labels: ['1', 'b3', 'b5', 'b7']},
+  { name: 'dim7',  tones: [0, 3, 6, 9],  labels: ['1', 'b3', 'b5', 'bb7']},
+];
+
+(function drawChain() {
+  const COL_W = 110;
+  const W = COL_W * CHAIN.length + 40;
+  const H = AXIS_H + 30; // extra headroom at top for column-name labels
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', style: `max-width:${W}px;display:block` });
+
+  const colX = i => 40 + i * COL_W;
+  const rowY = semi => y(semi) + 30; // shift down to make room for the header row
+
+  // vertical guide lines behind everything, per column, so the eye can track
+  // "unchanged" tones straight down that column
+  CHAIN.forEach((_, i) => {
+    svg.appendChild(el('line', {
+      x1: colX(i), y1: rowY(12), x2: colX(i), y2: rowY(0),
+      stroke: '#f0f0f0', 'stroke-width': 1,
+    }));
+  });
+
+  // column headers
+  CHAIN.forEach((chord, i) => {
+    const t = el('text', {
+      x: colX(i), y: 20, 'text-anchor': 'middle',
+      fill: '#2a2a2a', 'font-size': 14, 'font-weight': 700, 'font-family': 'Georgia, serif',
+    });
+    t.textContent = chord.name;
+    svg.appendChild(t);
+  });
+
+  // connectors between adjacent columns — the moved tone gets a highlighted
+  // diagonal (pointing down, since "−1 semitone" is literally lower on the
+  // vertical axis), everything else keeps its faint straight guide.
+  for (let i = 0; i < CHAIN.length - 1; i++) {
+    const a = CHAIN[i], b = CHAIN[i + 1];
+    const x1 = colX(i), x2 = colX(i + 1);
+    a.tones.forEach((t, idx) => {
+      const bt = b.tones[idx];
+      if (t === bt) return; // unchanged tone — the faint grey guide already shows it
+      svg.appendChild(el('line', {
+        x1: x1 + 16, y1: rowY(t), x2: x2 - 16, y2: rowY(bt),
+        stroke: '#c0504d', 'stroke-width': 2, 'stroke-dasharray': '5,4',
+      }));
+      const midX = (x1 + x2) / 2, midY = (rowY(t) + rowY(bt)) / 2;
+      const lbl = el('text', { x: midX, y: midY - 8, 'text-anchor': 'middle', fill: '#c0504d', 'font-size': 10 });
+      lbl.textContent = '−1 半音';
+      svg.appendChild(lbl);
+    });
+  }
+
+  // dots (drawn after connectors so they sit on top)
+  CHAIN.forEach((chord, i) => {
+    const cx = colX(i);
+    chord.tones.forEach((t, idx) => {
+      const cy = rowY(t);
+      const isRoot = t === 0;
+      svg.appendChild(el('circle', { cx, cy, r: 14, fill: isRoot ? '#888' : CAT_COLOR[catFor(t)] }));
+      const t2 = el('text', {
+        x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+        fill: '#fff', 'font-size': 11, class: 'deg-label',
+      });
+      t2.textContent = chord.labels[idx];
+      svg.appendChild(t2);
+    });
+  });
+
+  document.getElementById('chain').appendChild(svg);
+})();
+
+// ── Part 5: 2×2 grid — {maj7, mMaj7} × {7, m7}, axes = 3rd / 7th ──
+(function drawGrid() {
+  const GRID_UNIT = 20;          // px per semitone — more compact than the main chain
+  const CELL_PAD_T = 26, CELL_PAD_B = 14;
+  const CELL_H = CELL_PAD_T + 11 * GRID_UNIT + CELL_PAD_B; // spans semitone 0..11 within one cell
+  const COL_GAP = 170, ROW_GAP = CELL_H + 70;
+  const W = COL_GAP + 140;
+  const H = ROW_GAP + CELL_H + 20;
+
+  // local vertical mapping *within a cell* — semi=0 at the cell's own bottom
+  const yCell = (semi, rowTop) => rowTop + CELL_PAD_T + (11 - semi) * GRID_UNIT;
+
+  const CHORDS = {
+    maj7:  { tones: [0, 4, 7, 11], labels: ['1', '3', '5', '7'],   col: 0, row: 0 },
+    mMaj7: { tones: [0, 3, 7, 11], labels: ['1', 'b3', '5', '7'],  col: 1, row: 0 },
+    dom7:  { tones: [0, 4, 7, 10], labels: ['1', '3', '5', 'b7'],  col: 0, row: 1, displayName: '7' },
+    m7:    { tones: [0, 3, 7, 10], labels: ['1', 'b3', '5', 'b7'], col: 1, row: 1 },
+  };
+
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, width: '100%', style: `max-width:${W}px;display:block` });
+  const colX = c => 60 + c * COL_GAP;
+  const rowTop = r => 20 + r * ROW_GAP;
+
+  // axis captions
+  svg.appendChild(el('text', { x: colX(0), y: 14, 'text-anchor': 'middle', fill: '#aaa', 'font-size': 10 })).textContent = '';
+  const axisLbl = (x, yv, txt) => { const t = el('text', { x, y: yv, 'text-anchor': 'middle', fill: '#999', 'font-size': 10 }); t.textContent = txt; svg.appendChild(t); };
+  axisLbl((colX(0) + colX(1)) / 2, 12, '← 3 度：大三／小三 →');
+
+  // vertical guide lines within each cell
+  Object.values(CHORDS).forEach(c => {
+    const cx = colX(c.col), top = rowTop(c.row);
+    svg.appendChild(el('line', { x1: cx, y1: yCell(11, top), x2: cx, y2: yCell(0, top), stroke: '#f0f0f0', 'stroke-width': 1 }));
+  });
+
+  // column headers (chord names) above each cell
+  Object.entries(CHORDS).forEach(([key, c]) => {
+    const cx = colX(c.col), top = rowTop(c.row);
+    const t = el('text', { x: cx, y: top + 8, 'text-anchor': 'middle', fill: '#2a2a2a', 'font-size': 13, 'font-weight': 700, 'font-family': 'Georgia, serif' });
+    t.textContent = c.displayName || key;
+    svg.appendChild(t);
+  });
+
+  // connectors: same-row pairs differ only by the 3rd; same-col pairs differ only by the 7th
+  function connector(cFrom, cTo, diffIdx) {
+    const x1 = colX(cFrom.col), x2 = colX(cTo.col);
+    const top1 = rowTop(cFrom.row), top2 = rowTop(cTo.row);
+    const t1 = cFrom.tones[diffIdx], t2 = cTo.tones[diffIdx];
+    const y1 = yCell(t1, top1), y2 = yCell(t2, top2);
+    svg.appendChild(el('line', { x1, y1, x2, y2, stroke: '#7a5ca0', 'stroke-width': 2, 'stroke-dasharray': '5,4' }));
+    const isVertical = x1 === x2;
+    // Vertical (7th) connectors span almost the whole row gap, so a dead-center
+    // label would land at roughly the same height as the horizontal (3rd)
+    // connector's label and the two would crowd each other — anchor it near
+    // the top of the line instead.
+    const labelX = isVertical ? x1 + 14 : (x1 + x2) / 2;
+    const labelY = isVertical ? y1 + (y2 - y1) * 0.2 : (y1 + y2) / 2 - 8;
+    const dir = t2 < t1 ? '−1 半音' : '+1 半音';
+    const lbl = el('text', { x: labelX, y: labelY, 'text-anchor': isVertical ? 'start' : 'middle', fill: '#7a5ca0', 'font-size': 10 });
+    lbl.textContent = dir;
+    svg.appendChild(lbl);
+  }
+  connector(CHORDS.maj7, CHORDS.mMaj7, 1);  // 3rd differs (index 1 in tones array: [root,3rd,5th,7th])
+  connector(CHORDS.dom7, CHORDS.m7, 1);
+  connector(CHORDS.maj7, CHORDS.dom7, 3);   // 7th differs (index 3)
+  connector(CHORDS.mMaj7, CHORDS.m7, 3);
+
+  // dots (drawn after connectors so they sit on top)
+  Object.values(CHORDS).forEach(c => {
+    const cx = colX(c.col), top = rowTop(c.row);
+    c.tones.forEach((t, idx) => {
+      const cy = yCell(t, top);
+      const isRoot = t === 0;
+      svg.appendChild(el('circle', { cx, cy, r: 13, fill: isRoot ? '#888' : CAT_COLOR[catFor(t)] }));
+      const t2 = el('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central', fill: '#fff', 'font-size': 10.5, class: 'deg-label' });
+      t2.textContent = c.labels[idx];
+      svg.appendChild(t2);
+    });
+  });
+
+  // row captions (7th axis) to the left of each row
+  axisLbl(14, rowTop(0) + CELL_H / 2 - 4, '大七');
+  axisLbl(14, rowTop(0) + CELL_H / 2 + 8, '(7)');
+  axisLbl(14, rowTop(1) + CELL_H / 2 - 4, '小七');
+  axisLbl(14, rowTop(1) + CELL_H / 2 + 8, '(b7)');
+
+  document.getElementById('grid').appendChild(svg);
+})();
+</script>
+
+</body>
+</html>

@@ -52,17 +52,20 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 
 const fbState = {
   inited: false,
+  activeMode: 'notes',
   notes: { strings: [true, true, true, true, true, true], maxFret: 12, correct: 0, total: 0, streak: 0, current: null, locked: false },
   caged: { mode: 'barre', correct: 0, total: 0, streak: 0, current: null, answered: false },
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            strings: [true, true, true, true, true, true], practiceMode: 'all', stats: {},
-           showBoard: false,
+           showBoard: false, naturalsOnly: false,
            _holdCount: 0, _wrongNote: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity },
   tuner: { tuned: [false, false, false, false, false, false], activeString: -1, _holdCount: 0, _holdString: -1 },
   chord: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            qualities: { '': true, m: true, maj7: true, '7': true, m7: true, dim7: true, m7b5: true, sus2: false, sus4: false },
            notationStyle: 'standard', showFormula: false, showDegreesOnDiagram: false, showChordDiagram: false, diagramSize: 200,
-           source: 'random', fixedRoot: 0, progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0 },
+           source: 'random', fixedRoot: 0,
+           progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0, repeatsLeft: 0,
+                          repeatCount: 2, lockKey: false, lockedKeyRoot: 0 },
            stats: {},
            _holdCount: 0, _wrongSymbol: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity,
            _hiddenMs: 0, _hiddenSince: null },
@@ -81,7 +84,8 @@ const fbState = {
                   playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null } },
   bend: {
     subMode: 'bend', strings: {3: true, 4: true, 5: false}, intervals: {quarter: false, half: false, full: true, full_half: false},
-    phase: 'idle', baseFreq: null, _stableFr: 0, _holdFr: 0, _lastFreq: null, _nextAt: null, _readyAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
+    phase: 'idle', baseFreq: null, _stableFr: 0, _holdSinceMs: 0, _lastInZoneAt: 0, _lastFreq: null, _nextAt: null, _readyAt: null, _history: [], _lastFreqTs: null, _smoothedCents: null,
+    _ampHistory: [], _lastAttackAt: 0,
     current: null, correct: 0, total: 0, streak: 0,
   },
   vibrato: {
@@ -140,6 +144,7 @@ function initFretboardPage() {
   fbDegreeNext();
   fbKeymapSetMode(fbState.keymap.mode);
   fbBendInit();
+  fbShowMode(fbState.activeMode);
 }
 
 function fbShowMode(mode) {
@@ -156,6 +161,8 @@ function fbShowMode(mode) {
   document.querySelectorAll('.fb-tab').forEach(b => b.classList.toggle('active', b.dataset.fbmode === mode));
   document.querySelectorAll('.fb-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('fb-' + mode).classList.add('active');
+  fbState.activeMode = mode;
+  fbPrefsSave();
 }
 
 // releases the mic when navigating away from the Fretboard page entirely
@@ -178,6 +185,7 @@ function fbPrefsLoad() {
     if (Array.isArray(saved.pitch.strings) && saved.pitch.strings.length === 6) fbState.pitch.strings = saved.pitch.strings;
     if (saved.pitch.practiceMode === 'all' || saved.pitch.practiceMode === 'weak') fbState.pitch.practiceMode = saved.pitch.practiceMode;
     if (typeof saved.pitch.showBoard === 'boolean') fbState.pitch.showBoard = saved.pitch.showBoard;
+    if (typeof saved.pitch.naturalsOnly === 'boolean') fbState.pitch.naturalsOnly = saved.pitch.naturalsOnly;
   }
   if (saved.chord && saved.chord.qualities) {
     Object.keys(fbState.chord.qualities).forEach(k => {
@@ -193,6 +201,12 @@ function fbPrefsLoad() {
   if (saved.chord && typeof saved.chord.diagramSize === 'number') fbState.chord.diagramSize = saved.chord.diagramSize;
   if (saved.chord && ['random', 'progression', 'fixed_root'].includes(saved.chord.source)) fbState.chord.source = saved.chord.source;
   if (saved.chord && Number.isInteger(saved.chord.fixedRoot) && saved.chord.fixedRoot >= 0 && saved.chord.fixedRoot < 12) fbState.chord.fixedRoot = saved.chord.fixedRoot;
+  if (saved.chord && saved.chord.progression) {
+    const sp = saved.chord.progression;
+    if (Number.isInteger(sp.repeatCount) && sp.repeatCount >= 1) fbState.chord.progression.repeatCount = sp.repeatCount;
+    if (typeof sp.lockKey === 'boolean') fbState.chord.progression.lockKey = sp.lockKey;
+    if (Number.isInteger(sp.lockedKeyRoot) && sp.lockedKeyRoot >= 0 && sp.lockedKeyRoot < 12) fbState.chord.progression.lockedKeyRoot = sp.lockedKeyRoot;
+  }
   if (saved.keymap && (saved.keymap.mode === 'relative' || saved.keymap.mode === 'degree')) {
     fbState.keymap.mode = saved.keymap.mode;
   }
@@ -257,12 +271,16 @@ function fbPrefsLoad() {
   if (saved.vibrato && [3, 5, 7].includes(+saved.vibrato.targetHz)) {
     fbState.vibrato.targetHz = +saved.vibrato.targetHz;
   }
+  if (['notes', 'caged', 'pitch', 'tuner', 'chord', 'keymap', 'ear', 'bend'].includes(saved.activeMode)) {
+    fbState.activeMode = saved.activeMode;
+  }
 }
 
 function fbPrefsSave() {
   localStorage.setItem(FB_PREFS_KEY, JSON.stringify({
     notes: { strings: fbState.notes.strings, maxFret: fbState.notes.maxFret },
-    pitch: { strings: fbState.pitch.strings, practiceMode: fbState.pitch.practiceMode, showBoard: fbState.pitch.showBoard },
+    pitch: { strings: fbState.pitch.strings, practiceMode: fbState.pitch.practiceMode, showBoard: fbState.pitch.showBoard,
+             naturalsOnly: fbState.pitch.naturalsOnly },
     chord: {
       qualities: fbState.chord.qualities,
       notationStyle: fbState.chord.notationStyle,
@@ -270,6 +288,9 @@ function fbPrefsSave() {
       showChordDiagram: fbState.chord.showChordDiagram,
       diagramSize: fbState.chord.diagramSize,
       source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot,
+      progression: { repeatCount: fbState.chord.progression.repeatCount,
+                     lockKey: fbState.chord.progression.lockKey,
+                     lockedKeyRoot: fbState.chord.progression.lockedKeyRoot },
     },
     keymap: { mode: fbState.keymap.mode, degreeFullSet: fbState.keymap.degree.fullSet },
     caged: { mode: fbState.caged.mode },
@@ -280,6 +301,7 @@ function fbPrefsSave() {
            range: fbState.ear.range },
     bend: { subMode: fbState.bend.subMode, strings: fbState.bend.strings, intervals: fbState.bend.intervals },
     vibrato: { targetHz: fbState.vibrato.targetHz },
+    activeMode: fbState.activeMode,
   }));
 }
 
@@ -1569,6 +1591,8 @@ function fbRenderPitchOptions() {
     </select>
     <label style="margin-left:12px"><input type="checkbox" ${s.showBoard ? 'checked' : ''}
       onchange="fbState.pitch.showBoard=this.checked; fbPrefsSave(); fbRenderPitchBoard()"> Show fretboard diagram</label>
+    <label style="margin-left:12px"><input type="checkbox" ${s.naturalsOnly ? 'checked' : ''}
+      onchange="fbState.pitch.naturalsOnly=this.checked; fbPrefsSave()"> Naturals only (A-G, no #/b)</label>
     <button class="btn btn-ghost btn-sm" onclick="fbPitchResetStats()">Reset stats</button>
   `;
 }
@@ -1643,10 +1667,14 @@ function fbPitchAllowedMidis(noteName) {
   return midis;
 }
 
+// A-G only, no sharps — used when fbState.pitch.naturalsOnly is checked.
+const FB_NATURAL_NOTE_NAMES = FB_NOTE_NAMES.filter(n => !n.includes('#'));
+
 function fbPitchPickTarget() {
   const s = fbState.pitch;
-  if (s.practiceMode !== 'weak') return FB_NOTE_NAMES[Math.floor(Math.random() * 12)];
-  const weights = FB_NOTE_NAMES.map(n => {
+  const pool = s.naturalsOnly ? FB_NATURAL_NOTE_NAMES : FB_NOTE_NAMES;
+  if (s.practiceMode !== 'weak') return pool[Math.floor(Math.random() * pool.length)];
+  const weights = pool.map(n => {
     const st = s.stats[n];
     if (!st || !st.presented) return 3; // unseen notes get decent priority too
     const acc = st.matched / st.presented;
@@ -1655,8 +1683,8 @@ function fbPitchPickTarget() {
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
-  for (let i = 0; i < 12; i++) { r -= weights[i]; if (r <= 0) return FB_NOTE_NAMES[i]; }
-  return FB_NOTE_NAMES[11];
+  for (let i = 0; i < pool.length; i++) { r -= weights[i]; if (r <= 0) return pool[i]; }
+  return pool[pool.length - 1];
 }
 
 function fbRenderPitchStats() {
@@ -2193,6 +2221,17 @@ function fbRenderChordOptions() {
         ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.fixedRoot===i?'selected':''}>${n}</option>`).join('')}
       </select>
     </label>` : ''}
+    ${s.source === 'progression' ? `
+    <label style="margin-left:8px">Repeat each progression:
+      <input type="number" min="1" max="8" value="${s.progression.repeatCount}" style="width:48px"
+        onchange="fbState.chord.progression.repeatCount=Math.max(1, parseInt(this.value)||1); fbPrefsSave()"> ×
+    </label>
+    <label style="margin-left:8px"><input type="checkbox" ${s.progression.lockKey ? 'checked' : ''}
+      onchange="fbState.chord.progression.lockKey=this.checked; fbState.chord.progression.chords=null; fbPrefsSave(); fbRenderChordOptions()"> Lock key</label>
+    ${s.progression.lockKey ? `
+    <select onchange="fbState.chord.progression.lockedKeyRoot=parseInt(this.value); fbState.chord.progression.chords=null; fbPrefsSave()">
+      ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.progression.lockedKeyRoot===i?'selected':''}>${n}</option>`).join('')}
+    </select>` : ''}` : ''}
     <div class="fb-chord-type-groups">
       ${Object.keys(FB_CHORD_GROUPS).map(g => `
         <div class="fb-chord-type-group">
@@ -2334,9 +2373,15 @@ const FB_CHORD_PROGRESSIONS = [
   { name: 'I – vi – ii – V (turnaround)', keyType: 'major', degrees: [0, 5, 1, 4] },
   { name: 'iii – vi – ii – V (jazz turnaround)', keyType: 'major', degrees: [2, 5, 1, 4] },
   { name: '12-bar blues (changes)', keyType: 'major', degrees: [0, 3, 0, 4, 3, 0] },
+  { name: 'I – iii – IV – V', keyType: 'major', degrees: [0, 2, 3, 4] },
+  { name: 'I – V – IV – V', keyType: 'major', degrees: [0, 4, 3, 4] },
+  { name: 'vi – ii – V – I (circle of fifths)', keyType: 'major', degrees: [5, 1, 4, 0] },
+  { name: 'I – ii – iii – IV (ascending)', keyType: 'major', degrees: [0, 1, 2, 3] },
   { name: 'i – VI – III – VII (minor pop)', keyType: 'minor', degrees: [0, 5, 2, 6] },
   { name: 'i – iv – v (minor)', keyType: 'minor', degrees: [0, 3, 4] },
   { name: 'i – VII – VI – VII', keyType: 'minor', degrees: [0, 6, 5, 6] },
+  { name: 'i – iv – VII – III (minor rock)', keyType: 'minor', degrees: [0, 3, 6, 2] },
+  { name: 'i – VII – VI – v (Andalusian-ish)', keyType: 'minor', degrees: [0, 6, 5, 4] },
 ];
 
 // The first enabled quality among a degree's candidates, or null if the user
@@ -2398,12 +2443,22 @@ function fbChordPickTargetProgression() {
   const s = fbState.chord;
   const p = s.progression;
   if (!p.chords || p.stepIdx >= p.chords.length) {
-    const eligible = fbChordEligibleProgressions();
-    if (!eligible.length) return fbChordPickTargetRandom(); // no progression fits the enabled qualities — fall back
-    p.def = eligible[Math.floor(Math.random() * eligible.length)];
-    p.keyRoot = Math.floor(Math.random() * 12);
-    p.chords = fbChordBuildProgressionChords(p.def, p.keyRoot);
-    p.stepIdx = 0;
+    if (p.chords && p.repeatsLeft > 0) {
+      // Loop the same progression/key again instead of jumping to a new one
+      // every single pass — rebuilt (not reused) so the ~30% secondary-dominant
+      // insert can still vary between repeats.
+      p.repeatsLeft--;
+      p.chords = fbChordBuildProgressionChords(p.def, p.keyRoot);
+      p.stepIdx = 0;
+    } else {
+      const eligible = fbChordEligibleProgressions();
+      if (!eligible.length) return fbChordPickTargetRandom(); // no progression fits the enabled qualities — fall back
+      p.def = eligible[Math.floor(Math.random() * eligible.length)];
+      p.keyRoot = p.lockKey ? p.lockedKeyRoot : Math.floor(Math.random() * 12);
+      p.chords = fbChordBuildProgressionChords(p.def, p.keyRoot);
+      p.stepIdx = 0;
+      p.repeatsLeft = Math.max(0, p.repeatCount - 1);
+    }
   }
   return p.chords[p.stepIdx++];
 }
@@ -2495,9 +2550,10 @@ function fbChordRenderProgressionInfo() {
   if (!el) return;
   const s = fbState.chord;
   const p = s.progression;
-  el.textContent = (s.source === 'progression' && p.def && p.chords)
-    ? `Progression: ${p.def.name} in ${FB_NOTE_NAMES[p.keyRoot]} — chord ${p.stepIdx}/${p.chords.length}`
-    : '';
+  if (!(s.source === 'progression' && p.def && p.chords)) { el.textContent = ''; return; }
+  const currentLoop = p.repeatCount - p.repeatsLeft;
+  const loopSuffix = p.repeatCount > 1 ? ` (loop ${currentLoop}/${p.repeatCount})` : '';
+  el.textContent = `Progression: ${p.def.name} in ${FB_NOTE_NAMES[p.keyRoot]} — chord ${p.stepIdx}/${p.chords.length}${loopSuffix}`;
 }
 
 function fbChordRefreshLabels() {
@@ -2824,11 +2880,21 @@ const FB_BEND_FRET_MIN  = 5;
 const FB_BEND_FRET_MAX  = 17;
 
 const FB_BEND_STABLE_FRAMES   = 4;    // frames of stable pitch to lock baseline
-const FB_BEND_HOLD_FRAMES     = 8;    // frames in target zone → success
+const FB_BEND_HOLD_MS         = 700;  // must sit in the target zone this long (real time, not frames) → success
+const FB_BEND_ZONE_GRACE_MS   = 150;  // brief in/out noise near the edge of the zone doesn't reset the hold timer
 const FB_BEND_TOLERANCE       = 25;   // cents around target → success
 const FB_BEND_NEXT_DELAY_MS   = 2500;
 const FB_BEND_HISTORY_MS      = 5000; // rolling graph window
 const FB_BEND_SILENCE_HOLD_MS = 600;  // keep last reading for this long during decay
+
+// Detects a fresh pick (re-attack) via the amplitude envelope, independent of
+// pitch tracking — a real bend is one continuous string ring with gradually
+// rising pitch, while plucking the target fret directly to "check" the pitch
+// produces a new sharp attack transient. Used to reject that shortcut: once
+// baseFreq is locked, any new attack means "this isn't a bend, it's a re-pick."
+const FB_BEND_ATTACK_RATIO        = 1.8;  // new RMS this many× the rolling baseline counts as a fresh pick
+const FB_BEND_ATTACK_MIN_RMS      = 0.01; // ignore near-silence/noise floor
+const FB_BEND_ATTACK_REFRACTORY_MS = 150; // don't re-trigger on the same attack's own transient
 
 const FB_VIBRATO_HISTORY_MS    = 4000;
 const FB_VIBRATO_SUCCESS_MS    = 3000;
@@ -2838,6 +2904,18 @@ const FB_VIBRATO_SUCCESS_FR    = 180;  // 3 s × ~60 fps
 const FB_VIBRATO_TARGET_RANGES = { 3: [2, 4.5], 5: [3.5, 6.5], 7: [5.5, 9] };
 
 const FB_STRING_DISPLAY = ['low E', 'A', 'D', 'G', 'B', 'high E'];
+
+// Every standard bend amount, drawn on the graph *every* time regardless of
+// the current target — keeps the graph's layout fixed across questions
+// (only the highlighted/green one changes) instead of the axis rescaling
+// and every line shifting position each time you get a new exercise.
+const FB_BEND_REFERENCE_CENTS = [
+  { cents: 50,  label: '¼ step' },
+  { cents: 100, label: '½ step' },
+  { cents: 200, label: '1 step' },
+  { cents: 300, label: '1½ steps' },
+];
+const FB_BEND_GRAPH_MAX_CENTS = 350; // fixed scale — covers the widest reference (300¢) plus headroom
 
 function fbBendNoteLabel(midi) {
   return FB_NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
@@ -2951,7 +3029,7 @@ function fbBendRenderGraph() {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const targetCents = s.current ? s.current.targetCents : 200;
-  const maxCents    = targetCents + 60;
+  const maxCents    = FB_BEND_GRAPH_MAX_CENTS;
   const PAD_T = 20, PAD_B = 16, PAD_L = 0, PAD_R = 0;
   const innerH = H - PAD_T - PAD_B;
 
@@ -2962,53 +3040,40 @@ function fbBendRenderGraph() {
   ctx.fillStyle = '#f8f7f0';
   ctx.fillRect(0, 0, W, H);
 
-  // Target zone (green band)
-  const yz1 = cy(targetCents + FB_BEND_TOLERANCE);
-  const yz2 = cy(targetCents - FB_BEND_TOLERANCE);
-  ctx.fillStyle = 'rgba(74,124,74,0.15)';
-  ctx.fillRect(0, yz1, W, yz2 - yz1);
-
-  // Target dashed line
-  const yt = cy(targetCents);
-  ctx.save();
-  ctx.strokeStyle = '#4a7c4a';
-  ctx.lineWidth = 1.5;
-  ctx.setLineDash([6, 4]);
-  ctx.beginPath(); ctx.moveTo(0, yt); ctx.lineTo(W, yt); ctx.stroke();
-  ctx.restore();
-  ctx.fillStyle = '#4a7c4a';
-  ctx.font = '11px sans-serif';
-  ctx.textBaseline = 'bottom';
-  ctx.fillText(`${targetCents}¢  ${s.current ? s.current.targetLabel : ''}`, 6, yt - 1);
-
-  // Guide lines
-  if (targetCents > 105) {
-    // For ½/full/1½-step bends: subtle grey guide at the half-step mark
-    const yh = cy(100);
-    ctx.save();
-    ctx.strokeStyle = '#ddd';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 5]);
-    ctx.beginPath(); ctx.moveTo(0, yh); ctx.lineTo(W, yh); ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = '#bbb';
-    ctx.font = '10px sans-serif';
+  // Fixed reference gridlines for every standard bend amount — always drawn,
+  // regardless of which one is this question's target, so the graph's
+  // layout never shifts between questions. Only the current target's line
+  // gets the green highlight + tolerance band.
+  FB_BEND_REFERENCE_CENTS.forEach(({ cents, label }) => {
+    const isTarget = cents === targetCents;
+    const y = cy(cents);
+    if (isTarget) {
+      const yz1 = cy(cents + FB_BEND_TOLERANCE);
+      const yz2 = cy(cents - FB_BEND_TOLERANCE);
+      ctx.fillStyle = 'rgba(74,124,74,0.15)';
+      ctx.fillRect(0, yz1, W, yz2 - yz1);
+      ctx.save();
+      ctx.strokeStyle = '#4a7c4a';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([6, 4]);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#4a7c4a';
+      ctx.font = 'bold 11px sans-serif';
+    } else {
+      ctx.save();
+      ctx.strokeStyle = '#ddd';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 5]);
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#bbb';
+      ctx.font = '10px sans-serif';
+    }
     ctx.textBaseline = 'bottom';
-    ctx.fillText('100¢', 6, yh - 1);
-  } else if (targetCents <= 60) {
-    // For ¼-step bends: red ceiling at 100¢ — crossing it means you overshot
-    const yc = cy(100);
-    ctx.save();
-    ctx.strokeStyle = '#e04040';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([5, 4]);
-    ctx.beginPath(); ctx.moveTo(0, yc); ctx.lineTo(W, yc); ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = '#e04040';
-    ctx.font = '10px sans-serif';
-    ctx.textBaseline = 'bottom';
-    ctx.fillText('100¢ — too far (½ step)', 6, yc - 1);
-  }
+    const targetSuffix = isTarget && s.current ? `  ${s.current.targetLabel}` : '';
+    ctx.fillText(`${cents}¢ ${label}${targetSuffix}`, 6, y - 1);
+  });
 
   // Baseline
   const yb = cy(0);
@@ -3109,12 +3174,15 @@ function fbBendNext() {
   s.phase = 'idle';
   s.baseFreq = null;
   s._stableFr = 0;
-  s._holdFr = 0;
+  s._holdSinceMs = 0;
+  s._lastInZoneAt = 0;
   s._lastFreq = null;
   s._nextAt = null;
   s._history = [];
   s._lastFreqTs = null;
   s._smoothedCents = null;
+  s._ampHistory = [];
+  s._lastAttackAt = 0;
   // Cooldown: block baseline detection for 500 ms so a still-ringing string
   // from the previous exercise doesn't immediately lock as the new baseline.
   s._readyAt = performance.now() + 500;
@@ -3149,10 +3217,13 @@ async function fbBendMicStart() {
     fbState.bend.baseFreq = null;
     fbState.bend._stableFr = 0;
     fbState.bend._lastFreq = null;
-    fbState.bend._holdFr   = 0;
+    fbState.bend._holdSinceMs = 0;
+    fbState.bend._lastInZoneAt = 0;
     fbState.bend._history  = [];
     fbState.bend._lastFreqTs = null;
     fbState.bend._smoothedCents = null;
+    fbState.bend._ampHistory = [];
+    fbState.bend._lastAttackAt = 0;
     fbBendFb('Pluck the string — then bend…', '');
     fbBendRenderGraph();
   } else {
@@ -3196,6 +3267,40 @@ function fbBendBendOnFrame(analyser, sampleRate) {
 
   const buf = new Float32Array(analyser.fftSize);
   analyser.getFloatTimeDomainData(buf);
+
+  // Re-pick (fresh attack) detection, from the amplitude envelope — tracked
+  // independently of pitch so it catches a pick even during the split-second
+  // before autocorrelate locks onto its frequency. A real bend is one
+  // continuous ring with the pitch gradually rising; a "let me pluck the
+  // target fret to check" shortcut instead produces a brand-new attack
+  // transient partway through — that's exactly what this rejects.
+  let sumSq = 0;
+  for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
+  const rms = Math.sqrt(sumSq / buf.length);
+  const ampBaseline = s._ampHistory.length > 5
+    ? s._ampHistory.reduce((a, b) => a + b, 0) / s._ampHistory.length : 0;
+  s._ampHistory.push(rms);
+  if (s._ampHistory.length > 20) s._ampHistory.shift();
+  const isAttack = rms > FB_BEND_ATTACK_MIN_RMS && rms > ampBaseline * FB_BEND_ATTACK_RATIO
+    && now - s._lastAttackAt > FB_BEND_ATTACK_REFRACTORY_MS;
+  if (isAttack) s._lastAttackAt = now;
+
+  if (s.baseFreq && s.phase === 'bending' && isAttack) {
+    s.baseFreq       = null;
+    s.phase          = 'idle';
+    s._history       = [];
+    s._holdSinceMs   = 0;
+    s._lastInZoneAt  = 0;
+    s._smoothedCents = null;
+    s._stableFr      = 0;
+    s._lastFreq      = null;
+    // Brief cooldown so this same pick's own ring-out doesn't immediately
+    // re-lock as the new baseline before it's decayed away.
+    s._readyAt = now + 300;
+    fbBendFb('检测到重新拨弦——要连续推上去，不能松手重弹目标音。请重新弹起始音', 'err');
+    return;
+  }
+
   // Use a lower RMS threshold (0.003 vs default 0.01) so decaying notes
   // during bending are still detected rather than discarded as silence.
   const freq = fbAutoCorrelate(buf, sampleRate, 0.003);
@@ -3240,7 +3345,8 @@ function fbBendBendOnFrame(analyser, sampleRate) {
         s.baseFreq      = s._lastFreq;
         s.phase         = 'bending';
         s._history      = [];
-        s._holdFr       = 0;
+        s._holdSinceMs  = 0;
+        s._lastInZoneAt = 0;
         s._lastFreq     = null;
         s._stableFr     = 0;
         s._smoothedCents = 0;
@@ -3271,8 +3377,10 @@ function fbBendBendOnFrame(analyser, sampleRate) {
 }
 
 // Shared helper: push current smoothedCents into history, trim window,
-// and advance the hold counter / check success.  Called from both the
+// and advance the hold timer / check success.  Called from both the
 // active-signal and silence-hold branches so both count toward success.
+// Success requires sitting in the target zone for FB_BEND_HOLD_MS of real
+// time (not an instant match) — a brief pass-through no longer counts.
 fbState.bend._recordCents = function(now) {
   const s = fbState.bend;
   const cents = Math.round(s._smoothedCents);
@@ -3287,27 +3395,28 @@ fbState.bend._recordCents = function(now) {
   // Quarter-bend overshoot: if you push past 100¢ you've gone too far
   const isQuarter = s.current.targetCents <= 60;
   if (isQuarter && cents > 100) {
-    s._holdFr = 0;
+    s._holdSinceMs = 0;
     fbBendFb('太多了！停在 ¼ 音（30–70¢），不要推到半音', 'err');
     return;
   }
 
   const inZone = Math.abs(cents - s.current.targetCents) <= FB_BEND_TOLERANCE;
   if (inZone) {
-    s._holdFr++;
-    if (s._holdFr >= FB_BEND_HOLD_FRAMES) {
+    if (!s._holdSinceMs) s._holdSinceMs = now;
+    s._lastInZoneAt = now;
+    if (now - s._holdSinceMs >= FB_BEND_HOLD_MS) {
       s.phase = 'success';
       s.correct++; s.total++; s.streak++;
       fbBendRenderStats();
       s._nextAt = now + FB_BEND_NEXT_DELAY_MS;
       fbBendFb('✓ 推准了！按 Next → 继续', 'ok');
     }
-  } else {
-    // Decay slowly so short excursions don't reset all progress.
-    s._holdFr = Math.max(0, s._holdFr - 2);
-    if (s._holdFr === 0 && s.phase === 'bending') {
-      fbBendFb(isQuarter ? '推一点点，停在两音之间…' : 'Got it — now bend up!', '');
-    }
+  } else if (s._holdSinceMs && now - s._lastInZoneAt > FB_BEND_ZONE_GRACE_MS) {
+    // Been out of the zone for more than a brief blip — reset, don't count
+    // this partial hold. (A single noisy frame right at the edge doesn't
+    // reset it immediately, matching the old frame-decay's intent.)
+    s._holdSinceMs = 0;
+    fbBendFb(isQuarter ? '推一点点，停在两音之间…' : 'Got it — now bend up!', '');
   }
 };
 
@@ -3523,5 +3632,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbBendIntervalCents, fbBendNoteLabel,
     fbVibratoAnalyze,
     fbChordPickTargetFixedRoot,
+    FB_NATURAL_NOTE_NAMES, fbPitchPickTarget,
+    fbChordPickTargetProgression,
   };
 }

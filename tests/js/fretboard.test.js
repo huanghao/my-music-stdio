@@ -246,6 +246,62 @@ test('fbChordBuildProgressionChords resolves I-V-vi-IV in G to G-D-Em-C', () => 
   }
 });
 
+test('fbChordPickTargetProgression repeats the same progression/key for repeatCount passes before picking a new one', () => {
+  const qs = fb.fbState.chord.qualities;
+  const originalQs = { ...qs };
+  const p = fb.fbState.chord.progression;
+  const originalP = { ...p };
+  try {
+    Object.keys(qs).forEach(k => { qs[k] = false; });
+    qs[''] = true; qs.m = true; // enough for every major/minor-key progression in the library
+    fb.fbState.chord.source = 'progression';
+    p.chords = null; p.repeatsLeft = 0; p.repeatCount = 2; p.lockKey = false;
+
+    const prog = fb.fbChordPickTargetProgression();
+    const def = p.def, keyRoot = p.keyRoot;
+    const len = p.chords.length;
+
+    // Walk through the rest of pass 1
+    for (let i = 1; i < len; i++) fb.fbChordPickTargetProgression();
+    // Start of pass 2 (the repeat) — same def/key, not a freshly picked one
+    fb.fbChordPickTargetProgression();
+    assert.equal(p.def, def);
+    assert.equal(p.keyRoot, keyRoot);
+
+    // Finish pass 2; the next pick must move on to a new progression/key selection
+    for (let i = 1; i < len; i++) fb.fbChordPickTargetProgression();
+    fb.fbChordPickTargetProgression();
+    assert.equal(p.repeatsLeft, p.repeatCount - 1); // fresh pick reset the repeat counter
+  } finally {
+    Object.keys(originalQs).forEach(k => { qs[k] = originalQs[k]; });
+    Object.assign(p, originalP);
+    fb.fbState.chord.source = 'random';
+  }
+});
+
+test('fbChordPickTargetProgression respects lockKey — every new progression stays in the same key', () => {
+  const qs = fb.fbState.chord.qualities;
+  const originalQs = { ...qs };
+  const p = fb.fbState.chord.progression;
+  const originalP = { ...p };
+  try {
+    Object.keys(qs).forEach(k => { qs[k] = false; });
+    qs[''] = true; qs.m = true;
+    fb.fbState.chord.source = 'progression';
+    p.chords = null; p.repeatsLeft = 0; p.repeatCount = 1; // no repeats — every pass triggers a fresh progression pick
+    p.lockKey = true; p.lockedKeyRoot = 3; // Eb/D#
+
+    for (let i = 0; i < 20; i++) {
+      fb.fbChordPickTargetProgression();
+      assert.equal(p.keyRoot, 3);
+    }
+  } finally {
+    Object.keys(originalQs).forEach(k => { qs[k] = originalQs[k]; });
+    Object.assign(p, originalP);
+    fb.fbState.chord.source = 'random';
+  }
+});
+
 test('FB_EAR_RANGE_BASE tiers are distinct and low < mid < high', () => {
   const { low, mid, high } = fb.FB_EAR_RANGE_BASE;
   assert.ok(low < mid && mid < high);
@@ -380,4 +436,42 @@ test('fbChordPickTargetFixedRoot: does not repeat the previous quality when alte
   const result = fb.fbChordPickTargetFixedRoot();
   assert.equal(result.quality, 'm',
     `with prev=major, expected minor, got ${result.quality}`);
+});
+
+test('FB_NATURAL_NOTE_NAMES is exactly A-G, no sharps', () => {
+  assert.deepEqual(fb.FB_NATURAL_NOTE_NAMES, ['C', 'D', 'E', 'F', 'G', 'A', 'B']);
+});
+
+test('fbPitchPickTarget only returns naturals when fbState.pitch.naturalsOnly is set (all-notes mode)', () => {
+  const s = fb.fbState.pitch;
+  const original = { naturalsOnly: s.naturalsOnly, practiceMode: s.practiceMode };
+  try {
+    s.naturalsOnly = true;
+    s.practiceMode = 'all';
+    for (let i = 0; i < 50; i++) {
+      const note = fb.fbPitchPickTarget();
+      assert.ok(!note.includes('#'), `expected a natural note, got ${note}`);
+    }
+  } finally {
+    s.naturalsOnly = original.naturalsOnly;
+    s.practiceMode = original.practiceMode;
+  }
+});
+
+test('fbPitchPickTarget only returns naturals when fbState.pitch.naturalsOnly is set (weak-notes mode)', () => {
+  const s = fb.fbState.pitch;
+  const original = { naturalsOnly: s.naturalsOnly, practiceMode: s.practiceMode, stats: s.stats };
+  try {
+    s.naturalsOnly = true;
+    s.practiceMode = 'weak';
+    s.stats = {}; // no stats yet — every candidate gets the same "unseen" weight
+    for (let i = 0; i < 50; i++) {
+      const note = fb.fbPitchPickTarget();
+      assert.ok(!note.includes('#'), `expected a natural note, got ${note}`);
+    }
+  } finally {
+    s.naturalsOnly = original.naturalsOnly;
+    s.practiceMode = original.practiceMode;
+    s.stats = original.stats;
+  }
 });

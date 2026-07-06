@@ -2920,11 +2920,11 @@ const FB_BEND_STRINGS   = [3, 4, 5];  // G=3, B=4, high-E=5
 const FB_BEND_FRET_MIN  = 5;
 const FB_BEND_FRET_MAX  = 17;
 
-const FB_BEND_STABLE_FRAMES   = 4;    // frames of stable pitch to lock baseline
+const FB_BEND_STABLE_FRAMES   = 3;    // frames of stable pitch to lock baseline (3 @ 60fps ≈ 50ms)
 const FB_BEND_HOLD_MS         = 700;  // must sit in the target zone this long (real time, not frames) → success
 const FB_BEND_ZONE_GRACE_MS   = 150;  // brief in/out noise near the edge of the zone doesn't reset the hold timer
-const FB_BEND_TOLERANCE       = 25;   // cents around target → success
-const FB_BEND_NEXT_DELAY_MS   = 2500;
+const FB_BEND_TOLERANCE       = 30;   // cents around target → success (was 25 — wider zone reduces false negatives)
+const FB_BEND_NEXT_DELAY_MS   = 2000; // ms before auto-advancing to the next exercise after success
 const FB_BEND_HISTORY_MS      = 5000; // rolling graph window
 const FB_BEND_SILENCE_HOLD_MS = 600;  // keep last reading for this long during decay
 
@@ -3125,6 +3125,45 @@ function fbBendRenderGraph() {
   ctx.font = '11px sans-serif';
   ctx.textBaseline = 'top';
   ctx.fillText(`0¢  ${s.current ? s.current.startLabel : ''}`, 6, yb + 2);
+
+  // ── Idle-phase: show live pitch vs. expected start note ──
+  if (!s.baseFreq) {
+    // Draw a horizontal "0¢ reference" line so the user knows where to aim
+    const y0 = cy(0);
+    ctx.strokeStyle = '#6a8caa';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+    ctx.fillStyle = '#6a8caa';
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText(s.current ? `0¢  ${s.current.startLabel} ← pluck here` : '0¢  pluck to begin', 6, y0 + 2);
+
+    if (s._lastFreq && s.current) {
+      // Show how far the current pitch is from the expected starting note
+      const centsFromStart = 1200 * Math.log2(s._lastFreq / fbFreqFromMidi(s.current.midi));
+      const px = W - 12;
+      const py = cy(Math.max(-50, Math.min(300, centsFromStart)));
+      const near = Math.abs(centsFromStart) < 80;
+      ctx.beginPath();
+      ctx.arc(px, py, 5, 0, Math.PI * 2);
+      ctx.fillStyle = near ? '#4a7c4a' : '#aaa';
+      ctx.fill();
+      ctx.fillStyle = near ? '#4a7c4a' : '#888';
+      ctx.font = 'bold 12px monospace';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      ctx.fillText((centsFromStart >= 0 ? '+' : '') + Math.round(centsFromStart) + '¢', px - 8, py);
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillStyle = '#aaa';
+      ctx.font = '11px sans-serif';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.fillText('pluck and hold the string…', W / 2, H / 2);
+      ctx.textAlign = 'left';
+    }
+    return;
+  }
 
   if (!s._history || s._history.length < 2) return;
 
@@ -3412,9 +3451,14 @@ function fbBendBendOnFrame(analyser, sampleRate) {
     if (sinceMs < FB_BEND_SILENCE_HOLD_MS && s._smoothedCents !== null) {
       s._recordCents(now);  // freeze last smoothed value — bend still held
     }
+  } else if (!s.baseFreq) {
+    // ── Idle + silence ──
+    // No signal while waiting for the starting note. Clear _lastFreq so the
+    // idle-phase pitch dot doesn't stick on the previous reading.
+    s._lastFreq = null;
   }
 
-  if (s.baseFreq) fbBendRenderGraph();
+  fbBendRenderGraph(); // always render — idle phase shows reference grid + live pitch
 }
 
 // Shared helper: push current smoothedCents into history, trim window,

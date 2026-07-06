@@ -77,7 +77,7 @@ const fbState = {
                  identify: { correct: 0, total: 0, streak: 0, current: null, locked: false },
                  locate: { correct: 0, total: 0, streak: 0, current: null, answered: false } },
   ear: { scale: 'minor', mode: 'two', autoAdvance: true, wrongPauseSec: 3, showDiagram: true, waveform: 'sine',
-         playbackStyle: 'melodic', noteGapSec: 0.25, direction: 'both', range: 'mid',
+         playbackStyle: 'melodic', noteGapSec: 0.25, direction: 'both', range: 'mid', stats: {},
          two: { correct: 0, total: 0, streak: 0, current: null, answered: false, timeoutId: null,
                 playingUntil: 0, exploreFirstIdx: null, exploreArc: null, diagramCurrent: null },
          three: { correct: 0, total: 0, streak: 0, current: null, answered: false, step: 1, step1Correct: null, timeoutId: null,
@@ -128,6 +128,7 @@ function initFretboardPage() {
   fbCagedSetMode(fbState.caged.mode);
   fbShapeDegreeSetMode(fbState.shapeDegree.mode);
   fbRenderEarOptions();
+  fbEarLoadStats();
   fbEarTwoNext();
   fbEarThreeNext();
   fbEarSetMode(fbState.ear.mode);
@@ -1174,6 +1175,21 @@ function fbEarRefreshDiagrams() {
   fbEarRenderDiagramFor('three');
 }
 
+// ── Ear Training per-interval stats ──────────────────────────────────────
+
+const FB_EAR_STATS_KEY = 'fb_ear_stats';
+
+function fbEarLoadStats() {
+  try { fbState.ear.stats = JSON.parse(localStorage.getItem(FB_EAR_STATS_KEY)) || {}; }
+  catch (_) { fbState.ear.stats = {}; }
+}
+
+function fbEarSaveStats() {
+  localStorage.setItem(FB_EAR_STATS_KEY, JSON.stringify(fbState.ear.stats));
+}
+
+// ── Scale / mode switches ──────────────────────────────────────────────────
+
 function fbEarSetScale(scale) {
   fbState.ear.scale = scale;
   fbPrefsSave();
@@ -1193,9 +1209,23 @@ function fbEarSetMode(mode) {
 
 function fbRenderEarStats(subMode) {
   const s = fbState.ear[subMode];
+  // Per-interval weaknesses: show the 3 weakest intervals once we have enough data
+  const weakList = Object.entries(fbState.ear.stats)
+    .filter(([, v]) => v.presented >= 3)
+    .sort(([, a], [, b]) => (a.correct / a.presented) - (b.correct / b.presented))
+    .slice(0, 3)
+    .map(([name, v]) => {
+      const pct = Math.round(100 * v.correct / v.presented);
+      const col = pct < 60 ? 'var(--danger)' : pct < 80 ? 'var(--warn)' : 'var(--primary)';
+      return `<span style="color:${col}">${name} ${pct}%</span>`;
+    });
+  const weakLine = weakList.length
+    ? `<span style="flex-basis:100%;font-size:11px;color:var(--text-faint)">Weak: ${weakList.join(' · ')}</span>`
+    : '';
   document.getElementById(`fb-ear-${subMode}-stats`).innerHTML = `
     <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
     <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
+    ${weakLine}
   `;
 }
 
@@ -1268,6 +1298,11 @@ function fbEarTwoAnswer(name, btnEl) {
   const correct = name === target;
   if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
   btnEl.classList.add(correct ? 'correct' : 'wrong');
+  // Per-interval accuracy tracking
+  const st = fbState.ear.stats[target] || (fbState.ear.stats[target] = { presented: 0, correct: 0 });
+  st.presented++;
+  if (correct) st.correct++;
+  fbEarSaveStats();
 
   const labels = FB_EAR_SCALES[fbState.ear.scale].labels;
   const noteDesc = s.current.order.map(idx => labels[idx]).join(' → ');

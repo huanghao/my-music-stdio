@@ -195,12 +195,12 @@ input[type="number"] { width: 64px; text-align: center; }
 .song-card {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   padding: 14px 16px; display: flex; align-items: center; gap: 12px;
-  cursor: pointer; transition: border-color 0.1s; margin-bottom: 8px;
+  cursor: pointer; transition: box-shadow 0.15s; margin-bottom: 8px;
 }
-.song-card:hover { border-color: var(--border-muted); }
+.song-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 .song-card-body { flex: 1; }
-.song-card-title { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
-.song-card-meta { font-size: 12px; color: var(--text-muted); }
+.song-card-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+.song-card-meta { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .song-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
 .song-status.ready { background: var(--primary-bg); color: var(--primary); }
 .song-status.draft { background: var(--warn-bg); color: var(--warn-dark); }
@@ -693,8 +693,8 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-card {
   display: flex; align-items: center; gap: 12px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
-  padding: 12px 16px; margin-bottom: 10px; cursor: pointer;
-  transition: box-shadow .15s;
+  padding: 14px 16px; margin-bottom: 8px; cursor: pointer;
+  transition: box-shadow 0.15s;
 }
 .lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 .lick-card-body { flex: 1; min-width: 0; }

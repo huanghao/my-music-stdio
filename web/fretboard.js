@@ -63,7 +63,7 @@ const fbState = {
   chord: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            qualities: { '': true, m: true, maj7: true, '7': true, m7: true, dim7: true, m7b5: true, sus2: false, sus4: false },
            notationStyle: 'standard', showFormula: false, showDegreesOnDiagram: false, showChordDiagram: false, diagramSize: 200,
-           source: 'random', fixedRoot: 0,
+           source: 'random', fixedRoot: 0, practiceMode: 'all',
            progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0, repeatsLeft: 0,
                           repeatCount: 2, lockKey: false, lockedKeyRoot: 0 },
            stats: {},
@@ -203,6 +203,7 @@ function fbPrefsLoad() {
   if (saved.chord && typeof saved.chord.showChordDiagram === 'boolean') fbState.chord.showChordDiagram = saved.chord.showChordDiagram;
   if (saved.chord && typeof saved.chord.diagramSize === 'number') fbState.chord.diagramSize = saved.chord.diagramSize;
   if (saved.chord && ['random', 'progression', 'fixed_root'].includes(saved.chord.source)) fbState.chord.source = saved.chord.source;
+  if (saved.chord && ['all', 'weak'].includes(saved.chord.practiceMode)) fbState.chord.practiceMode = saved.chord.practiceMode;
   if (saved.chord && Number.isInteger(saved.chord.fixedRoot) && saved.chord.fixedRoot >= 0 && saved.chord.fixedRoot < 12) fbState.chord.fixedRoot = saved.chord.fixedRoot;
   if (saved.chord && saved.chord.progression) {
     const sp = saved.chord.progression;
@@ -293,7 +294,7 @@ function fbPrefsSave() {
       showFormula: fbState.chord.showFormula, showDegreesOnDiagram: fbState.chord.showDegreesOnDiagram,
       showChordDiagram: fbState.chord.showChordDiagram,
       diagramSize: fbState.chord.diagramSize,
-      source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot,
+      source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot, practiceMode: fbState.chord.practiceMode,
       progression: { repeatCount: fbState.chord.progression.repeatCount,
                      lockKey: fbState.chord.progression.lockKey,
                      lockedKeyRoot: fbState.chord.progression.lockedKeyRoot },
@@ -2369,6 +2370,13 @@ function fbRenderChordOptions() {
         ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.fixedRoot===i?'selected':''}>${n}</option>`).join('')}
       </select>
     </label>` : ''}
+    ${s.source === 'random' ? `
+    <label style="margin-left:8px">Practice:
+      <select onchange="fbState.chord.practiceMode=this.value; fbPrefsSave(); fbChordNewChord()">
+        <option value="all"  ${s.practiceMode==='all' ?'selected':''}>All</option>
+        <option value="weak" ${s.practiceMode==='weak'?'selected':''}>Focus on weak</option>
+      </select>
+    </label>` : ''}
     ${s.source === 'progression' ? `
     <label style="margin-left:8px">Repeat each progression:
       <input type="number" min="1" max="8" value="${s.progression.repeatCount}" style="width:48px"
@@ -2512,24 +2520,30 @@ const FB_MINOR_DEGREE_QUALITIES = [
   ['', 'maj7'],    // VI
   ['', '7'],       // VII
 ];
+// category is a rough tag for the *dominant generative mechanism* behind
+// each progression's root motion — not a rigorous classification (several
+// progressions could fit more than one bucket), just enough to let you
+// filter down to "only give me circle-of-fifths ones" etc. to drill one
+// pattern at a time. See docs/chord-progressions-guide.md for the theory.
 const FB_CHORD_PROGRESSIONS = [
-  { name: 'I – V – vi – IV (pop)', keyType: 'major', degrees: [0, 4, 5, 3] },
-  { name: 'I – vi – IV – V (50s / doo-wop)', keyType: 'major', degrees: [0, 5, 3, 4] },
-  { name: 'ii – V – I (jazz)', keyType: 'major', degrees: [1, 4, 0] },
-  { name: 'I – IV – V – IV', keyType: 'major', degrees: [0, 3, 4, 3] },
-  { name: 'vi – IV – I – V', keyType: 'major', degrees: [5, 3, 0, 4] },
-  { name: 'I – vi – ii – V (turnaround)', keyType: 'major', degrees: [0, 5, 1, 4] },
-  { name: 'iii – vi – ii – V (jazz turnaround)', keyType: 'major', degrees: [2, 5, 1, 4] },
-  { name: '12-bar blues (changes)', keyType: 'major', degrees: [0, 3, 0, 4, 3, 0] },
-  { name: 'I – iii – IV – V', keyType: 'major', degrees: [0, 2, 3, 4] },
-  { name: 'I – V – IV – V', keyType: 'major', degrees: [0, 4, 3, 4] },
-  { name: 'vi – ii – V – I (circle of fifths)', keyType: 'major', degrees: [5, 1, 4, 0] },
-  { name: 'I – ii – iii – IV (ascending)', keyType: 'major', degrees: [0, 1, 2, 3] },
-  { name: 'i – VI – III – VII (minor pop)', keyType: 'minor', degrees: [0, 5, 2, 6] },
-  { name: 'i – iv – v (minor)', keyType: 'minor', degrees: [0, 3, 4] },
-  { name: 'i – VII – VI – VII', keyType: 'minor', degrees: [0, 6, 5, 6] },
-  { name: 'i – iv – VII – III (minor rock)', keyType: 'minor', degrees: [0, 3, 6, 2] },
-  { name: 'i – VII – VI – v (Andalusian-ish)', keyType: 'minor', degrees: [0, 6, 5, 4] },
+  { name: 'I – V – vi – IV (pop)', keyType: 'major', degrees: [0, 4, 5, 3], category: 'functional' },
+  { name: 'I – vi – IV – V (50s / doo-wop)', keyType: 'major', degrees: [0, 5, 3, 4], category: 'functional' },
+  { name: 'ii – V – I (jazz)', keyType: 'major', degrees: [1, 4, 0], category: 'circle5' },
+  { name: 'I – IV – V – IV', keyType: 'major', degrees: [0, 3, 4, 3], category: 'functional' },
+  { name: 'vi – IV – I – V', keyType: 'major', degrees: [5, 3, 0, 4], category: 'functional' },
+  { name: 'I – vi – ii – V (turnaround)', keyType: 'major', degrees: [0, 5, 1, 4], category: 'circle5' },
+  { name: 'iii – vi – ii – V (jazz turnaround)', keyType: 'major', degrees: [2, 5, 1, 4], category: 'circle5' },
+  { name: '12-bar blues (changes)', keyType: 'major', degrees: [0, 3, 0, 4, 3, 0], category: 'blues' },
+  { name: 'I – iii – IV – V', keyType: 'major', degrees: [0, 2, 3, 4], category: 'functional' },
+  { name: 'I – V – IV – V', keyType: 'major', degrees: [0, 4, 3, 4], category: 'functional' },
+  { name: 'vi – ii – V – I (circle of fifths)', keyType: 'major', degrees: [5, 1, 4, 0], category: 'circle5' },
+  { name: 'I – ii – iii – IV (ascending)', keyType: 'major', degrees: [0, 1, 2, 3], category: 'stepwise' },
+  { name: 'IV – iii – ii – I (stepwise descent)', keyType: 'major', degrees: [3, 2, 1, 0], category: 'stepwise' },
+  { name: 'i – VI – III – VII (minor pop)', keyType: 'minor', degrees: [0, 5, 2, 6], category: 'functional' },
+  { name: 'i – iv – v (minor)', keyType: 'minor', degrees: [0, 3, 4], category: 'functional' },
+  { name: 'i – VII – VI – VII', keyType: 'minor', degrees: [0, 6, 5, 6], category: 'functional' },
+  { name: 'i – iv – VII – III (minor rock)', keyType: 'minor', degrees: [0, 3, 6, 2], category: 'circle5' },
+  { name: 'i – VII – VI – v (Andalusian-ish)', keyType: 'minor', degrees: [0, 6, 5, 4], category: 'stepwise' },
 ];
 
 // The first enabled quality among a degree's candidates, or null if the user
@@ -2572,7 +2586,24 @@ function fbChordBuildProgressionChords(prog, keyRoot) {
 
 function fbChordPickTargetRandom() {
   const pool = fbChordEnabledPool();
-  return pool[Math.floor(Math.random() * pool.length)];
+  if (fbState.chord.practiceMode !== 'weak') {
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  // Weighted by (1 – accuracy); chords with no stats yet get weight 0.5
+  // so new chords still appear.  Floor at 0.1 so even perfect chords
+  // aren't completely excluded.
+  const weights = pool.map(c => {
+    const st = fbState.chord.stats[c.symbol];
+    const acc = st && st.presented > 0 ? st.matched / st.presented : 0.5;
+    return Math.max(0.1, 1 - acc);
+  });
+  const total = weights.reduce((s, w) => s + w, 0);
+  let r = Math.random() * total;
+  for (let k = 0; k < pool.length; k++) {
+    r -= weights[k];
+    if (r <= 0) return pool[k];
+  }
+  return pool[pool.length - 1];
 }
 
 function fbChordPickTargetFixedRoot() {

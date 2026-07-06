@@ -475,3 +475,19 @@ test('fbPitchPickTarget only returns naturals when fbState.pitch.naturalsOnly is
     s.stats = original.stats;
   }
 });
+
+test('fbChordPreviewProgression is a no-op (no AudioContext touched) outside progression mode or with no chords built yet', () => {
+  const s = fb.fbState.chord;
+  const original = { source: s.source, chords: s.progression.chords };
+  try {
+    s.source = 'random';
+    assert.doesNotThrow(() => fb.fbChordPreviewProgression()); // not in progression mode — should bail before touching audio/DOM
+
+    s.source = 'progression';
+    s.progression.chords = null;
+    assert.doesNotThrow(() => fb.fbChordPreviewProgression()); // progression mode but nothing built yet — should also bail
+  } finally {
+    s.source = original.source;
+    s.progression.chords = original.chords;
+  }
+});

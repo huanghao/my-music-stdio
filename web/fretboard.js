@@ -2547,13 +2547,54 @@ function fbChordNewChord() {
 // generating a new chord.
 function fbChordRenderProgressionInfo() {
   const el = document.getElementById('fb-chord-progression-info');
+  const previewBtn = document.getElementById('fb-chord-preview-btn');
   if (!el) return;
   const s = fbState.chord;
   const p = s.progression;
-  if (!(s.source === 'progression' && p.def && p.chords)) { el.textContent = ''; return; }
+  const active = s.source === 'progression' && p.def && p.chords;
+  if (previewBtn) previewBtn.style.display = active ? '' : 'none';
+  if (!active) { el.textContent = ''; return; }
   const currentLoop = p.repeatCount - p.repeatsLeft;
   const loopSuffix = p.repeatCount > 1 ? ` (loop ${currentLoop}/${p.repeatCount})` : '';
   el.textContent = `Progression: ${p.def.name} in ${FB_NOTE_NAMES[p.keyRoot]} — chord ${p.stepIdx}/${p.chords.length}${loopSuffix}`;
+}
+
+// Lets you hear the *current* progression instance (same key, same chords,
+// including any secondary-dominant insert) before attempting it yourself —
+// so a fumbled attempt doesn't end up teaching you the wrong sound by
+// accident. Reuses Ear Training's shared AudioContext/output routing/volume,
+// just strums each chord's own tones as a block instead of playing a melody.
+let fbChordPreviewPlayingUntil = 0;
+function fbChordPreviewProgression() {
+  const s = fbState.chord;
+  const p = s.progression;
+  if (s.source !== 'progression' || !p.chords || !p.chords.length) return;
+  const now = Date.now();
+  if (now < fbChordPreviewPlayingUntil) return; // debounce — a preview is already playing
+
+  const ctx = fbEarGetAudioCtx();
+  const chordDur = 0.9, gap = 0.15;
+  let t = ctx.currentTime + 0.05;
+  p.chords.forEach(chord => {
+    const rootMidi = 48 + chord.root; // low-mid register, consistent regardless of key
+    FB_CHORD_QUALITIES[chord.quality].forEach(iv => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = fbFreqFromMidi(rootMidi + iv);
+      const gain = ctx.createGain();
+      const peak = 0.22 * fbMasterGain();
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(peak, t + 0.02);
+      gain.gain.setValueAtTime(peak, t + chordDur - 0.1);
+      gain.gain.linearRampToValueAtTime(0, t + chordDur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + chordDur + 0.02);
+    });
+    t += chordDur + gap;
+  });
+  fbChordPreviewPlayingUntil = now + Math.ceil((t - ctx.currentTime) * 1000);
 }
 
 function fbChordRefreshLabels() {
@@ -3633,6 +3674,6 @@ if (typeof module !== 'undefined' && module.exports) {
     fbVibratoAnalyze,
     fbChordPickTargetFixedRoot,
     FB_NATURAL_NOTE_NAMES, fbPitchPickTarget,
-    fbChordPickTargetProgression,
+    fbChordPickTargetProgression, fbChordPreviewProgression,
   };
 }

@@ -86,7 +86,7 @@ body {
 .nav-btn:hover { background: var(--bg-faint); }
 .nav-btn.active { background: var(--bg-raised); color: var(--text); font-weight: 500; }
 
-.page { display: none; padding: 16px 16px 60px; }
+.page { display: none; padding: 16px 16px 60px; max-width: 960px; margin: 0 auto; }
 .page.active { display: block; }
 
 .btn {

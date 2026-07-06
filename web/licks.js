@@ -51,6 +51,111 @@ async function loadLicks() {
         </button>
       </div>`;
   }).join('');
+  // Render the practice heatmap below the list (non-blocking)
+  renderLickHeatmap();
+}
+
+// ── Practice heatmap ──
+// GitHub-style calendar: last ~26 weeks as a grid of week-columns (7 rows,
+// one per weekday).  Cell colour intensity = total practice minutes that day.
+// Pure SVG, no dependencies.  Tooltips show date + minutes + lick count.
+async function renderLickHeatmap() {
+  const el = document.getElementById('lick-heatmap');
+  if (!el) return;
+  let sessions = [];
+  try { sessions = await api('/api/licks/sessions/all'); }
+  catch (_) { el.innerHTML = ''; return; }
+  if (!sessions.length) { el.innerHTML = ''; return; }
+
+  // Aggregate minutes per ISO date (YYYY-MM-DD)
+  const byDate = {};
+  sessions.forEach(s => {
+    const d = s.date.slice(0, 10);
+    if (!byDate[d]) byDate[d] = { min: 0, count: 0, licks: new Set() };
+    byDate[d].min += s.duration_min;
+    byDate[d].count++;
+    byDate[d].licks.add(s.lick_title);
+  });
+
+  // Build a 26-week window ending today
+  const WEEKS = 26;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  // Find the Sunday of the current week (column alignment)
+  const startSunday = new Date(today);
+  startSunday.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * 7);
+
+  const CELL = 13, GAP = 3, PAD_L = 28, PAD_T = 16, PAD_B = 16, PAD_R = 8;
+  const colW = CELL + GAP;
+  const W = PAD_L + PAD_R + WEEKS * colW;
+  const H = PAD_T + PAD_B + 7 * colW;
+
+  // Month labels along the top — show on the first column that starts a new month
+  const monthLabels = [];
+  let lastMonth = -1;
+  for (let w = 0; w < WEEKS; w++) {
+    const d = new Date(startSunday);
+    d.setDate(startSunday.getDate() + w * 7);
+    if (d.getMonth() !== lastMonth) {
+      monthLabels.push({ x: PAD_L + w * colW, label: d.toLocaleDateString('en-US', { month: 'short' }) });
+      lastMonth = d.getMonth();
+    }
+  }
+
+  // Weekday labels on the left (Mon/Wed/Fri)
+  const dayLabels = [1, 3, 5].map(dow => ({
+    y: PAD_T + dow * colW + CELL / 2,
+    label: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dow],
+  }));
+
+  // Max minutes for colour scaling (cap at 60 so even a single 10-min session is visible)
+  const maxMin = Math.max(60, ...Object.values(byDate).map(d => d.min));
+
+  const cells = [];
+  for (let w = 0; w < WEEKS; w++) {
+    for (let dow = 0; dow < 7; dow++) {
+      const d = new Date(startSunday);
+      d.setDate(startSunday.getDate() + w * 7 + dow);
+      if (d > today) continue;
+      const iso = d.toISOString().slice(0, 10);
+      const info = byDate[iso];
+      const x = PAD_L + w * colW;
+      const y = PAD_T + dow * colW;
+      if (!info) {
+        cells.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" class="heat-cell-empty"/>`);
+      } else {
+        const intensity = Math.min(1, info.min / maxMin);
+        const lvl = Math.min(4, 1 + Math.floor(intensity * 4));
+        const tip = `${iso}: ${Math.round(info.min)} min, ${info.count} session${info.count !== 1 ? 's' : ''} (${[...info.licks].join(', ')})`;
+        cells.push(`<rect x="${x}" y="${y}" width="${CELL}" height="${CELL}" rx="2" class="heat-cell heat-l${lvl}"><title>${tip}</title></rect>`);
+      }
+    }
+  }
+
+  const totalMin = Math.round(Object.values(byDate).reduce((s, d) => s + d.min, 0));
+  const activeDays = Object.keys(byDate).length;
+
+  el.innerHTML = `
+    <div class="lick-heatmap-wrap">
+      <h3 class="lick-heatmap-title">Practice — last 6 months</h3>
+      <svg viewBox="0 0 ${W} ${H}" class="lick-heatmap-svg" preserveAspectRatio="xMidYMid meet">
+        ${monthLabels.map(m => `<text x="${m.x}" y="${PAD_T - 5}" class="heat-month-label">${m.label}</text>`).join('')}
+        ${dayLabels.map(d => `<text x="${PAD_L - 5}" y="${d.y}" class="heat-day-label" text-anchor="end" dominant-baseline="middle">${d.label}</text>`).join('')}
+        ${cells.join('')}
+      </svg>
+      <div class="lick-heatmap-legend">
+        <span>${activeDays} active day${activeDays !== 1 ? 's' : ''} · ${totalMin} min total</span>
+        <span class="heat-scale">
+          <span class="heat-cell-empty" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
+          <span class="heat-l1" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
+          <span class="heat-l2" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
+          <span class="heat-l3" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
+          <span class="heat-l4" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
+          <span style="margin-left:4px">more</span>
+        </span>
+      </div>
+    </div>
+  `;
 }
 
 async function newLick() {

@@ -195,6 +195,25 @@ def test_lick_session_bpm_validated(client):
                        json={"bpm": 5, "duration_min": 5}).status_code == 422
 
 
+def test_list_all_lick_sessions(client):
+    """The flat /api/licks/sessions/all endpoint feeds the practice heatmap."""
+    a = client.post("/api/licks", json={"title": "A"}).json()["id"]
+    b = client.post("/api/licks", json={"title": "B"}).json()["id"]
+    client.post(f"/api/licks/{a}/sessions", json={"bpm": 80, "duration_min": 5})
+    client.post(f"/api/licks/{a}/sessions", json={"bpm": 90, "duration_min": 8})
+    client.post(f"/api/licks/{b}/sessions", json={"bpm": 120, "duration_min": 3})
+
+    r = client.get("/api/licks/sessions/all")
+    assert r.status_code == 200
+    rows = r.json()
+    assert len(rows) == 3
+    # sorted ascending by date
+    assert rows == sorted(rows, key=lambda x: x["date"])
+    # each row carries the lick context for tooltips
+    titles = {row["lick_title"] for row in rows}
+    assert titles == {"A", "B"}
+
+
 def test_lick_id_path_traversal_rejected(client):
     assert client.get("/api/licks/%2e%2e").status_code == 400
     assert client.delete("/api/licks/%2e%2e").status_code == 400

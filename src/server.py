@@ -273,6 +273,33 @@ def api_list_licks():
     return licks
 
 
+@app.get("/api/licks/sessions/all")
+def api_list_all_lick_sessions():
+    """Flat list of every session across every lick, for the practice heatmap.
+
+    Returns [{date, bpm, duration_min, lick_id, lick_title}, ...] sorted by date
+    ascending.  The list endpoint omits sessions, so this is the cheap way to
+    get all of them in one request without N round-trips.
+    """
+    out = []
+    for d in _licks_dir().iterdir():
+        p = d / "lick.json"
+        if not p.exists():
+            continue
+        data = json.loads(p.read_text())
+        title = data.get("title", d.name)
+        for s in data.get("sessions", []):
+            out.append({
+                "date": s["date"],
+                "bpm": s["bpm"],
+                "duration_min": s["duration_min"],
+                "lick_id": d.name,
+                "lick_title": title,
+            })
+    out.sort(key=lambda x: x["date"])
+    return out
+
+
 @app.post("/api/licks")
 def api_create_lick(lick: LickBody):
     data = lick.model_dump()

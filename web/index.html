@@ -408,7 +408,7 @@
 </div>
 
 <!-- Lick session log modal -->
-<div id="lick-log-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center">
+<div id="lick-log-modal" class="modal-overlay" onclick="if(event.target===this)closeLickLogModal()">
   <div class="modal">
     <h3 class="modal-subtitle">Log Practice Session</h3>
     <div class="lick-log-form">

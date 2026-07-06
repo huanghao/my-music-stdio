@@ -244,13 +244,13 @@ function openLogSessionModal() {
   if (modal) {
     document.getElementById('lick-log-bpm').value = currentBpm;
     document.getElementById('lick-log-dur').value = 5;
-    modal.style.display = 'flex';
+    modal.classList.add('show');
   }
 }
 
 function closeLickLogModal() {
   const modal = document.getElementById('lick-log-modal');
-  if (modal) modal.style.display = 'none';
+  if (modal) modal.classList.remove('show');
 }
 
 async function submitLickSession() {

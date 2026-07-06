@@ -187,16 +187,34 @@ function renderLickChart(sessions, targetBpm) {
 
 async function editLick(id) {
   const lick = await api(`/api/licks/${id}`);
-  // Inline quick-edit: prompt for title and notes (simple approach)
-  openModal('Rename', lick.title, async newTitle => {
-    await api(`/api/licks/${id}`, 'PUT', {
-      title: newTitle,
-      notes: lick.notes || '',
-      target_bpm: lick.target_bpm || null,
-    });
+  document.getElementById('lick-edit-title').value = lick.title || '';
+  document.getElementById('lick-edit-notes').value = lick.notes || '';
+  document.getElementById('lick-edit-target-bpm').value = lick.target_bpm ?? '';
+  // Store the id so submitLickEdit() knows which lick to save
+  document.getElementById('lick-edit-modal').dataset.lickId = id;
+  document.getElementById('lick-edit-modal').classList.add('show');
+}
+
+function closeLickEditModal() {
+  document.getElementById('lick-edit-modal').classList.remove('show');
+}
+
+async function submitLickEdit() {
+  const id = document.getElementById('lick-edit-modal').dataset.lickId;
+  if (!id) return;
+  const title = document.getElementById('lick-edit-title').value.trim() || 'Untitled';
+  const notes = document.getElementById('lick-edit-notes').value.trim();
+  const rawBpm = document.getElementById('lick-edit-target-bpm').value;
+  const target_bpm = rawBpm !== '' ? parseFloat(rawBpm) : null;
+  try {
+    await api(`/api/licks/${id}`, 'PUT', { title, notes, target_bpm });
+    closeLickEditModal();
     const updated = await api(`/api/licks/${id}`);
+    licksState.licksById[id] = updated;
     renderLickDetail(updated);
-  });
+  } catch (e) {
+    setStatus('Error saving: ' + e.message);
+  }
 }
 
 async function deleteLick(id) {
@@ -281,3 +299,22 @@ function fmtDateShort(iso) {
   const d = new Date(iso);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+// ── Keyboard shortcuts for lick modals ──
+
+document.addEventListener('DOMContentLoaded', () => {
+  // lick-edit-modal: Escape closes, Enter in title submits
+  const editTitle = document.getElementById('lick-edit-title');
+  if (editTitle) {
+    editTitle.addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitLickEdit();
+      if (e.key === 'Escape') closeLickEditModal();
+    });
+  }
+  // lick-log-modal: Escape closes
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (document.getElementById('lick-edit-modal')?.classList.contains('show')) closeLickEditModal();
+    if (document.getElementById('lick-log-modal')?.classList.contains('show')) closeLickLogModal();
+  });
+});

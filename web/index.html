@@ -414,6 +414,28 @@
   </div>
 </div>
 
+<!-- Lick edit modal (title + notes + target BPM) -->
+<div id="lick-edit-modal" class="modal-overlay" onclick="if(event.target===this)closeLickEditModal()">
+  <div class="modal" style="width:360px">
+    <h3 class="modal-subtitle">Edit Lick</h3>
+    <div class="lick-edit-form">
+      <label>Title
+        <input type="text" id="lick-edit-title" autocomplete="off" style="flex:1">
+      </label>
+      <label>Notes
+        <textarea id="lick-edit-notes" rows="3" style="flex:1"></textarea>
+      </label>
+      <label>Target BPM (optional)
+        <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" style="width:80px">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" onclick="closeLickEditModal()">Cancel</button>
+      <button class="btn btn-primary btn-sm" onclick="submitLickEdit()">Save</button>
+    </div>
+  </div>
+</div>
+
 <!-- Lick session log modal -->
 <div id="lick-log-modal" class="modal-overlay" onclick="if(event.target===this)closeLickLogModal()">
   <div class="modal">

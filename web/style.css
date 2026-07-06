@@ -105,13 +105,14 @@ body {
 
 .field { display: flex; align-items: center; gap: 6px; }
 .field label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
-input[type="text"], input[type="number"], select {
+input[type="text"], input[type="number"], select, textarea {
   background: var(--bg-card); border: 1px solid var(--border-dim); color: var(--text);
-  padding: 5px 8px; border-radius: 4px; font-size: 13px;
+  padding: 5px 8px; border-radius: 4px; font-size: 13px; font-family: inherit;
 }
-input[type="text"]:focus, input[type="number"]:focus, select:focus {
+input[type="text"]:focus, input[type="number"]:focus, select:focus, textarea:focus {
   outline: none; border-color: var(--primary-lt);
 }
+textarea { resize: vertical; }
 input[type="number"] { width: 64px; text-align: center; }
 
 /* Jam mode tabs */
@@ -756,10 +757,14 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-session-dur  { color: var(--text-muted); min-width: 50px; }
 .lick-session-date { color: var(--text-faint); }
 
-/* Lick session log modal form */
+/* Lick session log modal form (BPM + duration — compact inputs) */
 .lick-log-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 .lick-log-form label { font-size: 13px; }
 .lick-log-form input { width: 80px; margin-left: 8px; }
+
+/* Lick edit modal form (title + notes + target BPM — full-width inputs) */
+.lick-edit-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.lick-edit-form label { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
 .modal-subtitle { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
 
 /* Speed Trainer active lick banner */

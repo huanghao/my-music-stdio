@@ -26,7 +26,16 @@ async function loadLicks() {
     return;
   }
   licks.forEach(l => { licksState.licksById[l.id] = l; });
-  el.innerHTML = licks.map(l => {
+  const totalSessions = licks.reduce((sum, l) => sum + (l.session_count || 0), 0);
+  const mostRecent = licks
+    .map(l => l.last_date).filter(Boolean).sort().pop();
+  const summary = totalSessions === 0 ? '' : `
+    <p class="lick-list-summary">
+      ${licks.length} lick${licks.length !== 1 ? 's' : ''} &nbsp;·&nbsp;
+      ${totalSessions} session${totalSessions !== 1 ? 's' : ''} total
+      ${mostRecent ? `&nbsp;·&nbsp; last practice: ${timeAgo(mostRecent)}` : ''}
+    </p>`;
+  el.innerHTML = summary + licks.map(l => {
     const lastBpm  = l.last_bpm  ? `${l.last_bpm} BPM` : 'no sessions yet';
     const lastDate = l.last_date ? timeAgo(l.last_date) : '—';
     const count    = l.session_count || 0;
@@ -47,7 +56,8 @@ async function loadLicks() {
 async function newLick() {
   openModal('New Lick', 'My practice lick', async title => {
     const r = await api('/api/licks', 'POST', { title, notes: '', target_bpm: null });
-    openLick(r.id);
+    await openLick(r.id);  // navigate to detail first
+    editLick(r.id);        // then open edit modal to fill notes + target BPM
   });
 }
 
@@ -96,12 +106,20 @@ function renderLickDetail(lick) {
     <div class="lick-sessions-list">
       ${sessions.length === 0
         ? '<p class="empty-state">No sessions yet — practice and log one!</p>'
-        : [...sessions].reverse().slice(0, 20).map(s => `
-          <div class="lick-session-row">
-            <span class="lick-session-bpm">${s.bpm} BPM</span>
-            <span class="lick-session-dur">${s.duration_min} min</span>
-            <span class="lick-session-date">${fmtDate(s.date)}</span>
-          </div>`).join('')}
+        : (() => {
+            const MAX = 20;
+            const shown = [...sessions].reverse().slice(0, MAX);
+            const rows = shown.map(s => `
+              <div class="lick-session-row">
+                <span class="lick-session-bpm">${s.bpm} BPM</span>
+                <span class="lick-session-dur">${s.duration_min} min</span>
+                <span class="lick-session-date">${fmtDate(s.date)}</span>
+              </div>`).join('');
+            const more = sessions.length > MAX
+              ? `<p class="empty-state" style="padding:8px 0">… and ${sessions.length - MAX} earlier sessions</p>`
+              : '';
+            return rows + more;
+          })()}
     </div>
 
     <div class="lick-detail-cta">

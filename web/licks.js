@@ -19,10 +19,10 @@ const licksState = {
 async function loadLicks() {
   const el = document.getElementById('licks-list');
   if (!el) return;
-  el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">Loading…</p>';
+  el.innerHTML = '<p class="empty-state">Loading…</p>';
   const licks = await api('/api/licks');
   if (!licks.length) {
-    el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">No licks yet — click "+ New Lick" to start tracking.</p>';
+    el.innerHTML = '<p class="empty-state">No licks yet — click "+ New Lick" to start tracking.</p>';
     return;
   }
   licks.forEach(l => { licksState.licksById[l.id] = l; });
@@ -77,9 +77,9 @@ function renderLickDetail(lick) {
         <h2 class="lick-detail-title" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
         ${targetLine}
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div class="row-actions">
         <button class="btn btn-ghost btn-sm" onclick="editLick('${lick.id}')">Edit</button>
-        <button class="btn btn-ghost btn-sm" style="color:#c04040"
+        <button class="btn btn-ghost btn-sm danger"
           onclick="deleteLick('${lick.id}')">Delete</button>
       </div>
     </div>
@@ -91,11 +91,11 @@ function renderLickDetail(lick) {
     </div>
 
     <div class="lick-sessions-header">
-      <h3 style="font-size:14px;font-weight:600;margin:0">Sessions (${sessions.length})</h3>
+      <h3>Sessions (${sessions.length})</h3>
     </div>
     <div class="lick-sessions-list">
       ${sessions.length === 0
-        ? '<p style="color:#aaa;font-size:13px">No sessions yet — practice and log one!</p>'
+        ? '<p class="empty-state">No sessions yet — practice and log one!</p>'
         : [...sessions].reverse().slice(0, 20).map(s => `
           <div class="lick-session-row">
             <span class="lick-session-bpm">${s.bpm} BPM</span>
@@ -104,7 +104,7 @@ function renderLickDetail(lick) {
           </div>`).join('')}
     </div>
 
-    <div style="margin-top:20px">
+    <div class="lick-detail-cta">
       <button class="btn btn-primary" onclick="practiceLick('${lick.id}')">
         🎯 Practice Now — ${lastBpm} BPM
       </button>

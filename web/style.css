@@ -97,7 +97,8 @@ body {
 .btn:hover { opacity: 0.85; }
 .btn-primary { background: var(--primary); color: var(--text-inverse); }
 .btn-stop    { background: var(--danger-dark); color: var(--text-inverse); }
-.btn-ghost   { background: none; border: 1px solid var(--border-dim); color: var(--text-dim); }
+.btn-ghost        { background: none; border: 1px solid var(--border-dim); color: var(--text-dim); }
+.btn-ghost.danger { color: var(--danger); border-color: var(--danger-border); }
 .btn-sm      { padding: 4px 10px; font-size: 12px; }
 
 .field { display: flex; align-items: center; gap: 6px; }
@@ -281,6 +282,9 @@ input[type="number"] { width: 64px; text-align: center; }
 .sightread-wrap .beat-cell:hover { background: none; }
 .sightread-wrap .beat-cell .chord-name { font-size: 26px; cursor: default; }
 .sightread-wrap .beat-cell .chord-name:hover { color: var(--text); }
+
+/* Chord name input in control bars (Vamp, Jam) — Georgia, large, centred */
+.input-chord { font-family: Georgia, serif; font-size: 17px; font-weight: bold; text-align: center; width: 80px; }
 
 /* inline chord edit */
 .chord-inline-input {
@@ -673,6 +677,22 @@ input[type="number"] { width: 64px; text-align: center; }
 .fb-vibrato-prog-label { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
 
 
+/* ── Shared utility patterns ─────────────────────────────────────────────── */
+
+/* Empty-state and loading placeholder paragraphs */
+.empty-state { font-size: 13px; color: var(--text-faint); padding: 20px 0; }
+
+/* Inline "Saved" confirmation (hidden by default, shown by JS) */
+.saved-msg { font-size: 12px; color: var(--primary-lt); margin-left: 10px; display: none; }
+
+/* Preferences form */
+.prefs-form { display: flex; flex-direction: column; gap: 16px; max-width: 520px; }
+.prefs-form .field { gap: 12px; }
+.prefs-form .field > label { width: 160px; font-size: 13px; color: var(--text-dim); flex-shrink: 0; }
+
+/* Inline action buttons row (Edit/Delete, etc.) — used in card headers */
+.row-actions { display: flex; gap: 8px; align-items: center; }
+
 /* ── Page structure ─────────────────────────────────────────────────────── */
 
 /* Standard page-level header: title left, optional primary CTA right */
@@ -724,6 +744,8 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* Session list */
 .lick-sessions-header { margin-bottom: 8px; }
+.lick-sessions-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
+.lick-detail-cta { margin-top: 20px; }
 .lick-session-row {
   display: flex; gap: 16px; padding: 6px 0;
   border-bottom: 1px solid var(--bg-faint); font-size: 13px;

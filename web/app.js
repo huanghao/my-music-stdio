@@ -492,8 +492,7 @@ function renderVampControls() {
     <div class="controls-bar">
       <div class="controls-row">
         <div class="field"><label>Chord</label>
-          <input type="text" id="vamp-chord" value="${htmlEsc(state.vamp.chord)}"
-            style="width:80px;font-family:Georgia,serif;font-size:17px;font-weight:700;text-align:center"
+          <input type="text" id="vamp-chord" class="input-chord" value="${htmlEsc(state.vamp.chord)}"
             autocomplete="off" spellcheck="false" oninput="state.vamp.chord=this.value.trim(); saveLastSelection()">
         </div>
         <div class="field"><label>Style</label>
@@ -835,7 +834,7 @@ async function loadSongs() {
   const songs = await api('/api/songs');
   const el = document.getElementById('songs-list');
   if (!songs.length) {
-    el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">No songs yet. Create one!</p>';
+    el.innerHTML = '<p class="empty-state">No songs yet. Create one!</p>';
     return;
   }
   el.innerHTML = songs.map(s => {
@@ -852,7 +851,7 @@ async function loadSongs() {
         <span class="song-status ${s.generated ? 'ready' : 'draft'}">${s.generated ? 'Generated' : 'Draft'}</span>
         <div class="song-card-actions">
           <button class="btn btn-ghost btn-sm" onclick="duplicateSong(event,'${s.id}')">Duplicate</button>
-          <button class="btn btn-ghost btn-sm" style="color:#c04040" onclick="deleteSong(event,'${s.id}')">×</button>
+          <button class="btn btn-ghost btn-sm danger" onclick="deleteSong(event,'${s.id}')">×</button>
         </div>
       </div>
     `;
@@ -914,7 +913,7 @@ async function openEditor(id) {
 function renderEditorControls() {
   const s = state.editor.song;
   document.getElementById('editor-controls').innerHTML = `
-    <div style="margin-bottom:8px;">
+    <div class="page-back-row">
       <button class="btn btn-ghost btn-sm" onclick="showPage('songs')">← Songs</button>
     </div>
     <div class="controls-bar">
@@ -1026,7 +1025,7 @@ async function loadSightReadPicker() {
   const songs = await api('/api/songs');
   const el = document.getElementById('sightread-song-list');
   if (!songs.length) {
-    el.innerHTML = '<p style="color:#aaa;font-size:13px;padding:20px 0">No songs yet — create one on the Songs page first.</p>';
+    el.innerHTML = '<p class="empty-state">No songs yet — create one on the Songs page first.</p>';
     return;
   }
   el.innerHTML = songs.map(s => `
@@ -1057,7 +1056,7 @@ function backToSightReadPicker() {
 function renderSightReadControls() {
   const s = state.sightread.song;
   document.getElementById('sightread-controls').innerHTML = `
-    <div style="margin-bottom:8px;">
+    <div class="page-back-row">
       <button class="btn btn-ghost btn-sm" onclick="backToSightReadPicker()">← Choose another song</button>
     </div>
     <div class="controls-bar">
@@ -1178,26 +1177,26 @@ async function renderPrefsForm() {
   }).join('');
 
   document.getElementById('prefs-form').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:16px;max-width:520px;">
-      <div class="field" style="gap:12px;">
-        <label style="width:160px;font-size:13px;color:#555;">Bars per row</label>
+    <div class="prefs-form">
+      <div class="field">
+        <label>Bars per row</label>
         <select id="pref-bars-per-row">
           <option value="2" ${p.bars_per_row==2?'selected':''}>2</option>
           <option value="4" ${p.bars_per_row==4?'selected':''}>4</option>
           <option value="8" ${p.bars_per_row==8?'selected':''}>8</option>
         </select>
       </div>
-      <div class="field" style="gap:12px;">
-        <label style="width:160px;font-size:13px;color:#555;">SoundFont</label>
+      <div class="field">
+        <label>SoundFont</label>
         <select id="pref-sf" style="flex:1" onchange="applyPrefs()">${sfOptions}</select>
       </div>
-      <div class="field" style="gap:12px;">
-        <label style="width:160px;font-size:13px;color:#555;">Songs directory</label>
+      <div class="field">
+        <label>Songs directory</label>
         <input type="text" id="pref-songs-dir" value="${p.songs_dir}" style="flex:1">
       </div>
       <div>
         <button class="btn btn-primary" onclick="savePrefs()">Save</button>
-        <span id="prefs-saved-msg" style="font-size:12px;color:#7a9a7a;margin-left:10px;display:none">Saved</span>
+        <span id="prefs-saved-msg" class="saved-msg">Saved</span>
       </div>
     </div>
   `;

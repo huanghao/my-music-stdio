@@ -107,6 +107,35 @@ body {
 .btn-ghost.danger { color: var(--danger); border-color: var(--danger-border); }
 .btn-sm      { padding: 4px 10px; font-size: 12px; }
 
+/* Semantic core-action buttons — one shape+colour vocabulary across the app:
+     .btn-play    green  ▶  start audio playback (metronome / backing / replay)
+     .btn-listen  red    ●  start the microphone ("Start Listening")
+     .btn-stop    red    ■  stop whatever is currently running
+   The glyph is baked into the class via ::before, so markup only carries the
+   class — no literal icon character to drift out of sync. */
+.btn-play, .btn-listen, .btn-stop { display: inline-flex; align-items: center; gap: 6px; }
+.btn-play::before, .btn-listen::before, .btn-stop::before { font-size: 0.85em; line-height: 1; }
+.btn-play::before   { content: "\25B6"; }  /* ▶ triangle */
+.btn-listen::before { content: "\25CF"; }  /* ● record dot */
+.btn-stop::before   { content: "\25A0"; }  /* ■ square */
+.btn-play   { background: var(--primary); color: var(--text-inverse); }
+.btn-listen { background: var(--danger); color: var(--text-inverse); }
+
+/* App-wide transport bar — fixed at the bottom of the window, hosts the current
+   page's primary action so it's always in the same reachable spot. */
+.transport-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  display: none; align-items: center; justify-content: center; gap: 18px;
+  padding: 10px 20px;
+  background: var(--bg-card); border-top: 1px solid var(--border);
+  box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.07);
+}
+.transport-bar.active { display: flex; }
+.transport-label { font-size: 13px; color: var(--text-dim); font-weight: 500; }
+.transport-actions { display: flex; align-items: center; gap: 10px; }
+/* Reserve room so page content can scroll clear of the fixed bar. */
+body.has-transport { padding-bottom: 68px; }
+
 .field { display: flex; align-items: center; gap: 6px; }
 .field label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 input[type="text"], input[type="number"], select, textarea {
@@ -138,21 +167,7 @@ input[type="number"] { width: 64px; text-align: center; }
   display: flex; align-items: center; gap: 10px;
 }
 .controls-row + .controls-row { margin-top: 8px; border-top: 1px solid var(--bg-faint); padding-top: 8px; }
-.controls-bar .divider { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
 .duration-hint { font-size: 12px; color: var(--primary-lt); white-space: nowrap; }
-
-/* Icon-only playback buttons */
-.btn-icon {
-  width: 36px; height: 36px; border-radius: 50%; border: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; cursor: pointer; transition: background 0.1s;
-  flex-shrink: 0;
-}
-.btn-icon:hover { opacity: 0.85; }
-.btn-icon-play   { background: var(--primary); color: var(--text-inverse); }
-.btn-icon-stop   { background: var(--danger-dark); color: var(--text-inverse); }
-.btn-icon-pause  { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border-dim); }
-.btn-icon-resume { background: var(--bg-raised); color: var(--text-dim); border: 1px solid var(--border-dim); }
 
 /* Playback progress panel */
 .playback-panel {
@@ -408,6 +423,15 @@ input[type="number"] { width: 64px; text-align: center; }
   gap: 16px; align-items: center; font-size: 12px; color: var(--text-dim);
 }
 .fb-device-bar:empty { display: none; }
+
+/* Consistent "Reset stats" placement — a header row above every drill's
+   accuracy table, so the reset control always sits in the same spot rather than
+   being tucked into each drill's options row. */
+.fb-stats-table-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin-bottom: 6px;
+}
+.fb-stats-table-head > span { font-size: 12px; color: var(--text-muted); font-weight: 600; }
 
 .fb-stats {
   display: flex; flex-wrap: wrap; gap: 8px 24px; margin-bottom: 12px; font-size: 12px; color: var(--text-muted);

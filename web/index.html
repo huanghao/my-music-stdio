@@ -190,8 +190,6 @@
     <div class="fb-pitch-meter" id="fb-pitch-meter"></div>
     <div id="fb-pitch-board"></div>
     <div class="fb-caged-answer">
-      <button class="btn btn-primary btn-sm" id="fb-pitch-start-btn" onclick="fbPitchStart()">Start Listening</button>
-      <button class="btn btn-ghost btn-sm" id="fb-pitch-stop-btn" onclick="fbPitchStop()" style="display:none">Stop</button>
       <button class="btn btn-ghost btn-sm" onclick="fbPitchNewNote()">New Note</button>
     </div>
     <div class="fb-feedback" id="fb-pitch-feedback"></div>
@@ -204,8 +202,6 @@
     <div class="fb-tuner-strings" id="fb-tuner-strings"></div>
     <div class="fb-pitch-meter" id="fb-tuner-meter"></div>
     <div class="fb-caged-answer">
-      <button class="btn btn-primary btn-sm" id="fb-tuner-start-btn" onclick="fbTunerStart()">Start Listening</button>
-      <button class="btn btn-ghost btn-sm" id="fb-tuner-stop-btn" onclick="fbTunerStop()" style="display:none">Stop</button>
       <button class="btn btn-ghost btn-sm" onclick="fbTunerReset()">Reset</button>
     </div>
     <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
@@ -222,8 +218,6 @@
       <div class="fb-chord-formula" id="fb-chord-formula"></div>
       <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
       <div class="fb-caged-answer">
-        <button class="btn btn-primary btn-sm" id="fb-chord-start-btn" onclick="fbChordStart()">Start Listening</button>
-        <button class="btn btn-ghost btn-sm" id="fb-chord-stop-btn" onclick="fbChordStop()" style="display:none">Stop</button>
         <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
         <button class="btn btn-ghost btn-sm" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()" style="display:none">🔊 Preview progression</button>
       </div>
@@ -273,7 +267,7 @@
       <div class="fb-prompt" id="fb-ear-two-prompt"></div>
       <div id="fb-ear-two-diagram"></div>
       <div class="fb-caged-answer">
-        <button class="btn btn-primary btn-sm" onclick="fbEarPlayCurrent('two')">▶ Play</button>
+        <button class="btn btn-play btn-sm" onclick="fbEarPlayCurrent('two')">Play</button>
         <button class="btn btn-ghost btn-sm" onclick="fbEarPlayScaffold('two')" title="Play every scale step from the lower note up to the higher one">▶ Fill the gap</button>
         <button class="btn btn-ghost btn-sm" onclick="fbEarManualNext('two')">Next →</button>
       </div>
@@ -286,7 +280,7 @@
       <div class="fb-prompt" id="fb-ear-three-prompt"></div>
       <div id="fb-ear-three-diagram"></div>
       <div class="fb-caged-answer">
-        <button class="btn btn-primary btn-sm" onclick="fbEarPlayCurrent('three')">▶ Play</button>
+        <button class="btn btn-play btn-sm" onclick="fbEarPlayCurrent('three')">Play</button>
         <button class="btn btn-ghost btn-sm" onclick="fbEarPlayScaffold('three')" title="Play every scale step from the lowest note up to the highest one">▶ Fill the gap</button>
         <button class="btn btn-ghost btn-sm" onclick="fbEarManualNext('three')">Next →</button>
       </div>
@@ -302,11 +296,6 @@
       <button class="fb-subtab"        data-bendmode="vibrato" onclick="fbBendSetSubMode('vibrato')">揉弦 Vibrato</button>
     </div>
 
-    <!-- shared mic start/stop -->
-    <div class="fb-caged-answer">
-      <button class="btn btn-primary btn-sm" id="fb-bend-start-btn" onclick="fbBendMicStart()">Start Listening</button>
-      <button class="btn btn-ghost btn-sm"   id="fb-bend-stop-btn"  onclick="fbBendMicStop()" style="display:none">Stop</button>
-    </div>
 
     <!-- Bending panel -->
     <div id="fb-bend-bend-panel">
@@ -384,8 +373,6 @@
   </div>
 
   <div class="st-controls-row">
-    <button class="btn btn-primary btn-sm" id="st-start-btn" onclick="stStart()">▶ Start</button>
-    <button class="btn btn-stop btn-sm" id="st-stop-btn" onclick="stStop()" style="display:none">■ Stop</button>
     <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump toward target (+step)</button>
     <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
   </div>
@@ -456,6 +443,10 @@
     </div>
   </div>
 </div>
+
+<!-- App-wide transport bar: the current page's primary action, pinned to the
+     bottom so it's always reachable and never scrolls away. Filled by app.js. -->
+<div id="transport-bar" class="transport-bar"></div>
 
 <script src="vendor/svguitar.umd.js"></script>
 <script src="fretboard.js"></script>

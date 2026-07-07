@@ -127,6 +127,7 @@ async function init() {
   if (_connOk) await loadApp();
   const savedPage = localStorage.getItem(CURRENT_PAGE_KEY);
   if (savedPage && NAV_PAGES.includes(savedPage) && savedPage !== 'vamp') showPage(savedPage);
+  else updateTransportForPage('vamp'); // default page skips showPage — register its transport directly
 }
 
 // Stop polling when the tab is hidden; resume when it becomes visible again.
@@ -162,6 +163,7 @@ function showPage(name) {
   if (name === 'fretboard') initFretboardPage();
   if (name === 'sightread') loadSightReadPicker();
   if (name === 'speed')     { initSpeedPage(); renderActiveLickBanner(); }
+  updateTransportForPage(name);  // point the bottom transport bar at this page's action
 }
 
 // ── API helper ──
@@ -514,12 +516,6 @@ function renderVampControls() {
           <span class="duration-hint">min</span>
         </div>
       </div>
-      <div class="controls-row">
-        <button class="btn-icon btn-icon-play"   id="vamp-play-btn"   onclick="vampPlay()"   title="Play">▶</button>
-        <button class="btn-icon btn-icon-stop"   id="vamp-stop-btn"   onclick="vampStop()"   title="Stop"   style="display:none">⏹</button>
-        <button class="btn-icon btn-icon-pause"  id="vamp-pause-btn"  onclick="vampPause()"  title="Pause"  style="display:none">⏸</button>
-        <button class="btn-icon btn-icon-resume" id="vamp-resume-btn" onclick="vampResume()" title="Resume" style="display:none">▶</button>
-      </div>
     </div>
   `;
   // Duration-as-source-of-truth would clobber a restored `state.vamp.loops`
@@ -603,11 +599,6 @@ function renderJamControls() {
         </div>
       </div>
       <div class="controls-row">
-        <button class="btn-icon btn-icon-play"   id="jam-play-btn"   onclick="jamPlay()"   title="Play">▶</button>
-        <button class="btn-icon btn-icon-stop"   id="jam-stop-btn"   onclick="jamStop()"   title="Stop"   style="display:none">⏹</button>
-        <button class="btn-icon btn-icon-pause"  id="jam-pause-btn"  onclick="jamPause()"  title="Pause"  style="display:none">⏸</button>
-        <button class="btn-icon btn-icon-resume" id="jam-resume-btn" onclick="jamResume()" title="Resume" style="display:none">▶</button>
-        <div class="divider"></div>
         <button class="btn btn-ghost btn-sm" onclick="jamSaveAs()">Save as Song…</button>
       </div>
     </div>
@@ -680,16 +671,83 @@ async function liveSetBpm(val) {
   try { await api('/api/bpm', 'POST', { bpm }); } catch(_) {}
 }
 
+// ── App-wide transport bar (fixed at the bottom of the window) ─────────────
+// Every page's primary action — Play/Pause/Stop for the backing-track pages,
+// Start Listening/Stop for the mic drills — lives here instead of being
+// scattered into each page. Exactly one transport is active at a time:
+// whichever the current page registers. The bar renders itself from a single
+// state, so pages only have to (a) register their handlers and (b) report
+// state changes through the same setPlaybackUI/setTransportState funnel they
+// already used.
+//
+//   kind 'playback'  ▶ Play → ⏸ Pause / ⏹ Stop  (pause/resume optional)
+//   kind 'listen'    ● Start Listening → ⏹ Stop
+let _transport = null;          // { kind, label, play, stop, pause, resume }
+let _transportState = 'stopped';// 'stopped' | 'playing' | 'paused' | 'listening'
+
+function registerTransport(t) {
+  _transport = t;
+  _transportState = 'stopped';
+  renderTransportBar();
+}
+function clearTransport() {
+  _transport = null;
+  renderTransportBar();
+}
+function setTransportState(s) {
+  _transportState = s;
+  renderTransportBar();
+}
+function renderTransportBar() {
+  const bar = document.getElementById('transport-bar');
+  if (!bar) return;
+  document.body.classList.toggle('has-transport', !!_transport);
+  if (!_transport) { bar.classList.remove('active'); bar.innerHTML = ''; return; }
+  bar.classList.add('active');
+  let btns;
+  if (_transport.kind === 'listen') {
+    btns = _transportState === 'listening'
+      ? `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`
+      : `<button class="btn btn-listen" onclick="transportPlay()">Start Listening</button>`;
+  } else if (_transportState === 'playing') {
+    btns = (_transport.pause ? `<button class="btn btn-ghost" onclick="transportPause()">⏸ Pause</button>` : '') +
+      `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`;
+  } else if (_transportState === 'paused') {
+    btns = `<button class="btn btn-play" onclick="transportResume()">Resume</button>` +
+      `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`;
+  } else {
+    btns = `<button class="btn btn-play" onclick="transportPlay()">Play</button>`;
+  }
+  const label = _transport.label ? `<span class="transport-label">${htmlEsc(_transport.label)}</span>` : '';
+  bar.innerHTML = `${label}<span class="transport-actions">${btns}</span>`;
+}
+function transportPlay()   { _transport?.play?.(); }
+function transportStop()   { _transport?.stop?.(); }
+function transportPause()  { _transport?.pause?.(); }
+function transportResume() { _transport?.resume?.(); }
+// Debounce the start action — a mic Start Listening is async, so a fast double
+// click could otherwise fire two starts before the bar re-renders to Stop.
+transportPlay = guarded(transportPlay);
+
+// Registers the right transport for a page (called from showPage, and directly
+// from openEditor since the editor is opened without going through showPage).
+function updateTransportForPage(name) {
+  switch (name) {
+    case 'vamp':      registerTransport({ kind: 'playback', label: 'Vamp',          play: vampPlay,      stop: vampStop,      pause: vampPause,      resume: vampResume }); break;
+    case 'jam':       registerTransport({ kind: 'playback', label: 'Jam',           play: jamPlay,       stop: jamStop,       pause: jamPause,       resume: jamResume }); break;
+    case 'editor':    registerTransport({ kind: 'playback', label: 'Song Editor',   play: editorPlay,    stop: editorStop,    pause: editorPause,    resume: editorResume }); break;
+    case 'sightread': registerTransport({ kind: 'playback', label: 'Sight Read',    play: sightReadPlay, stop: sightReadStop, pause: sightReadPause, resume: sightReadResume }); break;
+    case 'speed':     registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart,       stop: stStop }); break;
+    case 'fretboard': fbRenderControlAction(); break; // fretboard registers per active sub-mode
+    default:          clearTransport();
+  }
+}
+
 function setPlaybackUI(prefix, state_) {
-  const play    = document.getElementById(`${prefix}-play-btn`);
-  const stop    = document.getElementById(`${prefix}-stop-btn`);
-  const pause   = document.getElementById(`${prefix}-pause-btn`);
-  const resume  = document.getElementById(`${prefix}-resume-btn`);
-  if (!play) return;
-  play.style.display   = state_ === 'stopped' ? '' : 'none';
-  stop.style.display   = state_ !== 'stopped' ? '' : 'none';
-  pause.style.display  = state_ === 'playing'  ? '' : 'none';
-  resume.style.display = state_ === 'paused'   ? '' : 'none';
+  // The transport buttons themselves now live in the shared bottom bar; mirror
+  // the state to it (this prefix is always the active page's, hence the active
+  // transport).
+  setTransportState(state_);
 
   // playback panel state
   const panel = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-playback`);
@@ -908,6 +966,7 @@ async function openEditor(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-editor').classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  updateTransportForPage('editor');  // opened outside showPage, so register here
 }
 
 function renderEditorControls() {
@@ -943,11 +1002,6 @@ function renderEditorControls() {
         </div>
       </div>
       <div class="controls-row">
-        <button class="btn-icon btn-icon-play"   id="ed-play-btn"   onclick="editorPlay()"   title="Generate &amp; Play">▶</button>
-        <button class="btn-icon btn-icon-stop"   id="ed-stop-btn"   onclick="editorStop()"   title="Stop"   style="display:none">⏹</button>
-        <button class="btn-icon btn-icon-pause"  id="ed-pause-btn"  onclick="editorPause()"  title="Pause"  style="display:none">⏸</button>
-        <button class="btn-icon btn-icon-resume" id="ed-resume-btn" onclick="editorResume()" title="Resume" style="display:none">▶</button>
-        <div class="divider"></div>
         <button class="btn btn-ghost btn-sm" onclick="saveSong()">Save</button>
       </div>
     </div>
@@ -1074,12 +1128,6 @@ function renderSightReadControls() {
           <input type="number" id="sightread-bpm" value="${s.bpm}" min="40" max="240"
             oninput="liveSetBpm(this.value)">
         </div>
-      </div>
-      <div class="controls-row">
-        <button class="btn-icon btn-icon-play"   id="sightread-play-btn"   onclick="sightReadPlay()"   title="Play">▶</button>
-        <button class="btn-icon btn-icon-stop"   id="sightread-stop-btn"   onclick="sightReadStop()"   title="Stop"   style="display:none">⏹</button>
-        <button class="btn-icon btn-icon-pause"  id="sightread-pause-btn"  onclick="sightReadPause()"  title="Pause"  style="display:none">⏸</button>
-        <button class="btn-icon btn-icon-resume" id="sightread-resume-btn" onclick="sightReadResume()" title="Resume" style="display:none">▶</button>
       </div>
     </div>
   `;

@@ -200,8 +200,7 @@ function stStart() {
   stState.barsCompletedAtCurrentBpm = 0;
   stState.nextTickTime = stState.audioCtx.currentTime + 0.05;
   stState.running = true;
-  document.getElementById('st-start-btn').style.display = 'none';
-  document.getElementById('st-stop-btn').style.display = '';
+  if (typeof setTransportState === 'function') setTransportState('playing');
   stScheduler();
   stState.timerId = setInterval(stScheduler, ST_LOOKAHEAD_MS);
   stUpdateDisplay();
@@ -212,8 +211,7 @@ function stStop() {
   stState.running = false;
   clearInterval(stState.timerId);
   stState.timerId = null;
-  document.getElementById('st-start-btn').style.display = '';
-  document.getElementById('st-stop-btn').style.display = 'none';
+  if (typeof setTransportState === 'function') setTransportState('stopped');
   stFlashBeat(-1, false);
   stUpdateDisplay();
 }

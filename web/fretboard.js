@@ -152,10 +152,6 @@ function initFretboardPage() {
 function fbShowMode(mode) {
   if (fbMic.listening) {
     fbMicStop();
-    fbSyncMicButtons('pitch');
-    fbSyncMicButtons('tuner');
-    fbSyncMicButtons('chord');
-    fbSyncMicButtons('bend');
     document.getElementById('fb-pitch-meter').innerHTML = '';
     document.getElementById('fb-tuner-meter').innerHTML = '';
     fbRenderChroma(new Array(12).fill(0), null);
@@ -164,6 +160,7 @@ function fbShowMode(mode) {
   document.querySelectorAll('.fb-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('fb-' + mode).classList.add('active');
   fbState.activeMode = mode;
+  fbRenderControlAction();
   fbPrefsSave();
 }
 
@@ -447,6 +444,19 @@ function fbNotesLoadStats() {
 function fbNotesSaveStats() {
   localStorage.setItem(FB_NOTES_STATS_KEY, JSON.stringify(fbState.notes.stats));
 }
+function fbNotesResetStats() {
+  fbState.notes.stats = {};
+  fbNotesSaveStats();
+  fbRenderNotesStatsTable();
+}
+
+// A consistent header above each drill's accuracy table — same title/reset
+// layout everywhere, so "Reset stats" always lives in one predictable spot
+// instead of being scattered into each drill's options row.
+function fbStatsTableHead(title, resetFn) {
+  return `<div class="fb-stats-table-head"><span>${title}</span>` +
+    `<button class="btn btn-ghost btn-sm danger" onclick="${resetFn}()">Reset stats</button></div>`;
+}
 function fbRenderNotesStatsTable() {
   const el = document.getElementById('fb-notes-stats-table');
   if (!el) return;
@@ -462,7 +472,7 @@ function fbRenderNotesStatsTable() {
     el.innerHTML = '<span class="empty-state" style="padding:8px 0">No attempts yet.</span>';
     return;
   }
-  el.innerHTML = `
+  el.innerHTML = fbStatsTableHead('Per-note accuracy', 'fbNotesResetStats') + `
     <table class="fb-stats-table">
       <tr><th>Note</th><th>Tries</th><th>Accuracy</th></tr>
       ${rows.map(r => `<tr><td>${r.n}</td><td>${r.presented}</td><td>${r.acc}%</td></tr>`).join('')}
@@ -1680,10 +1690,42 @@ async function fbMicDeviceChange(deviceId) {
   }
 }
 
-function fbSyncMicButtons(prefix) {
-  const isOn = fbMic.listening && fbMic.owner === prefix;
-  document.getElementById(`fb-${prefix}-start-btn`).style.display = isOn ? 'none' : '';
-  document.getElementById(`fb-${prefix}-stop-btn`).style.display = isOn ? '' : 'none';
+// The four mic drills (Pitch / Tuner / Chord / Bend) no longer own an inline
+// start/stop pair — their Start Listening / Stop toggle lives in the app-wide
+// transport bar (fixed at the bottom, defined in app.js). Their start/stop
+// functions still call fbSyncMicButtons() after toggling, so we keep the name
+// and just push the listening state to that shared bar.
+function fbSyncMicButtons() {
+  if (typeof setTransportState === 'function') setTransportState(fbMic.listening ? 'listening' : 'stopped');
+}
+
+// Start/stop handlers for each mic drill. Functions are hoisted, so referencing
+// them here (only ever called lazily) is safe despite definition order.
+function fbMicDrillHandlers(mode) {
+  switch (mode) {
+    case 'pitch': return { start: fbPitchStart,   stop: fbPitchStop };
+    case 'tuner': return { start: fbTunerStart,   stop: fbTunerStop };
+    case 'chord': return { start: fbChordStart,   stop: fbChordStop };
+    case 'bend':  return { start: fbBendMicStart, stop: fbBendMicStop };
+    default:      return null;
+  }
+}
+
+// Registers whichever mic drill is on screen as the app's active transport (so
+// its Start Listening / Stop shows in the bottom bar), or clears the bar on
+// non-mic modes and other pages. Called on page- and sub-mode switches.
+const FB_MIC_DRILL_LABELS = { pitch: 'Pitch Match', tuner: 'Tuner', chord: 'Chord Match', bend: 'Bend & Vibrato' };
+function fbRenderControlAction() {
+  if (typeof registerTransport !== 'function') return; // app.js not loaded (e.g. unit tests)
+  const onFretboard = document.getElementById('page-fretboard')?.classList.contains('active');
+  const handlers = onFretboard ? fbMicDrillHandlers(fbState.activeMode) : null;
+  if (!handlers) { clearTransport(); return; }
+  registerTransport({
+    kind: 'listen', label: FB_MIC_DRILL_LABELS[fbState.activeMode],
+    play: handlers.start, stop: handlers.stop,
+  });
+  // reflect the live listening state (e.g. re-registered mid-session on a device change)
+  setTransportState(fbMic.listening && fbMic.owner === fbState.activeMode ? 'listening' : 'stopped');
 }
 
 // ── Pitch Match drill (mic-based ear training) ──
@@ -1742,7 +1784,6 @@ function fbRenderPitchOptions() {
       onchange="fbState.pitch.showBoard=this.checked; fbPrefsSave(); fbRenderPitchBoard()"> Show fretboard diagram</label>
     <label style="margin-left:12px"><input type="checkbox" ${s.naturalsOnly ? 'checked' : ''}
       onchange="fbState.pitch.naturalsOnly=this.checked; fbPrefsSave()"> Naturals only (A-G, no #/b)</label>
-    <button class="btn btn-ghost btn-sm" onclick="fbPitchResetStats()">Reset stats</button>
   `;
 }
 
@@ -1861,7 +1902,7 @@ function fbRenderPitchStatsTable() {
     el.innerHTML = '<span style="color:#aaa;font-size:12px">No attempts yet — start listening and play some notes.</span>';
     return;
   }
-  el.innerHTML = `
+  el.innerHTML = fbStatsTableHead('Per-note accuracy', 'fbPitchResetStats') + `
     <table class="fb-stats-table">
       <tr><th>Note</th><th>Tries</th><th>Accuracy</th><th>Avg time</th><th>Wrong hits</th></tr>
       ${rows.map(r => `<tr><td>${r.n}</td><td>${r.presented}</td><td>${r.acc}%</td><td>${r.avg ?? '—'}s</td><td>${r.wrong}</td></tr>`).join('')}
@@ -2411,7 +2452,6 @@ function fbRenderChordOptions() {
         </label>
       </div>
     </div>
-    <button class="btn btn-ghost btn-sm" onclick="fbChordResetStats()">Reset stats</button>
   `;
   // indeterminate is JS-only, can't be expressed as an HTML attribute
   document.querySelectorAll('.fb-chord-group-cb').forEach(cb => {
@@ -2673,7 +2713,7 @@ function fbRenderChordStatsTable() {
     el.innerHTML = '<span style="color:#aaa;font-size:12px">No attempts yet — start listening and strum some chords.</span>';
     return;
   }
-  el.innerHTML = `
+  el.innerHTML = fbStatsTableHead('Per-chord accuracy', 'fbChordResetStats') + `
     <table class="fb-stats-table">
       <tr><th>Chord</th><th>Tries</th><th>Accuracy</th><th>Avg time</th><th>Wrong hits</th></tr>
       ${rows.map(r => `<tr><td>${r.label}</td><td>${r.presented}</td><td>${r.acc}%</td><td>${r.avg ?? '—'}s</td><td>${r.wrong}</td></tr>`).join('')}

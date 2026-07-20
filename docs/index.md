@@ -8,6 +8,8 @@
 
 - [和弦表示法调研](chord-symbol-notation-research.md)：流行/爵士和弦符号、iReal Pro 写法、罗马数字分析、Nashville Number System 和内部结构化建议。
 - [常见和弦进行分类调研](common-chord-progressions-research.md)：流行"四和弦"家族、Blues 12 小节变体、爵士 ii-V-I、小调/调式进行分类，以及给 Sight Read 练习库用的具体候选清单。
+- [和弦进行入门：是什么、为什么好听、怎么用](chord-progressions-guide.md)：和弦进行为什么这样排列背后的理论基础，也是 Chord Match 的 Progression 模式为什么选了这些和弦的解释。
+- [和声进阶：附属和弦、三全音代理、借用和弦，以及几种"替代 V"的手法](chromatic-harmony-and-substitutions.md)：附属和弦/三全音代理/借用和弦三者的区别，`4536251` 进行和五度圈的关系及为什么流行，V9sus4、ivm6 后门进行、"刹车和弦"分别是什么。
 - [CAGED 同把位级数进行练习 + 任意调级数快查方法](caged-positional-progression-practice.md)：用 G 大调 1-6-4-5 具体走一遍"同把位换形状"的横按品位，以及"看到一个小调秒答级数进行"的关系大小调快查法和拆解练习方法。
 - [MIDI 协议介绍](midi-format-research.md)：MIDI 消息、通道、字节结构、Standard MIDI File、General MIDI、MIDI 2.0、优缺点和相关标准。
 - [General MIDI 介绍](general-midi-research.md)：GM 的音色映射、鼓通道、复音能力和播放兼容意义。

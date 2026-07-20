@@ -22,8 +22,6 @@ const state = {
   styles: [],
   vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3 },
   jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
-  editor: { song: null, bars: [] },
-  sightread: { song: null, bars: [] },
   modal: { _onConfirm: null },
   playback: { polling: null },
   prefs: { bars_per_row: 4 },
@@ -118,10 +116,14 @@ async function loadApp() {
 
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
-const NAV_PAGES = ['vamp', 'jam', 'songs', 'licks', 'sightread', 'fretboard', 'speed', 'prefs'];
+const NAV_PAGES = ['vamp', 'jam', 'licks', 'fretboard', 'speed', 'songloop', 'prefs'];
 
 async function init() {
+  transportLoadPos();  // restore the floating pill's last position before anything registers a transport
+  initTransportDrag();
+  transportApplyPos(); // the panel is visible from the start now (it hosts the always-on practice timer)
   fbRenderDeviceBar(); // global mic/speaker pickers — no server dependency, so this works even if the backend is down
+  ptInit();            // practice timer — page-independent, always available
   await pingServer();
   setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();
@@ -133,7 +135,6 @@ async function init() {
 // Stop polling when the tab is hidden; resume when it becomes visible again.
 const _PAGE_PREFIX_MAP = {
   'page-vamp': 'vamp', 'page-jam': 'jam',
-  'page-editor': 'ed', 'page-sightread': 'sightread',
 };
 document.addEventListener('visibilitychange', function() {
   if (document.hidden) {
@@ -150,19 +151,37 @@ document.addEventListener('visibilitychange', function() {
 // ── Page nav ──
 function showPage(name) {
   if (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active')) fbLeavePage();
-  if (name !== 'speed' && document.getElementById('page-speed')?.classList.contains('active')) stStop();
+  // The metronome panel (#st-panel) can currently be hosted on either the
+  // standalone Speed Trainer page or embedded in an actively-practiced
+  // Lick's detail page (see licksSyncPracticePanelHome) — stop it when
+  // leaving whichever one is currently hosting it.
+  const leavingSpeedPanel = document.getElementById('page-speed')?.classList.contains('active')
+    || (document.getElementById('page-lick-detail')?.classList.contains('active')
+        && typeof licksState !== 'undefined' && licksState.activeLick);
+  if (name !== 'speed' && leavingSpeedPanel) {
+    stStop();
+    // Navigating away (to anywhere but the standalone Speed Trainer page,
+    // which keeps hosting the same practice — see licksSyncPracticePanelHome)
+    // is the "I'm done" signal now that there's no manual Stop button:
+    // auto-log and clear the active lick with zero clicks required.
+    if (typeof licksState !== 'undefined' && licksState.activeLick && typeof licksEndPractice === 'function') {
+      licksEndPractice();
+    }
+  }
   localStorage.setItem(CURRENT_PAGE_KEY, name);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.page === name);
   });
-  if (name === 'songs')     loadSongs();
   if (name === 'licks')     loadLicks();
   if (name === 'prefs')     renderPrefsForm();
   if (name === 'fretboard') initFretboardPage();
-  if (name === 'sightread') loadSightReadPicker();
   if (name === 'speed')     { initSpeedPage(); renderActiveLickBanner(); }
+  if (name === 'songloop')  initSongLoopPage();
+  // Move the metronome panel back to its standalone-page home if it was
+  // embedded in a Lick detail page we're now navigating away from.
+  if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();
   updateTransportForPage(name);  // point the bottom transport bar at this page's action
 }
 
@@ -400,14 +419,14 @@ document.addEventListener('click', hideCtxMenu);
 // ── Chord modal ──
 const COMMON_CHORDS = ['C','Am','F','G','Dm','Em','G7','Cmaj7','Am7','Fmaj7','A','D','E','Bm','A7','D7','E7'];
 
-function openModal(title, initialValue, onConfirm) {
+function openModal(title, initialValue, onConfirm, showChordSuggestions = true) {
   state.modal._onConfirm = onConfirm;
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-input').value = initialValue;
   const sugg = document.getElementById('modal-suggestions');
-  sugg.innerHTML = COMMON_CHORDS.map(c =>
+  sugg.innerHTML = showChordSuggestions ? COMMON_CHORDS.map(c =>
     `<span class="suggestion" onclick="document.getElementById('modal-input').value='${c}'">${c}</span>`
-  ).join('');
+  ).join('') : '';
   document.getElementById('modal-overlay').classList.add('show');
   setTimeout(() => document.getElementById('modal-input').focus(), 50);
 }
@@ -598,9 +617,6 @@ function renderJamControls() {
           <span class="duration-hint">min</span>
         </div>
       </div>
-      <div class="controls-row">
-        <button class="btn btn-ghost btn-sm" onclick="jamSaveAs()">Save as Song…</button>
-      </div>
     </div>
   `;
   syncFromLoops('jam');
@@ -627,12 +643,11 @@ function applyStyle(styleId, context) {
 // ── Loops / Duration shared helpers ──
 
 function secPerLoop(prefix) {
-  const bpmId = { jam: 'jam-bpm', ed: 'ed-bpm', vamp: 'vamp-bpm' }[prefix] || `${prefix}-bpm`;
+  const bpmId = { jam: 'jam-bpm', vamp: 'vamp-bpm' }[prefix] || `${prefix}-bpm`;
   const bpm = parseInt(document.getElementById(bpmId)?.value) || 120;
   let bars;
   if (prefix === 'vamp') bars = 1;
-  else if (prefix === 'jam') bars = state.jam.bars.length;
-  else bars = state.editor.bars.length;
+  else bars = state.jam.bars.length;
   return Math.max(1, bars) * 4 * 60 / bpm;
 }
 
@@ -684,6 +699,8 @@ async function liveSetBpm(val) {
 //   kind 'listen'    ● Start Listening → ⏹ Stop
 let _transport = null;          // { kind, label, play, stop, pause, resume }
 let _transportState = 'stopped';// 'stopped' | 'playing' | 'paused' | 'listening'
+const TRANSPORT_POS_KEY = 'transport_pos';
+let _transportPos = null;       // { x, y } persisted pill position, or null = default spot
 
 function registerTransport(t) {
   _transport = t;
@@ -699,11 +716,12 @@ function setTransportState(s) {
   renderTransportBar();
 }
 function renderTransportBar() {
-  const bar = document.getElementById('transport-bar');
-  if (!bar) return;
-  document.body.classList.toggle('has-transport', !!_transport);
-  if (!_transport) { bar.classList.remove('active'); bar.innerHTML = ''; return; }
-  bar.classList.add('active');
+  const bodyEl = document.getElementById('transport-body');
+  if (!bodyEl) return;
+  // The panel itself is always visible now (it also hosts the practice
+  // timer, which works on every page) — an unregistered transport just
+  // means this row renders empty, not that the whole pill hides.
+  if (!_transport) { bodyEl.innerHTML = ''; return; }
   let btns;
   if (_transport.kind === 'listen') {
     btns = _transportState === 'listening'
@@ -719,7 +737,68 @@ function renderTransportBar() {
     btns = `<button class="btn btn-play" onclick="transportPlay()">Play</button>`;
   }
   const label = _transport.label ? `<span class="transport-label">${htmlEsc(_transport.label)}</span>` : '';
-  bar.innerHTML = `${label}<span class="transport-actions">${btns}</span>`;
+  bodyEl.innerHTML = `${label}<span class="transport-actions">${btns}</span>`;
+  transportApplyPos(); // content width just changed — re-clamp so it can't drift off-screen
+}
+
+// ── Floating pill: position persistence + drag ────────────────────────────
+function transportLoadPos() {
+  try {
+    const s = JSON.parse(localStorage.getItem(TRANSPORT_POS_KEY));
+    if (s && Number.isFinite(s.x) && Number.isFinite(s.y)) _transportPos = s;
+  } catch (_) { _transportPos = null; }
+}
+function transportApplyPos() {
+  const pill = document.getElementById('transport-pill');
+  if (!pill) return;
+  const w = pill.offsetWidth || 220, h = pill.offsetHeight || 44;
+  let x, y;
+  if (_transportPos) { x = _transportPos.x; y = _transportPos.y; }
+  // Default: bottom-right corner. The panel is always visible now (it hosts
+  // the practice timer even on pages with no registered transport), so it
+  // needs a default spot unlikely to collide with a page's own top-right
+  // header buttons (e.g. Licks/Songs' "+ New …") — bottom-right is where the
+  // standalone practice timer used to live, with no such conflicts observed.
+  else { x = window.innerWidth - w - 24; y = window.innerHeight - h - 24; }
+  x = Math.max(4, Math.min(window.innerWidth  - w - 4, x));
+  y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
+  pill.style.left = x + 'px'; pill.style.top = y + 'px';
+  pill.style.right = 'auto'; pill.style.bottom = 'auto';
+}
+function initTransportDrag() {
+  const pill = document.getElementById('transport-pill');
+  if (!pill) return;
+  // The whole pill is a drag surface (grip + label + padding, across both
+  // rows) — only actual buttons are excluded, so clicks on Play/Stop/preset
+  // buttons still register instead of starting a drag.
+  const onButtons = e => e.target.closest('button');
+  let sx, sy, ox, oy, dragging = false;
+  pill.addEventListener('pointerdown', e => {
+    if (onButtons(e)) return;
+    dragging = true; pill.classList.add('dragging');
+    const r = pill.getBoundingClientRect();
+    ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+    pill.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  pill.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    let x = ox + (e.clientX - sx), y = oy + (e.clientY - sy);
+    x = Math.max(4, Math.min(window.innerWidth  - pill.offsetWidth  - 4, x));
+    y = Math.max(4, Math.min(window.innerHeight - pill.offsetHeight - 4, y));
+    pill.style.left = x + 'px'; pill.style.top = y + 'px'; pill.style.right = 'auto'; pill.style.bottom = 'auto';
+  });
+  pill.addEventListener('pointerup', () => {
+    if (!dragging) return;
+    dragging = false; pill.classList.remove('dragging');
+    _transportPos = { x: parseInt(pill.style.left), y: parseInt(pill.style.top) };
+    localStorage.setItem(TRANSPORT_POS_KEY, JSON.stringify(_transportPos));
+  });
+  pill.addEventListener('dblclick', e => { // reset to the default spot
+    if (onButtons(e)) return;
+    _transportPos = null; localStorage.removeItem(TRANSPORT_POS_KEY); transportApplyPos();
+  });
+  // keep it on-screen if the window shrinks — the panel is always visible now
+  window.addEventListener('resize', () => transportApplyPos());
 }
 function transportPlay()   { _transport?.play?.(); }
 function transportStop()   { _transport?.stop?.(); }
@@ -729,15 +808,12 @@ function transportResume() { _transport?.resume?.(); }
 // click could otherwise fire two starts before the bar re-renders to Stop.
 transportPlay = guarded(transportPlay);
 
-// Registers the right transport for a page (called from showPage, and directly
-// from openEditor since the editor is opened without going through showPage).
 function updateTransportForPage(name) {
   switch (name) {
     case 'vamp':      registerTransport({ kind: 'playback', label: 'Vamp',          play: vampPlay,      stop: vampStop,      pause: vampPause,      resume: vampResume }); break;
     case 'jam':       registerTransport({ kind: 'playback', label: 'Jam',           play: jamPlay,       stop: jamStop,       pause: jamPause,       resume: jamResume }); break;
-    case 'editor':    registerTransport({ kind: 'playback', label: 'Song Editor',   play: editorPlay,    stop: editorStop,    pause: editorPause,    resume: editorResume }); break;
-    case 'sightread': registerTransport({ kind: 'playback', label: 'Sight Read',    play: sightReadPlay, stop: sightReadStop, pause: sightReadPause, resume: sightReadResume }); break;
     case 'speed':     registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart,       stop: stStop }); break;
+    case 'songloop':  registerTransport({ kind: 'playback', label: 'Song Loop',     play: slPlay,        stop: slStop }); break;
     case 'fretboard': fbRenderControlAction(); break; // fretboard registers per active sub-mode
     default:          clearTransport();
   }
@@ -750,14 +826,14 @@ function setPlaybackUI(prefix, state_) {
   setTransportState(state_);
 
   // playback panel state
-  const panel = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-playback`);
-  const stateEl = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-state`);
+  const panel = document.getElementById(`${prefix}-playback`);
+  const stateEl = document.getElementById(`${prefix}-state`);
   if (panel) panel.className = 'playback-panel' + (state_ === 'playing' ? ' playing' : '');
   if (stateEl) { stateEl.textContent = state_; stateEl.className = 'playback-state ' + state_; }
 
   if (state_ === 'stopped') {
-    const elapsed = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-elapsed`);
-    const loopVal = document.getElementById(`${prefix === 'ed' ? 'editor' : prefix}-loop-val`);
+    const elapsed = document.getElementById(`${prefix}-elapsed`);
+    const loopVal = document.getElementById(`${prefix}-loop-val`);
     if (elapsed) elapsed.textContent = '—';
     if (loopVal) loopVal.textContent = '—';
     clearBarHighlight();
@@ -786,7 +862,7 @@ function highlightBar(barIndex) {
 
 function startPolling(prefix) {
   stopPolling();
-  const panelPrefix = prefix === 'ed' ? 'editor' : prefix;
+  const panelPrefix = prefix;
   let failCount = 0;
   state.playback.polling = setInterval(async () => {
     try {
@@ -875,346 +951,6 @@ async function jamStop() {
   setStatus('Ready');
 }
 
-async function jamSaveAs() {
-  openModal('Song Title', 'New Song', async title => {
-    const song = { ...state.jam, title };
-    try {
-      await api('/api/songs', 'POST', song);
-      setStatus(`Saved: ${title}`);
-      showPage('songs');
-    } catch(e) { setStatus('Error: ' + e.message); }
-  });
-}
-
-// ── Songs page ──
-
-async function loadSongs() {
-  const songs = await api('/api/songs');
-  const el = document.getElementById('songs-list');
-  if (!songs.length) {
-    el.innerHTML = '<p class="empty-state">No songs yet. Create one!</p>';
-    return;
-  }
-  el.innerHTML = songs.map(s => {
-    const totalBars = (s.bars?.length || 0) * (s.loops || 1);
-    const sec = Math.round(totalBars * 4 * 60 / (s.bpm || 120));
-    const dur = `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
-    const ago = timeAgo(s.updated_at);
-    return `
-      <div class="song-card" onclick="openEditor('${s.id}')">
-        <div class="song-card-body">
-          <div class="song-card-title">${htmlEsc(s.title)}</div>
-          <div class="song-card-meta">${htmlEsc(s.key)} · ${htmlEsc(s.style)} · ${s.bpm} BPM &nbsp;·&nbsp; ${s.bars?.length||0} bars × ${s.loops||1} = ${dur} &nbsp;·&nbsp; ${ago}</div>
-        </div>
-        <span class="song-status ${s.generated ? 'ready' : 'draft'}">${s.generated ? 'Generated' : 'Draft'}</span>
-        <div class="song-card-actions">
-          <button class="btn btn-ghost btn-sm" onclick="duplicateSong(event,'${s.id}')">Duplicate</button>
-          <button class="btn btn-ghost btn-sm danger" onclick="deleteSong(event,'${s.id}')">×</button>
-        </div>
-      </div>
-    `;
-  }).join('');
-}
-
-function timeAgo(iso) {
-  if (!iso) return '';
-  const diff = (Date.now() - new Date(iso)) / 1000;
-  if (diff < 60) return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  return `${Math.floor(diff/86400)}d ago`;
-}
-
-async function newSong() {
-  openModal('Song Title', 'New Song', async title => {
-    const s = state.styles.find(x => x.id === 'pop');
-    const song = {
-      title, key: s.default_key, bpm: s.bpm_default, style: s.id,
-      time_signature: '4/4', loops: 4,
-      bars: s.default_progression.map(b => ({ chords: b.chords.map(c => ({...c})) })),
-    };
-    const r = await api('/api/songs', 'POST', song);
-    openEditor(r.id);
-  });
-}
-
-async function duplicateSong(e, id) {
-  e.stopPropagation();
-  const song = await api(`/api/songs/${id}`);
-  song.title = song.title + ' (copy)';
-  delete song.id;
-  await api('/api/songs', 'POST', song);
-  loadSongs();
-}
-
-async function deleteSong(e, id) {
-  e.stopPropagation();
-  if (!confirm('Delete this song?')) return;
-  await api(`/api/songs/${id}`, 'DELETE');
-  loadSongs();
-}
-
-// ── Song Editor ──
-
-async function openEditor(id) {
-  const song = await api(`/api/songs/${id}`);
-  state.editor.song = song;
-  state.editor.bars = song.bars.map(b => ({ chords: b.chords.map(c => ({...c})) }));
-  renderEditorControls();
-  renderEditorGenStatus();
-  renderEditorChart();
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-editor').classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  updateTransportForPage('editor');  // opened outside showPage, so register here
-}
-
-function renderEditorControls() {
-  const s = state.editor.song;
-  document.getElementById('editor-controls').innerHTML = `
-    <div class="page-back-row">
-      <button class="btn btn-ghost btn-sm" onclick="showPage('songs')">← Songs</button>
-    </div>
-    <div class="controls-bar">
-      <div class="controls-row">
-        <div class="field"><label>Title</label>
-          <input type="text" id="ed-title" value="${htmlEsc(s.title)}" style="width:150px">
-        </div>
-        <div class="field"><label>Key</label>
-          <select id="ed-key">${keyOptions(s.key)}</select>
-        </div>
-        <div class="field"><label>BPM</label>
-          <input type="number" id="ed-bpm" value="${s.bpm}" min="40" max="240" oninput="syncFromDuration('ed')">
-        </div>
-        <div class="field"><label>Style</label>
-          <select id="ed-style">
-            ${state.styles.map(st => `<option value="${st.id}" ${st.id===s.style?'selected':''}>${st.name}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field"><label>Loops</label>
-          <input type="number" id="ed-loops" value="${s.loops}" min="1" max="99" style="width:52px"
-            oninput="syncFromLoops('ed')">
-        </div>
-        <div class="field"><label>Duration</label>
-          <input type="number" id="ed-dur-min" value="${(s.loops * state.editor.bars.length * 4 * 60 / (s.bpm || 120) / 60).toFixed(1)}"
-            min="0.5" max="120" step="0.5" style="width:60px" oninput="syncFromDuration('ed')">
-          <span class="duration-hint">min</span>
-        </div>
-      </div>
-      <div class="controls-row">
-        <button class="btn btn-ghost btn-sm" onclick="saveSong()">Save</button>
-      </div>
-    </div>
-  `;
-  updateEditorDuration();
-}
-
-function renderEditorGenStatus() {
-  // no-op — status shown in playback-panel now
-}
-
-function renderEditorChart() {
-  const rerender = () => { renderEditorChart(); updateEditorDuration(); };
-  const h = makeChordHandlers(() => state.editor.bars, rerender);
-  renderChart(document.getElementById('editor-chart'), state.editor.bars,
-    h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
-}
-
-async function saveSong() {
-  const s = state.editor.song;
-  const updated = {
-    ...s,
-    title: document.getElementById('ed-title').value,
-    key: document.getElementById('ed-key').value,
-    bpm: parseInt(document.getElementById('ed-bpm').value),
-    style: document.getElementById('ed-style').value,
-    loops: getLoops('ed'),
-    bars: state.editor.bars,
-  };
-  await api(`/api/songs/${s.id}`, 'PUT', updated);
-  state.editor.song = { ...updated, id: s.id };
-  setStatus('Saved');
-}
-
-async function editorPlay() {
-  await saveSong();
-  const s = state.editor.song;
-  setPlaybackUI('ed', 'playing');
-  setStatus('Playing');
-  try {
-    await api('/api/play', 'POST', { ...s, bars: state.editor.bars });
-    state.editor.song.generated = true;
-    startPolling('ed');
-  } catch(e) { setStatus('Error: ' + e.message); editorStop(); }
-}
-
-async function editorPause() {
-  await api('/api/pause', 'POST');
-  setPlaybackUI('ed', 'paused');
-  setStatus('Paused');
-}
-
-async function editorResume() {
-  await api('/api/resume', 'POST');
-  setPlaybackUI('ed', 'playing');
-  setStatus('Playing');
-}
-
-async function editorStop() {
-  stopPolling();
-  await api('/api/stop', 'POST');
-  setPlaybackUI('ed', 'stopped');
-  setStatus('Ready');
-}
-
-// ── Sight Read page ──
-// Standalone nav page: pick a song from a picker list, then read-only chord
-// chart with no editing affordances, current bar highlighted (and scrolled
-// into view) in sync with playback — for reading/playing along rather than
-// building the song. Independent of the Songs/Editor flow.
-
-async function loadSightReadPicker() {
-  document.getElementById('sightread-view').style.display = 'none';
-  document.getElementById('sightread-picker').style.display = '';
-  const songs = await api('/api/songs');
-  const el = document.getElementById('sightread-song-list');
-  if (!songs.length) {
-    el.innerHTML = '<p class="empty-state">No songs yet — create one on the Songs page first.</p>';
-    return;
-  }
-  el.innerHTML = songs.map(s => `
-    <div class="song-card" onclick="openSightRead('${s.id}')">
-      <div class="song-card-body">
-        <div class="song-card-title">${htmlEsc(s.title)}</div>
-        <div class="song-card-meta">${htmlEsc(s.key)} · ${htmlEsc(s.style)} · ${s.bpm} BPM &nbsp;·&nbsp; ${s.bars?.length||0} bars × ${s.loops||1}</div>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function openSightRead(id) {
-  const song = await api(`/api/songs/${id}`);
-  state.sightread.song = song;
-  state.sightread.bars = song.bars;
-  renderSightReadControls();
-  renderSightReadChart();
-  document.getElementById('sightread-picker').style.display = 'none';
-  document.getElementById('sightread-view').style.display = '';
-}
-
-function backToSightReadPicker() {
-  sightReadStop();
-  loadSightReadPicker();
-}
-
-function renderSightReadControls() {
-  const s = state.sightread.song;
-  document.getElementById('sightread-controls').innerHTML = `
-    <div class="page-back-row">
-      <button class="btn btn-ghost btn-sm" onclick="backToSightReadPicker()">← Choose another song</button>
-    </div>
-    <div class="controls-bar">
-      <div class="controls-row">
-        <div class="field"><label>Title</label>
-          <div class="sightread-readonly">${htmlEsc(s.title)}</div>
-        </div>
-        <div class="field"><label>Key</label>
-          <div class="sightread-readonly">${htmlEsc(s.key)}</div>
-        </div>
-        <div class="field"><label>Style</label>
-          <div class="sightread-readonly">${htmlEsc(state.styles.find(st => st.id === s.style)?.name || s.style)}</div>
-        </div>
-        <div class="field"><label>BPM</label>
-          <input type="number" id="sightread-bpm" value="${s.bpm}" min="40" max="240"
-            oninput="liveSetBpm(this.value)">
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-// Deliberately not `renderChart()`: that renderer always attaches inline-edit,
-// insert and delete affordances (chord toolbar, "+" cells, "×" buttons) meant
-// for building a song. Sight reading is a read-only "just play along" view,
-// so this renders the same chart-row/chart-bar markup (highlightBar's
-// `.chart-bar` lookup and the shared CSS both work unmodified) without any
-// of that editing UI.
-function renderSightReadChart() {
-  const containerEl = document.getElementById('sightread-chart');
-  containerEl.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'chart-wrap sightread-wrap';
-  const bars = state.sightread.bars;
-  const BARS_PER_ROW = state.prefs.bars_per_row || 4;
-  const totalRows = Math.ceil(Math.max(bars.length, 1) / BARS_PER_ROW);
-
-  for (let rowStart = 0; rowStart < totalRows * BARS_PER_ROW; rowStart += BARS_PER_ROW) {
-    const row = document.createElement('div');
-    row.className = 'chart-row';
-    row.style.gridTemplateColumns = `32px repeat(${BARS_PER_ROW}, 1fr)`;
-
-    const tsig = document.createElement('div');
-    tsig.className = 'chart-timesig';
-    tsig.textContent = rowStart === 0 ? '4/4' : '';
-    row.appendChild(tsig);
-
-    for (let col = 0; col < BARS_PER_ROW; col++) {
-      const barIdx = rowStart + col;
-      const bar = bars[barIdx];
-      const barEl = document.createElement('div');
-      barEl.className = 'chart-bar';
-
-      if (bar) {
-        const numEl = document.createElement('div');
-        numEl.className = 'bar-num';
-        numEl.textContent = barIdx + 1;
-        barEl.appendChild(numEl);
-
-        const beatsEl = document.createElement('div');
-        beatsEl.className = 'bar-beats';
-        beatsForChords(bar.chords || []).forEach(chord => {
-          const cell = document.createElement('div');
-          cell.className = 'beat-cell sightread-cell';
-          cell.style.flex = chord.beats;
-          cell.innerHTML = `<span class="chord-name">${htmlEsc(chord.name)}</span>`;
-          beatsEl.appendChild(cell);
-        });
-        barEl.appendChild(beatsEl);
-      }
-      row.appendChild(barEl);
-    }
-    wrap.appendChild(row);
-
-    const hasContent = Array.from({length: BARS_PER_ROW}, (_, i) => bars[rowStart + i]).some(Boolean);
-    if (!hasContent && rowStart > 0) {
-      wrap.removeChild(row);
-      break;
-    }
-  }
-
-  containerEl.appendChild(wrap);
-}
-
-async function sightReadPlay() {
-  const s = state.sightread.song;
-  const bpm = parseInt(document.getElementById('sightread-bpm')?.value) || s.bpm;
-  setPlaybackUI('sightread', 'playing');
-  setStatus('Playing');
-  try {
-    await api('/api/play', 'POST', { ...s, bpm, bars: state.sightread.bars });
-    startPolling('sightread');
-  } catch(e) { setStatus('Error: ' + e.message); sightReadStop(); }
-}
-
-async function sightReadPause()  { await api('/api/pause',  'POST'); setPlaybackUI('sightread', 'paused');  setStatus('Paused'); }
-async function sightReadResume() { await api('/api/resume', 'POST'); setPlaybackUI('sightread', 'playing'); setStatus('Playing'); }
-async function sightReadStop() {
-  stopPolling();
-  await api('/api/stop', 'POST');
-  setPlaybackUI('sightread', 'stopped');
-  setStatus('Ready');
-}
-
 // ── Preferences page ──
 
 async function renderPrefsForm() {
@@ -1270,7 +1006,6 @@ async function savePrefs() {
   document.getElementById('status-sf').textContent = updates.soundfont_path.split('/').pop();
   setStatus('Preferences saved');
   renderJamChart();
-  if (state.editor.song) renderEditorChart();
 }
 
 // ── Start ──

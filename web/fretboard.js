@@ -52,30 +52,23 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 
 const fbState = {
   inited: false,
-  activeMode: 'notes',
-  notes: { strings: [true, true, true, true, true, true], maxFret: 12, practiceMode: 'all', correct: 0, total: 0, streak: 0, current: null, locked: false, stats: {} },
-  caged: { mode: 'barre', correct: 0, total: 0, streak: 0, current: null, answered: false },
+  activeMode: 'pitch',
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            strings: [true, true, true, true, true, true], practiceMode: 'all', stats: {},
            showBoard: false, naturalsOnly: false,
            _holdCount: 0, _wrongNote: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity },
   tuner: { tuned: [false, false, false, false, false, false], activeString: -1, _holdCount: 0, _holdString: -1 },
   chord: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
-           qualities: { '': true, m: true, maj7: true, '7': true, m7: true, dim7: true, m7b5: true, sus2: false, sus4: false },
+           qualities: { '': true, m: true, maj7: true, '7': true, m7: true, dim7: true, m7b5: true, sus2: false, sus4: false,
+                        '6': false, m6: false, add9: false, madd9: false, '9': false, m9: false, maj9: false,
+                        dim: false, aug: false, '7sus4': false, '6/9': false, mmaj7: false, '7b9': false, '7#9': false },
            notationStyle: 'standard', showFormula: false, showDegreesOnDiagram: false, showChordDiagram: false, diagramSize: 200,
            source: 'random', fixedRoot: 0, practiceMode: 'all',
            progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0, repeatsLeft: 0,
-                          repeatCount: 2, lockKey: false, lockedKeyRoot: 0 },
+                          repeatCount: 2, lockKey: false, lockedKeyRoot: 0, categoryFilter: 'all' },
            stats: {},
            _holdCount: 0, _wrongSymbol: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity,
            _hiddenMs: 0, _hiddenSince: null },
-  keymap: { mode: 'relative',
-            relative: { correct: 0, total: 0, streak: 0, current: null, locked: false },
-            degree: { fullSet: false, correct: 0, total: 0, streak: 0, current: null, answered: false } },
-  shapeDegree: { mode: 'identify',
-                 shapes: [true, true, true, true, true], // one per FB_SHAPE_ORDER entry (C,A,G,E,D)
-                 identify: { correct: 0, total: 0, streak: 0, current: null, locked: false },
-                 locate: { correct: 0, total: 0, streak: 0, current: null, answered: false } },
   ear: { scale: 'minor', mode: 'two', autoAdvance: true, wrongPauseSec: 3, showDiagram: true, waveform: 'sine',
          playbackStyle: 'melodic', noteGapSec: 0.25, direction: 'both', range: 'mid', practiceMode: 'all', stats: {},
          two: { correct: 0, total: 0, streak: 0, current: null, answered: false, timeoutId: null,
@@ -92,6 +85,12 @@ const fbState = {
     targetHz: 5, phase: 'idle', baseFreq: null,
     _history: [], _stableFr: 0, _lastFreq: null, _successFr: 0, _startTime: null,
     correct: 0, total: 0, speed: null, depth: null,
+  },
+  seq: {
+    mode: 'reference', keyRoot: 0, scale: 'major', pattern: 'thirds', direction: 'asc', startFret: 0,
+    showPositionHint: false,
+    sequence: [], idx: 0, completed: 0,
+    _holdCount: 0, _wrongNote: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity, _lastReading: null,
   },
 };
 
@@ -119,15 +118,6 @@ function initFretboardPage() {
   fbPrefsLoad();
   fbApplyDiagramSize();  // apply saved diagram size as CSS variable
   fbPitchLoadStats();
-  fbNotesLoadStats();
-  fbRenderNotesOptions();
-  fbNotesNext();
-  fbCagedNext();
-  fbRenderShapeDegreeOptions();
-  fbShapeDegreeIdentifyNext();
-  fbShapeDegreeLocateNext();
-  fbCagedSetMode(fbState.caged.mode);
-  fbShapeDegreeSetMode(fbState.shapeDegree.mode);
   fbRenderEarOptions();
   fbEarLoadStats();
   fbEarTwoNext();
@@ -141,11 +131,10 @@ function initFretboardPage() {
   fbRenderChordOptions();
   fbChordNewChord();
   fbRenderChordStatsTable();
-  fbRelativeNext();
-  fbRenderDegreeOptions();
-  fbDegreeNext();
-  fbKeymapSetMode(fbState.keymap.mode);
   fbBendInit();
+  fbRenderSeqOptions();
+  fbSeqBuild();
+  fbSeqSetMode(fbState.seq.mode);
   fbShowMode(fbState.activeMode);
 }
 
@@ -154,6 +143,7 @@ function fbShowMode(mode) {
     fbMicStop();
     document.getElementById('fb-pitch-meter').innerHTML = '';
     document.getElementById('fb-tuner-meter').innerHTML = '';
+    document.getElementById('fb-seq-verify-meter').innerHTML = '';
     fbRenderChroma(new Array(12).fill(0), null);
   }
   document.querySelectorAll('.fb-tab').forEach(b => b.classList.toggle('active', b.dataset.fbmode === mode));
@@ -176,11 +166,6 @@ const FB_PREFS_KEY = 'fb_prefs';
 function fbPrefsLoad() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(FB_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
-  if (saved.notes) {
-    if (Array.isArray(saved.notes.strings) && saved.notes.strings.length === 6) fbState.notes.strings = saved.notes.strings;
-    if (saved.notes.maxFret === 5 || saved.notes.maxFret === 12) fbState.notes.maxFret = saved.notes.maxFret;
-    if (saved.notes.practiceMode === 'all' || saved.notes.practiceMode === 'weak') fbState.notes.practiceMode = saved.notes.practiceMode;
-  }
   if (saved.pitch) {
     if (Array.isArray(saved.pitch.strings) && saved.pitch.strings.length === 6) fbState.pitch.strings = saved.pitch.strings;
     if (saved.pitch.practiceMode === 'all' || saved.pitch.practiceMode === 'weak') fbState.pitch.practiceMode = saved.pitch.practiceMode;
@@ -207,21 +192,7 @@ function fbPrefsLoad() {
     if (Number.isInteger(sp.repeatCount) && sp.repeatCount >= 1) fbState.chord.progression.repeatCount = sp.repeatCount;
     if (typeof sp.lockKey === 'boolean') fbState.chord.progression.lockKey = sp.lockKey;
     if (Number.isInteger(sp.lockedKeyRoot) && sp.lockedKeyRoot >= 0 && sp.lockedKeyRoot < 12) fbState.chord.progression.lockedKeyRoot = sp.lockedKeyRoot;
-  }
-  if (saved.keymap && (saved.keymap.mode === 'relative' || saved.keymap.mode === 'degree')) {
-    fbState.keymap.mode = saved.keymap.mode;
-  }
-  if (saved.keymap && typeof saved.keymap.degreeFullSet === 'boolean') {
-    fbState.keymap.degree.fullSet = saved.keymap.degreeFullSet;
-  }
-  if (saved.caged && (saved.caged.mode === 'barre' || saved.caged.mode === 'degrees')) {
-    fbState.caged.mode = saved.caged.mode;
-  }
-  if (saved.shapeDegree && (saved.shapeDegree.mode === 'identify' || saved.shapeDegree.mode === 'locate')) {
-    fbState.shapeDegree.mode = saved.shapeDegree.mode;
-  }
-  if (saved.shapeDegree && Array.isArray(saved.shapeDegree.shapes) && saved.shapeDegree.shapes.length === 5) {
-    fbState.shapeDegree.shapes = saved.shapeDegree.shapes;
+    if (['all', 'functional', 'circle5', 'stepwise', 'blues'].includes(sp.categoryFilter)) fbState.chord.progression.categoryFilter = sp.categoryFilter;
   }
   if (saved.ear && Object.prototype.hasOwnProperty.call(FB_EAR_SCALES, saved.ear.scale)) {
     fbState.ear.scale = saved.ear.scale;
@@ -275,14 +246,22 @@ function fbPrefsLoad() {
   if (saved.vibrato && [3, 5, 7].includes(+saved.vibrato.targetHz)) {
     fbState.vibrato.targetHz = +saved.vibrato.targetHz;
   }
-  if (['notes', 'caged', 'pitch', 'tuner', 'chord', 'keymap', 'ear', 'bend'].includes(saved.activeMode)) {
+  if (saved.seq) {
+    if (Number.isInteger(saved.seq.keyRoot) && saved.seq.keyRoot >= 0 && saved.seq.keyRoot < 12) fbState.seq.keyRoot = saved.seq.keyRoot;
+    if (['major', 'naturalMinor', 'harmonicMinor'].includes(saved.seq.scale)) fbState.seq.scale = saved.seq.scale;
+    if (['thirds', 'sixths', 'triad', 'seventh'].includes(saved.seq.pattern)) fbState.seq.pattern = saved.seq.pattern;
+    if (['asc', 'desc', 'both'].includes(saved.seq.direction)) fbState.seq.direction = saved.seq.direction;
+    if (Number.isInteger(saved.seq.startFret) && saved.seq.startFret >= 0 && saved.seq.startFret <= 12) fbState.seq.startFret = saved.seq.startFret;
+    if (saved.seq.mode === 'reference' || saved.seq.mode === 'verify') fbState.seq.mode = saved.seq.mode;
+    if (typeof saved.seq.showPositionHint === 'boolean') fbState.seq.showPositionHint = saved.seq.showPositionHint;
+  }
+  if (['pitch', 'tuner', 'chord', 'ear', 'bend', 'seq'].includes(saved.activeMode)) {
     fbState.activeMode = saved.activeMode;
   }
 }
 
 function fbPrefsSave() {
   localStorage.setItem(FB_PREFS_KEY, JSON.stringify({
-    notes: { strings: fbState.notes.strings, maxFret: fbState.notes.maxFret, practiceMode: fbState.notes.practiceMode },
     pitch: { strings: fbState.pitch.strings, practiceMode: fbState.pitch.practiceMode, showBoard: fbState.pitch.showBoard,
              naturalsOnly: fbState.pitch.naturalsOnly },
     chord: {
@@ -294,17 +273,18 @@ function fbPrefsSave() {
       source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot, practiceMode: fbState.chord.practiceMode,
       progression: { repeatCount: fbState.chord.progression.repeatCount,
                      lockKey: fbState.chord.progression.lockKey,
-                     lockedKeyRoot: fbState.chord.progression.lockedKeyRoot },
+                     lockedKeyRoot: fbState.chord.progression.lockedKeyRoot,
+                     categoryFilter: fbState.chord.progression.categoryFilter },
     },
-    keymap: { mode: fbState.keymap.mode, degreeFullSet: fbState.keymap.degree.fullSet },
-    caged: { mode: fbState.caged.mode },
-    shapeDegree: { mode: fbState.shapeDegree.mode, shapes: fbState.shapeDegree.shapes },
     ear: { scale: fbState.ear.scale, mode: fbState.ear.mode, autoAdvance: fbState.ear.autoAdvance,
            wrongPauseSec: fbState.ear.wrongPauseSec, showDiagram: fbState.ear.showDiagram, waveform: fbState.ear.waveform,
            playbackStyle: fbState.ear.playbackStyle, noteGapSec: fbState.ear.noteGapSec, direction: fbState.ear.direction,
            range: fbState.ear.range, practiceMode: fbState.ear.practiceMode },
     bend: { subMode: fbState.bend.subMode, strings: fbState.bend.strings, intervals: fbState.bend.intervals },
     vibrato: { targetHz: fbState.vibrato.targetHz },
+    seq: { keyRoot: fbState.seq.keyRoot, scale: fbState.seq.scale, pattern: fbState.seq.pattern,
+           direction: fbState.seq.direction, startFret: fbState.seq.startFret, mode: fbState.seq.mode,
+           showPositionHint: fbState.seq.showPositionHint },
     activeMode: fbState.activeMode,
   }));
 }
@@ -397,236 +377,12 @@ function fbMarkerX(b, fretIdx) {
   return fretIdx === 0 ? b.xFret(0) : (b.xFret(fretIdx - 1) + b.xFret(fretIdx)) / 2;
 }
 
-// ── Note Names drill ──
-
-function fbRenderNotesOptions() {
-  const el = document.getElementById('fb-notes-options');
-  el.innerHTML = `
-    <span>Strings:</span>
-    ${FB_STRING_NAMES.map((n, i) => `
-      <label><input type="checkbox" data-str="${i}" ${fbState.notes.strings[i] ? 'checked' : ''} onchange="fbToggleString(${i})"> ${n}${i===0?'(low)':i===5?'(high)':''}</label>
-    `).join('')}
-    <span style="margin-left:12px">Frets:</span>
-    <select onchange="fbState.notes.maxFret=parseInt(this.value); fbPrefsSave(); fbNotesNext()">
-      <option value="5" ${fbState.notes.maxFret===5?'selected':''}>0–5</option>
-      <option value="12" ${fbState.notes.maxFret===12?'selected':''}>0–12</option>
-    </select>
-    <span style="margin-left:12px">Practice:</span>
-    <select onchange="fbState.notes.practiceMode=this.value; fbPrefsSave(); fbNotesNext()">
-      <option value="all"  ${fbState.notes.practiceMode === 'all'  ? 'selected' : ''}>All notes</option>
-      <option value="weak" ${fbState.notes.practiceMode === 'weak' ? 'selected' : ''}>Focus on weak</option>
-    </select>
-  `;
-}
-
-function fbToggleString(i) {
-  fbState.notes.strings[i] = !fbState.notes.strings[i];
-  if (!fbState.notes.strings.some(Boolean)) fbState.notes.strings[i] = true; // keep at least one
-  fbPrefsSave();
-  fbNotesNext();
-}
-
-function fbRenderNotesStats() {
-  const s = fbState.notes;
-  document.getElementById('fb-notes-stats').innerHTML = `
-    <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
-    <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
-  `;
-}
-
-// Per-note accuracy tracking for the Note Names drill — same pattern as
-// Pitch Match's stats table.  Keyed by note name (e.g. 'A#', 'Eb').
-const FB_NOTES_STATS_KEY = 'fb_notes_stats';
-function fbNotesLoadStats() {
-  try { fbState.notes.stats = JSON.parse(localStorage.getItem(FB_NOTES_STATS_KEY)) || {}; }
-  catch (_) { fbState.notes.stats = {}; }
-}
-function fbNotesSaveStats() {
-  localStorage.setItem(FB_NOTES_STATS_KEY, JSON.stringify(fbState.notes.stats));
-}
-function fbNotesResetStats() {
-  fbState.notes.stats = {};
-  fbNotesSaveStats();
-  fbRenderNotesStatsTable();
-}
-
 // A consistent header above each drill's accuracy table — same title/reset
 // layout everywhere, so "Reset stats" always lives in one predictable spot
 // instead of being scattered into each drill's options row.
 function fbStatsTableHead(title, resetFn) {
   return `<div class="fb-stats-table-head"><span>${title}</span>` +
     `<button class="btn btn-ghost btn-sm danger" onclick="${resetFn}()">Reset stats</button></div>`;
-}
-function fbRenderNotesStatsTable() {
-  const el = document.getElementById('fb-notes-stats-table');
-  if (!el) return;
-  const rows = FB_NOTE_NAMES.map(n => {
-    const st = fbState.notes.stats[n];
-    const presented = st?.presented || 0;
-    const correct = st?.correct || 0;
-    const acc = presented ? Math.round((correct / presented) * 100) : null;
-    return { n, presented, acc };
-  }).filter(r => r.presented > 0)
-    .sort((a, b) => (a.acc ?? 999) - (b.acc ?? 999));
-  if (!rows.length) {
-    el.innerHTML = '<span class="empty-state" style="padding:8px 0">No attempts yet.</span>';
-    return;
-  }
-  el.innerHTML = fbStatsTableHead('Per-note accuracy', 'fbNotesResetStats') + `
-    <table class="fb-stats-table">
-      <tr><th>Note</th><th>Tries</th><th>Accuracy</th></tr>
-      ${rows.map(r => `<tr><td>${r.n}</td><td>${r.presented}</td><td>${r.acc}%</td></tr>`).join('')}
-    </table>
-  `;
-}
-
-function fbNotesNext() {
-  const s = fbState.notes;
-  s.locked = false;
-  const eligible = [];
-  for (let i = 0; i < 6; i++) if (s.strings[i]) eligible.push(i);
-  // In 'weak' mode: pick a note name weighted by (1 – accuracy), then find
-  // a random position on an eligible string within the fret range that
-  // sounds that note. Falls back to uniform random if no stats yet.
-  let targetNote = null;
-  if (s.practiceMode === 'weak') {
-    const candidates = FB_NOTE_NAMES.map(n => {
-      const st = s.stats[n];
-      const acc = st && st.presented > 0 ? st.correct / st.presented : 0.5;
-      return { n, w: Math.max(0.1, 1 - acc) };
-    });
-    const total = candidates.reduce((sum, c) => sum + c.w, 0);
-    let r = Math.random() * total;
-    for (const c of candidates) { r -= c.w; if (r <= 0) { targetNote = c.n; break; } }
-  }
-  let stringIdx, fret, note;
-  if (targetNote) {
-    // Collect all (string, fret) positions matching the target note
-    const positions = [];
-    for (const si of eligible) {
-      for (let f = 0; f <= s.maxFret; f++) {
-        if (fbNoteAt(si, f) === targetNote) positions.push({ si, f });
-      }
-    }
-    if (positions.length) {
-      const pick = positions[Math.floor(Math.random() * positions.length)];
-      stringIdx = pick.si; fret = pick.f; note = targetNote;
-    }
-  }
-  if (note === undefined) {
-    stringIdx = eligible[Math.floor(Math.random() * eligible.length)];
-    fret = Math.floor(Math.random() * (s.maxFret + 1));
-    note = fbNoteAt(stringIdx, fret);
-  }
-  s.current = { stringIdx, fret, note };
-
-  fbRenderNotesStats();
-  fbRenderNotesStatsTable();
-  document.getElementById('fb-notes-feedback').textContent = '';
-  document.getElementById('fb-notes-feedback').className = 'fb-feedback';
-
-  const b = fbBuildBoard(12, 0);
-  const cls = fret === 0 ? 'fb-open-marker' : 'fb-quiz-dot';
-  const r = fret === 0 ? 10 : 11;
-  const cx = fbMarkerX(b, fret);
-  const cy = b.yString(stringIdx);
-  const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  circ.setAttribute('cx', cx); circ.setAttribute('cy', cy); circ.setAttribute('r', r);
-  circ.setAttribute('class', cls);
-  b.svg.appendChild(circ);
-
-  const boardEl = document.getElementById('fb-notes-board');
-  boardEl.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'fb-board';
-  wrap.appendChild(b.svg);
-  boardEl.appendChild(wrap);
-
-  const ansEl = document.getElementById('fb-notes-answers');
-  ansEl.innerHTML = FB_NOTE_NAMES.map(n => `<button class="fb-answer-btn" onclick="fbNotesAnswer('${n}', this)">${n}</button>`).join('');
-}
-
-function fbNotesAnswer(note, btnEl) {
-  const s = fbState.notes;
-  if (s.locked) return;
-  s.locked = true;
-  s.total++;
-  const correct = note === s.current.note;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-  // Per-note accuracy tracking
-  const st = s.stats[s.current.note] || (s.stats[s.current.note] = { presented: 0, correct: 0 });
-  st.presented++;
-  if (correct) st.correct++;
-  fbNotesSaveStats();
-
-  document.querySelectorAll('#fb-notes-answers .fb-answer-btn').forEach(b => {
-    if (b.textContent === s.current.note) b.classList.add('correct');
-    else if (b === btnEl && !correct) b.classList.add('wrong');
-  });
-
-  const fb = document.getElementById('fb-notes-feedback');
-  const posLabel = `${FB_STRING_NAMES[s.current.stringIdx]} string, fret ${s.current.fret}`;
-  fb.textContent = correct ? `Correct — ${posLabel} = ${s.current.note}` : `${posLabel} = ${s.current.note}, not ${note}`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderNotesStats();
-  fbRenderNotesStatsTable();
-
-  setTimeout(fbNotesNext, correct ? 500 : 1300);
-}
-
-// ── CAGED Shapes drill ──
-
-function fbCagedSetMode(mode) {
-  fbState.caged.mode = mode;
-  fbPrefsSave();
-  document.querySelectorAll('#fb-caged-mode-tabs .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.cagedmode === mode));
-  document.getElementById('fb-caged-barre-panel').style.display = mode === 'barre' ? '' : 'none';
-  document.getElementById('fb-caged-degrees-panel').style.display = mode === 'degrees' ? '' : 'none';
-}
-
-function fbRenderCagedStats() {
-  const s = fbState.caged;
-  document.getElementById('fb-caged-stats').innerHTML = `
-    <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
-    <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
-  `;
-}
-
-function fbCagedNext() {
-  const s = fbState.caged;
-  const root = FB_NOTE_NAMES[Math.floor(Math.random() * 12)];
-  const shape = FB_SHAPE_ORDER[Math.floor(Math.random() * FB_SHAPE_ORDER.length)];
-  const barreFret = fbBarreFretFor(root, shape);
-  s.current = { root, shape, barreFret };
-  s.answered = false;
-
-  fbRenderCagedStats();
-  document.getElementById('fb-caged-prompt').innerHTML =
-    `Play <b>${root} major</b> using the <b>${shape}-shape</b> (CAGED). Which fret is the shape's reference (barre) position?`;
-  document.getElementById('fb-caged-fret').value = '';
-  document.getElementById('fb-caged-feedback').textContent = '';
-  document.getElementById('fb-caged-feedback').className = 'fb-feedback';
-  document.getElementById('fb-caged-board').innerHTML = '';
-}
-
-function fbCagedCheck() {
-  const s = fbState.caged;
-  if (s.answered) return;
-  const input = document.getElementById('fb-caged-fret');
-  const val = parseInt(input.value);
-  if (Number.isNaN(val)) return;
-  s.answered = true;
-  s.total++;
-  const correct = ((val % 12) + 12) % 12 === s.current.barreFret;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-
-  const fb = document.getElementById('fb-caged-feedback');
-  fb.textContent = correct
-    ? `Correct — fret ${s.current.barreFret}`
-    : `Fret ${s.current.barreFret} (you said ${val})`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderCagedStats();
-  fbRenderCagedDiagram(s.current.shape, s.current.barreFret);
 }
 
 // shape: { frets: [6 values, 'x' or fret-offset], rootString, rootFret }
@@ -725,194 +481,6 @@ function fbRenderShapeBox(containerEl, shape, barreFret, degreeLabels, forceNoBa
     })
     .chord({ fingers, barres, position })
     .draw();
-}
-
-function fbRenderCagedDiagram(shapeLetter, barreFret) {
-  fbRenderShapeBox(document.getElementById('fb-caged-board'), FB_CAGED_SHAPES[shapeLetter], barreFret, null);
-}
-
-// ── Shape Degrees drill ──
-// The 5 CAGED shapes are movable major-triad shapes: every fretted note in
-// one is the root, 3rd, or 5th, and which one it is never changes regardless
-// of which actual root the shape is barred to (see fbShapeDegreeLabels,
-// defined below with the Chord Match code that introduced it). This drill
-// tests that shape-relative map directly: "Identify" shows one position
-// highlighted and asks its degree; "Locate" gives a degree and asks you to
-// click a matching position. Both are the same lookup fbBarreFretFor already
-// does for the barre-fret drill above, just at finer grain (per-string
-// degree instead of "where's the root").
-
-// Pure (no Math.random) so it's unit-testable: absolute fret + scale degree
-// for every fretted string of `shape` when barred at `barreFret`.
-function fbShapePositionsForShape(shape, barreFret) {
-  const degreeLabels = fbShapeDegreeLabels(shape, '');
-  const positions = [];
-  shape.frets.forEach((v, i) => {
-    if (v === 'x') return;
-    positions.push({ stringIdx: i, fret: v + barreFret, degree: degreeLabels[i] });
-  });
-  return positions;
-}
-
-function fbShapeDegreeSetup() {
-  const enabled = FB_SHAPE_ORDER.filter((_, i) => fbState.shapeDegree.shapes[i]);
-  const pool = enabled.length ? enabled : FB_SHAPE_ORDER;
-  const shapeLetter = pool[Math.floor(Math.random() * pool.length)];
-  const rootPc = Math.floor(Math.random() * 12);
-  const shape = FB_CAGED_SHAPES[shapeLetter];
-  const barreFret = fbBarreFretForShape(rootPc, shape);
-  return { shapeLetter, rootPc, shape, barreFret, positions: fbShapePositionsForShape(shape, barreFret) };
-}
-
-function fbRenderShapeDegreeOptions() {
-  document.getElementById('fb-shapedeg-options').innerHTML = `
-    <span>Shapes:</span>
-    ${FB_SHAPE_ORDER.map((letter, i) => `
-      <label><input type="checkbox" data-shapedeg="${i}" ${fbState.shapeDegree.shapes[i] ? 'checked' : ''}
-        onchange="fbToggleShapeDegreeShape(${i})"> ${i + 1} (${letter})</label>
-    `).join('')}
-  `;
-}
-
-function fbToggleShapeDegreeShape(i) {
-  const s = fbState.shapeDegree.shapes;
-  s[i] = !s[i];
-  if (!s.some(Boolean)) s[i] = true; // keep at least one selected
-  fbPrefsSave();
-  fbRenderShapeDegreeOptions();
-  // Both submodes' panels exist in the DOM at once (only one is visible), so
-  // both need a fresh question now — otherwise switching to the hidden one
-  // shows a stale question drawn from the old (unfiltered) shape pool.
-  fbShapeDegreeIdentifyNext();
-  fbShapeDegreeLocateNext();
-}
-
-// Renders the shape's fretted positions on the shared linear fretboard SVG.
-// opts.highlightIdx marks one position in the "quiz" color (Identify mode);
-// opts.clickable + opts.onClick wires click handlers on every position
-// (Locate mode); opts.revealAll prints each position's degree as text
-// (shown after answering, in either mode, for reinforcement).
-function fbRenderShapeDegreeBoard(containerEl, positions, opts = {}) {
-  const frets = positions.map(p => p.fret);
-  const startFret = Math.max(0, Math.min(...frets) - 1);
-  const numFrets = Math.max(5, Math.max(...frets) - startFret + 1);
-  const b = fbBuildBoard(numFrets, startFret);
-
-  positions.forEach((p, idx) => {
-    const cx = fbMarkerX(b, p.fret - startFret);
-    const cy = b.yString(p.stringIdx);
-    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circ.setAttribute('cx', cx); circ.setAttribute('cy', cy); circ.setAttribute('r', 11);
-    circ.setAttribute('class', opts.highlightIdx === idx ? 'fb-quiz-dot' : 'fb-shape-dot');
-    b.svg.appendChild(circ);
-    if (opts.clickable) {
-      circ.classList.add('clickable');
-      circ.addEventListener('click', () => opts.onClick(p, circ));
-    }
-    if (opts.revealAll) {
-      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      t.setAttribute('x', cx); t.setAttribute('y', cy + 4);
-      t.setAttribute('text-anchor', 'middle');
-      t.setAttribute('class', 'fb-shape-degree-label');
-      t.textContent = p.degree;
-      b.svg.appendChild(t);
-    }
-  });
-
-  containerEl.innerHTML = '';
-  const wrap = document.createElement('div');
-  wrap.className = 'fb-board';
-  wrap.appendChild(b.svg);
-  containerEl.appendChild(wrap);
-}
-
-function fbShapeDegreeSetMode(mode) {
-  fbState.shapeDegree.mode = mode;
-  fbPrefsSave();
-  document.querySelectorAll('#fb-shapedeg-mode-tabs .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.degreemode === mode));
-  document.getElementById('fb-shapedeg-identify-panel').style.display = mode === 'identify' ? '' : 'none';
-  document.getElementById('fb-shapedeg-locate-panel').style.display = mode === 'locate' ? '' : 'none';
-}
-
-function fbRenderShapeDegreeStats(subMode) {
-  const s = fbState.shapeDegree[subMode];
-  document.getElementById(`fb-shapedeg-${subMode}-stats`).innerHTML = `
-    <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
-    <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
-  `;
-}
-
-function fbShapeDegreeIdentifyNext() {
-  const s = fbState.shapeDegree.identify;
-  s.locked = false;
-  const setup = fbShapeDegreeSetup();
-  const targetIdx = Math.floor(Math.random() * setup.positions.length);
-  s.current = { ...setup, targetIdx };
-
-  fbRenderShapeDegreeStats('identify');
-  document.getElementById('fb-shapedeg-identify-prompt').innerHTML =
-    `Root <b>${FB_NOTE_NAMES[setup.rootPc]}</b>, <b>${setup.shapeLetter}-shape</b> (barred at fret ${setup.barreFret}). What scale degree is the highlighted position?`;
-  fbRenderShapeDegreeBoard(document.getElementById('fb-shapedeg-identify-board'), setup.positions, { highlightIdx: targetIdx });
-  document.getElementById('fb-shapedeg-identify-answers').innerHTML =
-    ['1', '3', '5'].map(d => `<button class="fb-answer-btn" onclick="fbShapeDegreeIdentifyAnswer('${d}', this)">${d}</button>`).join('');
-  const fb = document.getElementById('fb-shapedeg-identify-feedback');
-  fb.textContent = '';
-  fb.className = 'fb-feedback';
-}
-
-function fbShapeDegreeIdentifyAnswer(degree, btnEl) {
-  const s = fbState.shapeDegree.identify;
-  if (s.locked) return;
-  s.locked = true;
-  s.total++;
-  const target = s.current.positions[s.current.targetIdx];
-  const correct = degree === target.degree;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-  btnEl.classList.add(correct ? 'correct' : 'wrong');
-
-  const fb = document.getElementById('fb-shapedeg-identify-feedback');
-  fb.textContent = correct ? `Correct — ${target.degree}` : `${target.degree} (you said ${degree})`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderShapeDegreeStats('identify');
-  fbRenderShapeDegreeBoard(document.getElementById('fb-shapedeg-identify-board'), s.current.positions, { highlightIdx: s.current.targetIdx, revealAll: true });
-  setTimeout(fbShapeDegreeIdentifyNext, 1100);
-}
-
-function fbShapeDegreeLocateNext() {
-  const s = fbState.shapeDegree.locate;
-  s.answered = false;
-  const setup = fbShapeDegreeSetup();
-  const degreesAvailable = [...new Set(setup.positions.map(p => p.degree))];
-  const targetDegree = degreesAvailable[Math.floor(Math.random() * degreesAvailable.length)];
-  s.current = { ...setup, targetDegree };
-
-  fbRenderShapeDegreeStats('locate');
-  document.getElementById('fb-shapedeg-locate-prompt').innerHTML =
-    `Root <b>${FB_NOTE_NAMES[setup.rootPc]}</b>, <b>${setup.shapeLetter}-shape</b> (barred at fret ${setup.barreFret}). Click a position that is the <b>${targetDegree}</b>.`;
-  fbRenderShapeDegreeBoard(document.getElementById('fb-shapedeg-locate-board'), setup.positions, {
-    clickable: true,
-    onClick: (pos, circleEl) => fbShapeDegreeLocateAnswer(pos, circleEl),
-  });
-  const fb = document.getElementById('fb-shapedeg-locate-feedback');
-  fb.textContent = '';
-  fb.className = 'fb-feedback';
-}
-
-function fbShapeDegreeLocateAnswer(pos, circleEl) {
-  const s = fbState.shapeDegree.locate;
-  if (s.answered) return;
-  s.answered = true;
-  s.total++;
-  const correct = pos.degree === s.current.targetDegree;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-  circleEl.classList.add(correct ? 'correct' : 'wrong');
-
-  const fb = document.getElementById('fb-shapedeg-locate-feedback');
-  fb.textContent = correct ? `Correct — that's the ${pos.degree}` : `That's the ${pos.degree}, not the ${s.current.targetDegree}`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderShapeDegreeStats('locate');
-  fbRenderShapeDegreeBoard(document.getElementById('fb-shapedeg-locate-board'), s.current.positions, { revealAll: true });
-  setTimeout(fbShapeDegreeLocateNext, 1100);
 }
 
 // ── Ear Training drill ──
@@ -1286,13 +854,351 @@ function fbEarSaveStats() {
   localStorage.setItem(FB_EAR_STATS_KEY, JSON.stringify(fbState.ear.stats));
 }
 
+// ── Scale Sequences drill (diatonic 3rds/6ths/triad/7th-arpeggio sequences,
+// walked up/down a chosen scale) ──────────────────────────────────────────
+// Reuses FB_EAR_SCALES as the single source of scale data — restricted to
+// the three full 7-note diatonic scales, since a "sequence" (in the classic
+// technical-exercise sense) needs a distinct note on every scale step; the
+// pentatonic/blues entries don't have one.
+const FB_SEQ_SCALE_KEYS = ['major', 'naturalMinor', 'harmonicMinor'];
+// offsets are scale-STEP counts (not semitones) from each group's starting
+// degree: thirds/sixths are dyads, triad/seventh are stacked-3rd arpeggios.
+const FB_SEQ_PATTERNS = {
+  thirds:  { label: 'Diatonic 3rds', offsets: [0, 2] },
+  sixths:  { label: 'Diatonic 6ths', offsets: [0, 5] },
+  triad:   { label: 'Triad Arpeggios', offsets: [0, 2, 4] },
+  seventh: { label: '7th Arpeggios', offsets: [0, 2, 4, 6] },
+};
+
+// The 7 unique scale-step semitone offsets for a scale — drops FB_EAR_SCALES'
+// trailing octave duplicate (e.g. major's 8-entry [0,2,4,5,7,9,11,12] -> the
+// first 7).
+function fbSeqScaleSteps(scaleKey) {
+  return FB_EAR_SCALES[scaleKey].degrees.slice(0, 7);
+}
+
+// One ascending pass, one octave (7 diatonic groups), as absolute semitone
+// offsets from the tonic — not yet transposed to a key or fretted. E.g.
+// thirds in major: groups start on scale-steps 0..6, each group being
+// [step, step+2] read through the octave-extended scale, giving the classic
+// "up two, back one" sawtooth contour of a real diatonic 3rds sequence.
+function fbSeqBuildAscending(scaleKey, patternKey) {
+  const steps = fbSeqScaleSteps(scaleKey);
+  const offsets = FB_SEQ_PATTERNS[patternKey].offsets;
+  const extended = i => steps[i % 7] + 12 * Math.floor(i / 7);
+  const notes = [];
+  for (let g = 0; g < 7; g++) offsets.forEach(off => notes.push(extended(g + off)));
+  return notes;
+}
+
+// direction: 'asc' | 'desc' | 'both'. 'desc' reverses the whole ascending
+// pass (groups and the notes within them); 'both' plays the ascending pass
+// then the same pass in reverse — the turnaround note repeats once, which is
+// normal in real technical-exercise practice.
+function fbSeqBuildSemitoneOffsets(scaleKey, patternKey, direction) {
+  const asc = fbSeqBuildAscending(scaleKey, patternKey);
+  if (direction === 'asc') return asc;
+  const desc = asc.slice().reverse();
+  return direction === 'desc' ? desc : asc.concat(desc);
+}
+
+// Width (in frets) of the single hand position the whole sequence is
+// confined to — matches how real "one octave, one position" scale-box
+// exercises are taught (a comfortable span using all 6 strings, no shifting
+// mid-sequence). For a window of this width starting at fret F, the 6
+// strings' reachable pitches ([open+F, open+F+4] each) join into one
+// *contiguous* range [40+F, 68+F] regardless of which string anchors it —
+// open strings are 5,5,5,4,5 semitones apart, so each string's span links
+// seamlessly to the next.
+const FB_SEQ_WINDOW_WIDTH = 5;
+
+// Picks which string the tonic (semitone offset 0) sits on, and at which
+// fret. Two constraints: (1) the fret should be the nearest occurrence of
+// the key at or after startFret (search only ever moves up the neck, never
+// below the requested fret), and (2) the whole sequence (up to maxOffset
+// semitones above the tonic) must still fit inside one FB_SEQ_WINDOW_WIDTH
+// window — per the coverage note above, that requires
+// FB_STRING_OPEN_MIDI[stringIdx] + maxOffset <= (open high-e) + width - 1.
+// Only strings satisfying that are considered, so wide patterns (7th
+// arpeggios, "both" directions) naturally fall back to the low E/A strings
+// where there's enough headroom, while narrower patterns (3rds, one octave)
+// get to use any string and can land closer to the requested startFret.
+function fbSeqAnchorPosition(keyRootPc, startFret, maxOffset) {
+  const headroomCeiling = FB_STRING_OPEN_MIDI[5] + FB_SEQ_WINDOW_WIDTH - 1;
+  let best = null;
+  for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
+    if (FB_STRING_OPEN_MIDI[stringIdx] + maxOffset > headroomCeiling) continue;
+    let fret = startFret;
+    while (((FB_STRING_OPEN[stringIdx] + fret) % 12 + 12) % 12 !== keyRootPc) fret++;
+    const dist = Math.abs(fret - startFret);
+    if (!best || dist < best.dist) best = { stringIdx, fret, midi: FB_STRING_OPEN_MIDI[stringIdx] + fret, dist };
+  }
+  return { stringIdx: best.stringIdx, fret: best.fret, midi: best.midi };
+}
+
+// Frets every target semitone offset (from the anchor) strictly within the
+// single-position window [anchor.fret, anchor.fret + FB_SEQ_WINDOW_WIDTH - 1]
+// across all 6 strings — the whole point being that the player never has to
+// shift hand position mid-sequence. When a pitch is reachable on more than
+// one string within the window (happens at the window's string-overlap
+// points), prefer whichever string is closest to the previous note's string,
+// so the line still reads as smooth left-to-right motion rather than
+// jumping around within the position.
+function fbSeqAssignFretting(anchor, semitoneOffsets) {
+  const windowStart = anchor.fret;
+  const windowEnd = windowStart + FB_SEQ_WINDOW_WIDTH - 1;
+  const positions = [];
+  let prevString = anchor.stringIdx;
+  for (const offset of semitoneOffsets) {
+    const targetMidi = anchor.midi + offset;
+    let best = null;
+    for (let stringIdx = 0; stringIdx < 6; stringIdx++) {
+      const fret = targetMidi - FB_STRING_OPEN_MIDI[stringIdx];
+      if (fret < windowStart || fret > windowEnd) continue;
+      const cost = Math.abs(stringIdx - prevString);
+      if (!best || cost < best.cost) best = { stringIdx, fret, midi: targetMidi, cost };
+    }
+    if (!best) continue; // shouldn't happen — the window is sized to cover every offset the UI can produce
+    positions.push({ stringIdx: best.stringIdx, fret: best.fret, midi: best.midi });
+    prevString = best.stringIdx;
+  }
+  return positions;
+}
+
+function fbRenderSeqOptions() {
+  const s = fbState.seq;
+  document.getElementById('fb-seq-options').innerHTML = `
+    <span>Key:</span>
+    <select onchange="fbState.seq.keyRoot=parseInt(this.value); fbPrefsSave(); fbSeqBuild()">
+      ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.keyRoot === i ? 'selected' : ''}>${n}</option>`).join('')}
+    </select>
+    <span style="margin-left:12px">Scale:</span>
+    <select onchange="fbState.seq.scale=this.value; fbPrefsSave(); fbSeqBuild()">
+      ${FB_SEQ_SCALE_KEYS.map(k => `<option value="${k}" ${s.scale === k ? 'selected' : ''}>${FB_EAR_SCALES[k].label}</option>`).join('')}
+    </select>
+    <span style="margin-left:12px">Pattern:</span>
+    <select onchange="fbState.seq.pattern=this.value; fbPrefsSave(); fbSeqBuild()">
+      ${Object.keys(FB_SEQ_PATTERNS).map(k => `<option value="${k}" ${s.pattern === k ? 'selected' : ''}>${FB_SEQ_PATTERNS[k].label}</option>`).join('')}
+    </select>
+    <span style="margin-left:12px">Direction:</span>
+    <select onchange="fbState.seq.direction=this.value; fbPrefsSave(); fbSeqBuild()">
+      <option value="asc"  ${s.direction === 'asc'  ? 'selected' : ''}>Ascending</option>
+      <option value="desc" ${s.direction === 'desc' ? 'selected' : ''}>Descending</option>
+      <option value="both" ${s.direction === 'both' ? 'selected' : ''}>Both</option>
+    </select>
+    <span style="margin-left:12px">Start near fret:</span>
+    <input type="number" min="0" max="12" value="${s.startFret}" style="width:56px"
+      onchange="fbState.seq.startFret=Math.max(0, Math.min(12, parseInt(this.value) || 0)); fbPrefsSave(); fbSeqBuild()">
+  `;
+}
+
+// Renders a set of fretted positions on the shared linear fretboard SVG.
+// opts.highlightIdx marks one position in the "quiz" color; opts.clickable +
+// opts.onClick wires click handlers on every position; opts.revealAll prints
+// each position's degree/order label as text.
+function fbRenderShapeDegreeBoard(containerEl, positions, opts = {}) {
+  const frets = positions.map(p => p.fret);
+  const startFret = Math.max(0, Math.min(...frets) - 1);
+  const numFrets = Math.max(5, Math.max(...frets) - startFret + 1);
+  const b = fbBuildBoard(numFrets, startFret);
+
+  positions.forEach((p, idx) => {
+    const cx = fbMarkerX(b, p.fret - startFret);
+    const cy = b.yString(p.stringIdx);
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.setAttribute('cx', cx); circ.setAttribute('cy', cy); circ.setAttribute('r', 11);
+    circ.setAttribute('class', opts.highlightIdx === idx ? 'fb-quiz-dot' : 'fb-shape-dot');
+    b.svg.appendChild(circ);
+    if (opts.clickable) {
+      circ.classList.add('clickable');
+      circ.addEventListener('click', () => opts.onClick(p, circ));
+    }
+    if (opts.revealAll) {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('x', cx); t.setAttribute('y', cy + 4);
+      t.setAttribute('text-anchor', 'middle');
+      t.setAttribute('class', 'fb-shape-degree-label');
+      t.textContent = p.degree;
+      b.svg.appendChild(t);
+    }
+  });
+
+  containerEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'fb-board';
+  wrap.appendChild(b.svg);
+  containerEl.appendChild(wrap);
+}
+
+// Rebuilds fbState.seq.sequence from the current options and re-renders
+// whichever subtab panel is visible (called on every option change and on
+// page init — both subtabs' panels exist in the DOM at once, so both get a
+// fresh render).
+function fbSeqBuild() {
+  const s = fbState.seq;
+  const offsets = fbSeqBuildSemitoneOffsets(s.scale, s.pattern, s.direction);
+  const anchor = fbSeqAnchorPosition(s.keyRoot, s.startFret, Math.max(...offsets));
+  const positions = fbSeqAssignFretting(anchor, offsets);
+  s.sequence = positions.map((p, i) => ({
+    stringIdx: p.stringIdx, fret: p.fret, midi: p.midi,
+    noteName: FB_NOTE_NAMES[((p.midi % 12) + 12) % 12], octave: fbOctaveOf(p.midi),
+    order: i + 1,
+  }));
+  s.idx = 0;
+  s._holdCount = 0;
+  s._wrongNote = null;
+  s._wrongHoldCount = 0;
+  s._lastReading = null;
+  fbRenderSeqReference();
+  fbRenderSeqVerify();
+}
+
+function fbRenderSeqReference() {
+  const s = fbState.seq;
+  const listEl = document.getElementById('fb-seq-reference-list');
+  if (!listEl) return;
+  listEl.textContent = s.sequence.map(p => `${p.noteName}${p.octave}`).join('  ');
+  const boardPositions = s.sequence.map(p => ({ stringIdx: p.stringIdx, fret: p.fret, degree: String(p.order) }));
+  fbRenderShapeDegreeBoard(document.getElementById('fb-seq-reference-board'), boardPositions, { revealAll: true });
+}
+
+function fbRenderSeqVerify() {
+  const s = fbState.seq;
+  const statsEl = document.getElementById('fb-seq-verify-stats');
+  if (!statsEl) return;
+  statsEl.innerHTML = `<span class="fb-stat-ok">Sequences completed <b>${s.completed}</b></span>`;
+  const step = s.sequence[s.idx];
+  document.getElementById('fb-seq-verify-target').textContent =
+    step ? `${step.noteName}${step.octave}  (note ${step.order}/${s.sequence.length})` : '';
+  document.getElementById('fb-seq-hint-cb').checked = s.showPositionHint;
+  const boardEl = document.getElementById('fb-seq-verify-board');
+  if (s.showPositionHint) {
+    const boardPositions = s.sequence.map(p => ({ stringIdx: p.stringIdx, fret: p.fret, degree: String(p.order) }));
+    fbRenderShapeDegreeBoard(boardEl, boardPositions, { highlightIdx: s.idx });
+  } else {
+    boardEl.innerHTML = '';
+  }
+}
+
+function fbSeqSetMode(mode) {
+  if (fbMic.listening && fbMic.owner === 'seq' && mode !== 'verify') fbSeqStop();
+  fbState.seq.mode = mode;
+  fbPrefsSave();
+  document.querySelectorAll('#fb-seq-mode-tabs .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.seqmode === mode));
+  document.getElementById('fb-seq-reference-panel').style.display = mode === 'reference' ? '' : 'none';
+  document.getElementById('fb-seq-verify-panel').style.display = mode === 'verify' ? '' : 'none';
+  fbRenderSeqReference();
+  fbRenderSeqVerify();
+  fbRenderControlAction();
+}
+
+function fbSeqNewSequence() {
+  fbState.seq.keyRoot = Math.floor(Math.random() * 12);
+  fbPrefsSave();
+  fbSeqBuild();
+}
+
+const FB_SEQ_MATCH_CENTS_TOLERANCE = 15;
+const FB_SEQ_MATCH_HOLD_FRAMES = 12;
+const FB_SEQ_WRONG_HOLD_FRAMES = 10;
+const FB_SEQ_WRONG_MSG_COOLDOWN_MS = 700;
+
+function fbRenderSeqMeter(r, held) {
+  const meter = document.getElementById('fb-seq-verify-meter');
+  meter.innerHTML = `
+    <div class="fb-pitch-detected${r.isMatch ? ' match' : ''}${held ? ' held' : ''}">${r.noteName}<span class="fb-pitch-octave">${fbOctaveOf(r.midi)}</span></div>
+    <div class="fb-pitch-cents-bar"><div class="fb-pitch-cents-needle" style="left:${50 + Math.max(-50, Math.min(50, r.cents))}%"></div></div>
+    <div class="fb-pitch-hz">${r.freq.toFixed(1)} Hz &nbsp;·&nbsp; ${r.cents > 0 ? '+' : ''}${r.cents} cents</div>
+  `;
+}
+
+async function fbSeqStart() {
+  try {
+    await fbMicStart('seq', fbSeqOnFrame);
+  } catch (e) {
+    const fb = document.getElementById('fb-seq-verify-feedback');
+    fb.textContent = 'Microphone access denied or unavailable: ' + e.message;
+    fb.className = 'fb-feedback err';
+    return;
+  }
+  fbSyncMicButtons('seq');
+}
+
+function fbSeqStop() {
+  fbMicStop();
+  fbSyncMicButtons('seq');
+  document.getElementById('fb-seq-verify-meter').innerHTML = '';
+}
+
+function fbSeqOnFrame(analyser, sampleRate) {
+  const buf = new Float32Array(analyser.fftSize);
+  analyser.getFloatTimeDomainData(buf);
+  const freq = fbAutoCorrelate(buf, sampleRate);
+
+  const s = fbState.seq;
+  const meter = document.getElementById('fb-seq-verify-meter');
+  const now = performance.now();
+  const step = s.sequence[s.idx];
+  if (!step) return;
+
+  if (!(freq > 0 && freq >= 60 && freq <= 1500)) {
+    if (s._lastReading && now - s._lastReading.ts < FB_METER_HOLD_MS) {
+      fbRenderSeqMeter(s._lastReading, true);
+    } else {
+      meter.innerHTML = `<div class="fb-pitch-detected">—</div><div class="fb-pitch-hz">listening…</div>`;
+    }
+    s._holdCount = 0;
+    return;
+  }
+
+  const { noteName, cents, midi } = fbFreqToNote(freq);
+  const isMatch = midi === step.midi && Math.abs(cents) <= FB_SEQ_MATCH_CENTS_TOLERANCE;
+  s._lastReading = { noteName, cents, midi, freq, isMatch, ts: now };
+  fbRenderSeqMeter(s._lastReading, false);
+
+  if (isMatch) {
+    s._holdCount++;
+    s._wrongHoldCount = 0;
+    if (s._holdCount >= FB_SEQ_MATCH_HOLD_FRAMES) fbSeqOnStepMatch();
+    return;
+  }
+  s._holdCount = 0;
+  if (noteName === s._wrongNote) s._wrongHoldCount++;
+  else { s._wrongNote = noteName; s._wrongHoldCount = 1; }
+  if (s._wrongHoldCount === FB_SEQ_WRONG_HOLD_FRAMES && now - s._lastWrongMsgAt > FB_SEQ_WRONG_MSG_COOLDOWN_MS) {
+    s._lastWrongMsgAt = now;
+    const fb = document.getElementById('fb-seq-verify-feedback');
+    fb.textContent = `Not quite — heard ${noteName}${fbOctaveOf(midi)}, need ${step.noteName}${step.octave}. Keep trying…`;
+    fb.className = 'fb-feedback err';
+  }
+}
+
+function fbSeqOnStepMatch() {
+  const s = fbState.seq;
+  s.idx++;
+  s._holdCount = 0;
+  s._wrongHoldCount = 0;
+  s._wrongNote = null;
+  fbRenderSeqVerify();
+  const fb = document.getElementById('fb-seq-verify-feedback');
+  if (s.idx >= s.sequence.length) {
+    s.completed++;
+    fb.textContent = `Sequence complete! (${s.completed} total)`;
+    fb.className = 'fb-feedback ok';
+    setTimeout(fbSeqNewSequence, 1200);
+  } else {
+    fb.textContent = '';
+    fb.className = 'fb-feedback';
+  }
+}
+
 // ── Scale / mode switches ──────────────────────────────────────────────────
 
 function fbEarSetScale(scale) {
   fbState.ear.scale = scale;
   fbPrefsSave();
-  // Both submode panels exist in the DOM at once — see the identical note on
-  // fbToggleShapeDegreeShape — so both need a fresh question now.
+  // Both submode panels exist in the DOM at once, so both need a fresh
+  // question now.
   fbEarTwoNext();
   fbEarThreeNext();
 }
@@ -1549,6 +1455,9 @@ function fbMasterVolumeChange(value) {
   fbMasterVolume = Math.max(0, Math.min(1, parseFloat(value) || 0));
   localStorage.setItem(FB_MASTER_VOLUME_KEY, String(fbMasterVolume));
   document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
+  document.dispatchEvent(new CustomEvent('fb-master-volume-change', {
+    detail: { raw: fbMasterVolume, gain: fbMasterGain() },
+  }));
 }
 
 // Human loudness perception is roughly logarithmic, not linear — a slider
@@ -1707,6 +1616,7 @@ function fbMicDrillHandlers(mode) {
     case 'tuner': return { start: fbTunerStart,   stop: fbTunerStop };
     case 'chord': return { start: fbChordStart,   stop: fbChordStop };
     case 'bend':  return { start: fbBendMicStart, stop: fbBendMicStop };
+    case 'seq':   return fbState.seq.mode === 'verify' ? { start: fbSeqStart, stop: fbSeqStop } : null;
     default:      return null;
   }
 }
@@ -1714,7 +1624,7 @@ function fbMicDrillHandlers(mode) {
 // Registers whichever mic drill is on screen as the app's active transport (so
 // its Start Listening / Stop shows in the bottom bar), or clears the bar on
 // non-mic modes and other pages. Called on page- and sub-mode switches.
-const FB_MIC_DRILL_LABELS = { pitch: 'Pitch Match', tuner: 'Tuner', chord: 'Chord Match', bend: 'Bend & Vibrato' };
+const FB_MIC_DRILL_LABELS = { pitch: 'Pitch Match', tuner: 'Tuner', chord: 'Chord Match', bend: 'Bend & Vibrato', seq: 'Scale Sequences' };
 function fbRenderControlAction() {
   if (typeof registerTransport !== 'function') return; // app.js not loaded (e.g. unit tests)
   const onFretboard = document.getElementById('page-fretboard')?.classList.contains('active');
@@ -2159,10 +2069,28 @@ const FB_CHORD_QUALITIES = {
   'm7b5': [0, 3, 6, 10],  // half-diminished 7 (minor 7 flat 5)
   'sus2': [0, 2, 7],
   'sus4': [0, 5, 7],
+  '6':     [0, 4, 7, 9],   // major 6
+  'm6':    [0, 3, 7, 9],   // minor 6
+  'add9':  [0, 4, 7, 2],   // major triad + 9 (no 7th)
+  'madd9': [0, 3, 7, 2],   // minor triad + 9 (no 7th)
+  '9':     [0, 4, 7, 10, 2], // dominant 9
+  'm9':    [0, 3, 7, 10, 2], // minor 9
+  'maj9':  [0, 4, 7, 11, 2], // major 9
+  'dim':   [0, 3, 6],        // diminished triad
+  'aug':   [0, 4, 8],        // augmented triad
+  '7sus4': [0, 5, 7, 10],    // dominant 7 sus4
+  '6/9':   [0, 4, 7, 9, 2],  // major 6/9
+  'mmaj7': [0, 3, 7, 11],    // minor-major 7
+  '7b9':   [0, 4, 7, 10, 1], // altered dominant, flat 9
+  '7#9':   [0, 4, 7, 10, 3], // altered dominant, sharp 9 ("Hendrix chord")
 };
 const FB_CHORD_QUALITY_LABELS = {
   '': 'Major', 'm': 'Minor', 'maj7': 'Maj7', '7': 'Dominant 7', 'm7': 'Minor 7',
   'dim7': 'Diminished 7', 'm7b5': 'Half-dim 7 (m7♭5)', 'sus2': 'Sus2', 'sus4': 'Sus4',
+  '6': 'Major 6', 'm6': 'Minor 6', 'add9': 'Add9', 'madd9': 'Minor add9',
+  '9': 'Dominant 9', 'm9': 'Minor 9', 'maj9': 'Major 9',
+  'dim': 'Diminished', 'aug': 'Augmented', '7sus4': '7sus4', '6/9': 'Major 6/9',
+  'mmaj7': 'Minor-Major 7', '7b9': 'Dominant 7♭9', '7#9': 'Dominant 7♯9',
 };
 // scale-degree formula for each quality, in the same order as FB_CHORD_QUALITIES[quality]
 const FB_CHORD_DEGREE_LABELS = {
@@ -2175,6 +2103,20 @@ const FB_CHORD_DEGREE_LABELS = {
   'm7b5': ['1', 'b3', 'b5', 'b7'],
   'sus2': ['1', '2', '5'],
   'sus4': ['1', '4', '5'],
+  '6':     ['1', '3', '5', '6'],
+  'm6':    ['1', 'b3', '5', '6'],
+  'add9':  ['1', '3', '5', '9'],
+  'madd9': ['1', 'b3', '5', '9'],
+  '9':     ['1', '3', '5', 'b7', '9'],
+  'm9':    ['1', 'b3', '5', 'b7', '9'],
+  'maj9':  ['1', '3', '5', '7', '9'],
+  'dim':   ['1', 'b3', 'b5'],
+  'aug':   ['1', '3', '#5'],
+  '7sus4': ['1', '4', '5', 'b7'],
+  '6/9':   ['1', '3', '5', '6', '9'],
+  'mmaj7': ['1', 'b3', '5', '7'],
+  '7b9':   ['1', '3', '5', 'b7', 'b9'],
+  '7#9':   ['1', '3', '5', 'b7', '#9'],
 };
 function fbChordFormula(quality) {
   return FB_CHORD_QUALITIES[quality].map((iv, idx) => FB_CHORD_DEGREE_LABELS[quality][idx]).join('  ');
@@ -2185,9 +2127,13 @@ function fbChordFormula(quality) {
 // the internal `quality` key (used for matching/stats) never changes.
 const FB_CHORD_NOTATION_STYLES = {
   standard: { label: 'Standard (Cm, Cmaj7, Cm7b5)',
-    suffixes: { '': '', m: 'm', maj7: 'maj7', '7': '7', m7: 'm7', dim7: 'dim7', m7b5: 'm7b5', sus2: 'sus2', sus4: 'sus4' } },
+    suffixes: { '': '', m: 'm', maj7: 'maj7', '7': '7', m7: 'm7', dim7: 'dim7', m7b5: 'm7b5', sus2: 'sus2', sus4: 'sus4',
+                '6': '6', m6: 'm6', add9: 'add9', madd9: 'm(add9)', '9': '9', m9: 'm9', maj9: 'maj9',
+                dim: 'dim', aug: 'aug', '7sus4': '7sus4', '6/9': '6/9', mmaj7: 'm(maj7)', '7b9': '7b9', '7#9': '7#9' } },
   jazz: { label: 'Jazz / iReal Pro (C-, CΔ7, Cø7)',
-    suffixes: { '': '', m: '-', maj7: 'Δ7', '7': '7', m7: '-7', dim7: '°7', m7b5: 'ø7', sus2: 'sus2', sus4: 'sus4' } },
+    suffixes: { '': '', m: '-', maj7: 'Δ7', '7': '7', m7: '-7', dim7: '°7', m7b5: 'ø7', sus2: 'sus2', sus4: 'sus4',
+                '6': '6', m6: '-6', add9: 'add9', madd9: '-(add9)', '9': '9', m9: '-9', maj9: 'Δ9',
+                dim: '°', aug: '+', '7sus4': '7sus4', '6/9': '6/9', mmaj7: '-Δ7', '7b9': '7♭9', '7#9': '7♯9' } },
 };
 function fbChordDisplaySymbol(root, quality) {
   const style = FB_CHORD_NOTATION_STYLES[fbState.chord.notationStyle] || FB_CHORD_NOTATION_STYLES.standard;
@@ -2214,9 +2160,12 @@ function fbShapeDegreeLabels(shape, quality) {
 // switched individually — group checkbox shows an indeterminate dash when
 // the group is only partly selected.
 const FB_CHORD_GROUPS = {
-  triad:   { label: 'Triads', qualities: ['', 'm'] },
-  seventh: { label: '7th Chords', qualities: ['maj7', '7', 'm7', 'dim7', 'm7b5'] },
-  sus:     { label: 'Sus Chords', qualities: ['sus2', 'sus4'] },
+  triad:   { label: 'Triads', qualities: ['', 'm', 'dim', 'aug'] },
+  seventh: { label: '7th Chords', qualities: ['maj7', '7', 'm7', 'dim7', 'm7b5', 'mmaj7'] },
+  sus:     { label: 'Sus Chords', qualities: ['sus2', 'sus4', '7sus4'] },
+  sixth:   { label: '6th Chords', qualities: ['6', 'm6', '6/9'] },
+  ninth:   { label: '9th / add9 Chords (pop, R&B, neo-soul)', qualities: ['add9', 'madd9', '9', 'm9', 'maj9'] },
+  altered: { label: 'Altered Dominants (jazz/blues)', qualities: ['7b9', '7#9'] },
 };
 const FB_CHORD_MATCH_SIM = 0.82;
 const FB_CHORD_WRONG_SIM = 0.68;
@@ -2247,6 +2196,19 @@ const FB_CHORD_MIN_HZ = 70, FB_CHORD_MAX_HZ = 1200, FB_CHORD_NOISE_FLOOR_DB = -7
 //   - m7b5 E-shape from Am7b5 "5x554x" (guitarcommand.com)
 //   - m7b5 A-shape from Bm7b5 "x2323x" (fachords.com)
 //   - m7b5 D-shape from Em7b5 "xx2333" (fachords.com)
+// 6/m6/add9/madd9/9/m9/maj9 shapes below are derived the same way as the
+// sus2/sus4 shapes above: real open-position chords (E6, Em6, E9, Em9,
+// Emaj9, Eadd9, Em(add9) and their A-shape equivalents) verified against
+// each quality's own interval formula (see verify_shapes.js reasoning —
+// pitch-class of every fretted string minus root pitch-class must cover
+// the formula's interval set). No D-shape voicing is included for
+// add9/madd9/9/m9/maj9 — the only fingerings that hit every required tone
+// need an awkward 5-fret reach on the D-string family, so those are
+// intentionally left out rather than shipping an impractical shape.
+// dim/aug/7sus4/6-9/mmaj7 shapes are likewise sourced from real open chords
+// (Edim/Adim/Ddim, Eaug/Aaug/Daug, E7sus4/A7sus4/D7sus4, E6-9/A6-9,
+// Em(maj7)/Am(maj7)/Dm(maj7)) and verified the same way against each
+// quality's interval formula.
 const FB_MOVABLE_SHAPES = {
   E: { rootString: 0, patterns: {
     '':     { frets: [0, 2, 2, 1, 0, 0], rootFret: 0 },
@@ -2258,6 +2220,18 @@ const FB_MOVABLE_SHAPES = {
     'm7b5': { frets: [1, 'x', 1, 1, 0, 'x'], rootFret: 1 },
     'sus2': { frets: [0, 2, 4, 4, 0, 0], rootFret: 0 },
     'sus4': { frets: [0, 2, 2, 2, 0, 0], rootFret: 0 },
+    '6':     { frets: [0, 2, 2, 1, 2, 0], rootFret: 0 },
+    'm6':    { frets: [0, 2, 2, 0, 2, 0], rootFret: 0 },
+    'add9':  { frets: [0, 2, 2, 1, 0, 2], rootFret: 0 },
+    'madd9': { frets: [0, 2, 2, 0, 0, 2], rootFret: 0 },
+    '9':     { frets: [0, 2, 0, 1, 0, 2], rootFret: 0 },
+    'm9':    { frets: [0, 2, 0, 0, 0, 2], rootFret: 0 },
+    'maj9':  { frets: [0, 2, 1, 1, 0, 2], rootFret: 0 },
+    'dim':   { frets: [1, 'x', 'x', 1, 0, 'x'], rootFret: 1 },
+    'aug':   { frets: [0, 3, 2, 1, 1, 0], rootFret: 0 },
+    '7sus4': { frets: [0, 2, 0, 2, 0, 0], rootFret: 0 },
+    '6/9':   { frets: [0, 'x', 2, 1, 2, 2], rootFret: 0 },
+    'mmaj7': { frets: [0, 2, 1, 0, 0, 0], rootFret: 0 },
   }},
   A: { rootString: 1, patterns: {
     '':     { frets: ['x', 0, 2, 2, 2, 0], rootFret: 0 },
@@ -2269,6 +2243,18 @@ const FB_MOVABLE_SHAPES = {
     'm7b5': { frets: ['x', 0, 1, 0, 1, 'x'], rootFret: 0 },
     'sus2': { frets: ['x', 0, 2, 2, 0, 0], rootFret: 0 },
     'sus4': { frets: ['x', 0, 2, 2, 3, 0], rootFret: 0 },
+    '6':     { frets: ['x', 0, 2, 2, 2, 2], rootFret: 0 },
+    'm6':    { frets: ['x', 0, 2, 2, 1, 2], rootFret: 0 },
+    'add9':  { frets: ['x', 0, 2, 4, 2, 'x'], rootFret: 0 },
+    'madd9': { frets: ['x', 0, 2, 4, 1, 'x'], rootFret: 0 },
+    '9':     { frets: ['x', 0, 2, 4, 2, 3], rootFret: 0 },
+    'm9':    { frets: ['x', 0, 2, 4, 1, 3], rootFret: 0 },
+    'maj9':  { frets: ['x', 0, 2, 4, 2, 4], rootFret: 0 },
+    'dim':   { frets: ['x', 1, 2, 'x', 2, 'x'], rootFret: 1 },
+    'aug':   { frets: ['x', 0, 3, 2, 2, 1], rootFret: 0 },
+    '7sus4': { frets: ['x', 0, 2, 0, 3, 0], rootFret: 0 },
+    '6/9':   { frets: ['x', 0, 'x', 4, 2, 2], rootFret: 0 },
+    'mmaj7': { frets: ['x', 0, 2, 1, 1, 0], rootFret: 0 },
   }},
   D: { rootString: 2, patterns: {
     '':     { frets: ['x', 'x', 0, 2, 3, 2], rootFret: 0 },
@@ -2280,6 +2266,15 @@ const FB_MOVABLE_SHAPES = {
     'm7b5': { frets: ['x', 'x', 0, 1, 1, 1], rootFret: 0 },
     'sus2': { frets: ['x', 'x', 0, 2, 3, 0], rootFret: 0 },
     'sus4': { frets: ['x', 'x', 0, 2, 3, 3], rootFret: 0 },
+    '6':     { frets: ['x', 'x', 0, 2, 0, 2], rootFret: 0 },
+    'm6':    { frets: ['x', 'x', 0, 2, 0, 1], rootFret: 0 },
+    'dim':   { frets: ['x', 'x', 0, 1, 'x', 1], rootFret: 0 },
+    'aug':   { frets: ['x', 'x', 0, 3, 3, 2], rootFret: 0 },
+    '7sus4': { frets: ['x', 'x', 0, 2, 1, 3], rootFret: 0 },
+    'mmaj7': { frets: ['x', 'x', 0, 2, 2, 1], rootFret: 0 },
+    // No D-shape 6/9 — only 4 strings are available on this family (E/A
+    // already muted), not enough to fit root+3rd+6th+9th without dropping
+    // a tone that matters; same reasoning as the missing D-shape 9/m9/maj9.
   }},
 };
 
@@ -2295,6 +2290,33 @@ const FB_SHELL_PATTERNS = {
   A: { '7': ['x',0,'x',0,2,'x'], 'm7': ['x',0,'x',0,1,'x'], 'maj7': ['x',0,'x',1,2,'x'] },
   D: { '7': ['x','x',0,'x',1,2], 'm7': ['x','x',0,'x',1,1], 'maj7': ['x','x',0,'x',2,2] },
 };
+// 4-note "shell + 9" voicings: root-3rd(or b3)-7th(or maj7)-9th, 5th dropped,
+// on 4 adjacent strings (outer strings muted). This is the classic movable
+// R&B/funk/jazz 9-chord shape (e.g. the common "x-10-9-10-10-x" G9 grip) —
+// a distinct fingering family from FB_MOVABLE_SHAPES/FB_SHELL_PATTERNS above,
+// not a CAGED-derived barre shape. Every note verified by interval math
+// against FB_CHORD_QUALITIES before being added here.
+// 7b9/7#9 (altered dominants) are the same 4-note "shell+9" shape family,
+// just with the top note nudged one fret to flat/sharpen the 9th. A-shape
+// '7#9' at fret 7 (root E) is literally the famous "Hendrix chord" grip
+// (x-7-6-7-8-x). No D-shape — same reach problem as the plain 9-chords.
+const FB_SHELL9_PATTERNS = {
+  E: {
+    '9':   { frets: [1, 0, 1, 0, 'x', 'x'], rootFret: 1 },
+    m9:    { frets: [2, 0, 2, 1, 'x', 'x'], rootFret: 2 },
+    maj9:  { frets: [1, 0, 2, 0, 'x', 'x'], rootFret: 1 },
+    '7b9': { frets: [2, 1, 2, 0, 'x', 'x'], rootFret: 2 },
+    '7#9': { frets: [1, 0, 1, 1, 'x', 'x'], rootFret: 1 },
+  },
+  A: {
+    '9':   { frets: ['x', 1, 0, 1, 1, 'x'], rootFret: 1 },
+    m9:    { frets: ['x', 2, 0, 2, 2, 'x'], rootFret: 2 },
+    maj9:  { frets: ['x', 1, 0, 2, 1, 'x'], rootFret: 1 },
+    '7b9': { frets: ['x', 1, 0, 1, 0, 'x'], rootFret: 1 },
+    '7#9': { frets: ['x', 1, 0, 1, 2, 'x'], rootFret: 1 },
+  },
+};
+const FB_SHELL9_QUALITIES = new Set(['9', 'm9', 'maj9', '7b9', '7#9']);
 
 function fbRenderChordShapeDiagrams(chord) {
   const el = document.getElementById('fb-chord-diagrams');
@@ -2369,6 +2391,32 @@ function fbRenderChordShapeDiagrams(chord) {
       el.appendChild(shCard);
     });
   }
+
+  // Shell+9 chords (root + 3rd/b3 + 7th/maj7 + 9th, no 5th) for 9/m9/maj9 —
+  // a different fingering family from the CAGED-derived E/A/D shapes above
+  // (see FB_SHELL9_PATTERNS comment). Root can only sit on the E or A string;
+  // a D-string-root version isn't practical (same reach issue that already
+  // excludes D-shape from the plain 9/m9/maj9 barre voicings above).
+  if (FB_SHELL9_QUALITIES.has(chord.quality)) {
+    ['E', 'A'].forEach(letter => {
+      const pattern = FB_SHELL9_PATTERNS[letter] && FB_SHELL9_PATTERNS[letter][chord.quality];
+      if (!pattern) return;
+      const family = FB_MOVABLE_SHAPES[letter];
+      const sh9Shape = { frets: pattern.frets, rootString: family.rootString, rootFret: pattern.rootFret };
+      const sh9BarreFret = fbBarreFretForShape(chord.root, sh9Shape);
+      const sh9DegreeLabels = fbState.chord.showDegreesOnDiagram ? fbShapeDegreeLabels(sh9Shape, chord.quality) : null;
+      const sh9Card = document.createElement('div');
+      sh9Card.className = 'fb-shape-card';
+      const sh9Title = document.createElement('div');
+      sh9Title.className = 'fb-shape-card-title';
+      sh9Title.textContent = `${letter}-shape（壳+9）`;
+      sh9Card.appendChild(sh9Title);
+      const sh9Wrap = document.createElement('div');
+      sh9Card.appendChild(sh9Wrap);
+      fbRenderShapeBox(sh9Wrap, sh9Shape, sh9BarreFret, sh9DegreeLabels, true);
+      el.appendChild(sh9Card);
+    });
+  }
 }
 
 function fbChordLoadStats() {
@@ -2419,6 +2467,15 @@ function fbRenderChordOptions() {
       </select>
     </label>` : ''}
     ${s.source === 'progression' ? `
+    <label style="margin-left:8px">Pattern:
+      <select onchange="fbState.chord.progression.categoryFilter=this.value; fbState.chord.progression.chords=null; fbPrefsSave()">
+        <option value="all"        ${s.progression.categoryFilter==='all'       ?'selected':''}>All</option>
+        <option value="functional" ${s.progression.categoryFilter==='functional'?'selected':''}>Functional (T-S-D-T)</option>
+        <option value="circle5"    ${s.progression.categoryFilter==='circle5'   ?'selected':''}>Circle of fifths</option>
+        <option value="stepwise"   ${s.progression.categoryFilter==='stepwise'  ?'selected':''}>Stepwise descent/ascent</option>
+        <option value="blues"      ${s.progression.categoryFilter==='blues'     ?'selected':''}>12-bar blues</option>
+      </select>
+    </label>
     <label style="margin-left:8px">Repeat each progression:
       <input type="number" min="1" max="8" value="${s.progression.repeatCount}" style="width:48px"
         onchange="fbState.chord.progression.repeatCount=Math.max(1, parseInt(this.value)||1); fbPrefsSave()"> ×
@@ -2543,22 +2600,22 @@ function fbChordEnabledPool() {
 const FB_MAJOR_SCALE_OFFSETS = [0, 2, 4, 5, 7, 9, 11];
 const FB_MINOR_SCALE_OFFSETS = [0, 2, 3, 5, 7, 8, 10];
 const FB_MAJOR_DEGREE_QUALITIES = [
-  ['', 'maj7'],    // I
-  ['m', 'm7'],     // ii
-  ['m', 'm7'],     // iii
-  ['', 'maj7'],    // IV
-  ['', '7'],       // V
-  ['m', 'm7'],     // vi
-  ['m7b5', 'dim7'],// vii°
+  ['', 'maj7', '6', 'maj9', 'add9'],  // I
+  ['m', 'm7', 'm9'],                  // ii
+  ['m', 'm7', 'm9'],                  // iii
+  ['', 'maj7', '6', 'maj9', 'add9'],  // IV
+  ['', '7', '9'],                     // V
+  ['m', 'm7', 'm6', 'm9'],            // vi
+  ['m7b5', 'dim7'],                   // vii°
 ];
 const FB_MINOR_DEGREE_QUALITIES = [
-  ['m', 'm7'],     // i
-  ['m7b5', 'dim7'],// ii°
-  ['', 'maj7'],    // III
-  ['m', 'm7'],     // iv
-  ['m', 'm7'],     // v
-  ['', 'maj7'],    // VI
-  ['', '7'],       // VII
+  ['m', 'm7', 'm6', 'm9'],            // i
+  ['m7b5', 'dim7'],                   // ii°
+  ['', 'maj7', 'maj9'],                // III
+  ['m', 'm7', 'm9'],                  // iv
+  ['m', 'm7', 'm9'],                  // v
+  ['', 'maj7', '6', 'maj9'],           // VI
+  ['', '7', '9'],                     // VII
 ];
 // category is a rough tag for the *dominant generative mechanism* behind
 // each progression's root motion — not a rigorous classification (several
@@ -2584,6 +2641,9 @@ const FB_CHORD_PROGRESSIONS = [
   { name: 'i – VII – VI – VII', keyType: 'minor', degrees: [0, 6, 5, 6], category: 'functional' },
   { name: 'i – iv – VII – III (minor rock)', keyType: 'minor', degrees: [0, 3, 6, 2], category: 'circle5' },
   { name: 'i – VII – VI – v (Andalusian-ish)', keyType: 'minor', degrees: [0, 6, 5, 4], category: 'stepwise' },
+  { name: 'ii – V – I – vi (R&B / neo-soul loop)', keyType: 'major', degrees: [1, 4, 0, 5], category: 'circle5' },
+  { name: 'I – IV – I – V (gospel / R&B vamp)', keyType: 'major', degrees: [0, 3, 0, 4], category: 'functional' },
+  { name: 'i – iv – v – i (minor R&B vamp)', keyType: 'minor', degrees: [0, 3, 4, 0], category: 'functional' },
 ];
 
 // The first enabled quality among a degree's candidates, or null if the user
@@ -2599,9 +2659,13 @@ function fbChordBestQualityFor(degreeIdx, keyType) {
 // enabled quality — otherwise we'd be asking the user to strum a chord type
 // they've explicitly turned off.
 function fbChordEligibleProgressions() {
-  // NB: fbChordBestQualityFor can validly return '' (major triad) — check
-  // against null explicitly rather than truthiness.
-  return FB_CHORD_PROGRESSIONS.filter(p => p.degrees.every(d => fbChordBestQualityFor(d, p.keyType) !== null));
+  const catFilter = fbState.chord.progression.categoryFilter;
+  return FB_CHORD_PROGRESSIONS.filter(p =>
+    (catFilter === 'all' || p.category === catFilter) &&
+    // NB: fbChordBestQualityFor can validly return '' (major triad) — check
+    // against null explicitly rather than truthiness.
+    p.degrees.every(d => fbChordBestQualityFor(d, p.keyType) !== null)
+  );
 }
 
 // Builds the concrete { root, quality, symbol } list for one pass through a
@@ -3002,133 +3066,6 @@ function fbFreqToNote(freq) {
   const noteName = FB_NOTE_NAMES[((midi % 12) + 12) % 12];
   return { noteName, cents, midi };
 }
-
-// ── Key Map: relative major/minor lookup + scale-degree-to-chord lookup ──
-// Two drills meant to be practiced separately then combined (see
-// docs/caged-positional-progression-practice.md): given a chord, name its
-// relative major/minor; given a key + Roman-numeral degree, name the chord.
-// Speed at "Em -> G -> 1-6-4-5 = G-Em-C-D" is really just these two lookups
-// chained, not a third thing to memorize on its own.
-
-function fbKeymapSetMode(mode) {
-  fbState.keymap.mode = mode;
-  fbPrefsSave();
-  document.querySelectorAll('#fb-keymap .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.keymapmode === mode));
-  document.getElementById('fb-keymap-relative-panel').style.display = mode === 'relative' ? '' : 'none';
-  document.getElementById('fb-keymap-degree-panel').style.display = mode === 'degree' ? '' : 'none';
-}
-
-function fbRenderRelativeStats() {
-  const s = fbState.keymap.relative;
-  document.getElementById('fb-keymap-relative-stats').innerHTML = `
-    <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
-    <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
-  `;
-}
-
-function fbRelativeNext() {
-  const s = fbState.keymap.relative;
-  s.locked = false;
-  const rootPc = Math.floor(Math.random() * 12);
-  const isMinor = Math.random() < 0.5;
-  // minor root + 3 semitones = its relative major; major root + 9 (i.e. -3) = its relative minor
-  const answerPc = isMinor ? (rootPc + 3) % 12 : (rootPc + 9) % 12;
-  s.current = { rootPc, isMinor, answerPc };
-
-  fbRenderRelativeStats();
-  const chordName = FB_NOTE_NAMES[rootPc] + (isMinor ? 'm' : '');
-  document.getElementById('fb-keymap-relative-prompt').innerHTML =
-    `What's the root of the relative ${isMinor ? 'major' : 'minor'} of <b>${chordName}</b>?`;
-  const ansEl = document.getElementById('fb-keymap-relative-answers');
-  ansEl.innerHTML = FB_NOTE_NAMES.map(n => `<button class="fb-answer-btn" onclick="fbRelativeAnswer('${n}', this)">${n}</button>`).join('');
-  const fb = document.getElementById('fb-keymap-relative-feedback');
-  fb.textContent = '';
-  fb.className = 'fb-feedback';
-}
-
-function fbRelativeAnswer(note, btnEl) {
-  const s = fbState.keymap.relative;
-  if (s.locked) return;
-  s.locked = true;
-  s.total++;
-  const correct = FB_NOTE_NAMES.indexOf(note) === s.current.answerPc;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-  btnEl.classList.add(correct ? 'correct' : 'wrong');
-
-  const answerName = FB_NOTE_NAMES[s.current.answerPc] + (s.current.isMinor ? '' : 'm');
-  const fb = document.getElementById('fb-keymap-relative-feedback');
-  fb.textContent = correct ? `Correct — ${answerName}` : `${answerName} (you said ${note})`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderRelativeStats();
-  setTimeout(fbRelativeNext, 900);
-}
-
-const FB_DEGREE_LABELS = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii°'];
-const FB_DEGREE_QUALITIES = ['', 'm', 'm', '', '', 'm', 'dim'];
-const FB_DEGREE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
-const FB_DEGREE_COMMON = [0, 3, 4, 5]; // I, IV, V, vi — the "1-6-4-5" family
-
-function fbDegreeChordName(keyRootPc, degreeIdx) {
-  const rootPc = (keyRootPc + FB_DEGREE_INTERVALS[degreeIdx]) % 12;
-  return FB_NOTE_NAMES[rootPc] + FB_DEGREE_QUALITIES[degreeIdx];
-}
-
-function fbRenderDegreeOptions() {
-  const s = fbState.keymap.degree;
-  document.getElementById('fb-keymap-degree-options').innerHTML = `
-    <label><input type="checkbox" ${s.fullSet ? 'checked' : ''}
-      onchange="fbState.keymap.degree.fullSet=this.checked; fbPrefsSave(); fbDegreeNext()"> Full diatonic set (I–vii°), not just I/IV/V/vi</label>
-  `;
-}
-
-function fbRenderDegreeStats() {
-  const s = fbState.keymap.degree;
-  document.getElementById('fb-keymap-degree-stats').innerHTML = `
-    <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
-    <span class="fb-stat-streak">Streak <b>${s.streak}</b></span>
-  `;
-}
-
-function fbDegreeNext() {
-  const s = fbState.keymap.degree;
-  s.answered = false;
-  const keyRootPc = Math.floor(Math.random() * 12);
-  const pool = s.fullSet ? [0, 1, 2, 3, 4, 5, 6] : FB_DEGREE_COMMON;
-  const degreeIdx = pool[Math.floor(Math.random() * pool.length)];
-  const answerRootPc = (keyRootPc + FB_DEGREE_INTERVALS[degreeIdx]) % 12;
-  s.current = { keyRootPc, degreeIdx, answerRootPc, answer: fbDegreeChordName(keyRootPc, degreeIdx) };
-
-  fbRenderDegreeStats();
-  document.getElementById('fb-keymap-degree-prompt').innerHTML =
-    `In <b>${FB_NOTE_NAMES[keyRootPc]} major</b>, what chord is the <b>${FB_DEGREE_LABELS[degreeIdx]}</b>?`;
-
-  // All 12 notes, not just the key's diatonic set — picking the right root
-  // pitch class is the actual skill; its quality (maj/min/dim) is a fixed
-  // fact of the roman numeral itself, not something the choices need to test.
-  document.getElementById('fb-keymap-degree-answers').innerHTML =
-    FB_NOTE_NAMES.map(n => `<button class="fb-answer-btn" onclick="fbDegreeAnswer('${n}', this)">${n}</button>`).join('');
-
-  const fb = document.getElementById('fb-keymap-degree-feedback');
-  fb.textContent = '';
-  fb.className = 'fb-feedback';
-}
-
-function fbDegreeAnswer(note, btnEl) {
-  const s = fbState.keymap.degree;
-  if (s.answered) return;
-  s.answered = true;
-  s.total++;
-  const correct = FB_NOTE_NAMES.indexOf(note) === s.current.answerRootPc;
-  if (correct) { s.correct++; s.streak++; } else { s.streak = 0; }
-  btnEl.classList.add(correct ? 'correct' : 'wrong');
-
-  const fb = document.getElementById('fb-keymap-degree-feedback');
-  fb.textContent = correct ? `Correct — ${s.current.answer}` : `${s.current.answer} (you said ${note})`;
-  fb.className = 'fb-feedback ' + (correct ? 'ok' : 'err');
-  fbRenderDegreeStats();
-  setTimeout(fbDegreeNext, 900);
-}
-
 
 // ── Bend & Vibrato ──
 
@@ -3903,21 +3840,16 @@ function fbVibratoRenderStats() {
 }
 
 // ── Guard action buttons against rapid double-click ──
-// Answer functions (fbNotesAnswer, fbEarTwoAnswer, etc.) already have an
+// Answer functions (fbEarTwoAnswer, etc.) already have an
 // internal `locked`/`answered` flag — only the bare "Next" and "Play"
 // functions need wrapping here.
 fbBendNext                = guarded(fbBendNext);
-fbCagedNext               = guarded(fbCagedNext);
-fbNotesNext               = guarded(fbNotesNext);
-fbShapeDegreeIdentifyNext = guarded(fbShapeDegreeIdentifyNext);
-fbShapeDegreeLocateNext   = guarded(fbShapeDegreeLocateNext);
 fbEarManualNext           = guarded(fbEarManualNext);
 fbEarPlayCurrent          = guarded(fbEarPlayCurrent);
 fbEarPlayScaffold         = guarded(fbEarPlayScaffold);
 fbPitchNewNote            = guarded(fbPitchNewNote);
 fbChordNewChord           = guarded(fbChordNewChord);
-fbRelativeNext            = guarded(fbRelativeNext);
-fbDegreeNext              = guarded(fbDegreeNext);
+fbSeqNewSequence          = guarded(fbSeqNewSequence);
 
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
@@ -3928,8 +3860,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbStringMidis, fbPitchAllowedMidis,
     fbChordFormula, fbChordDisplaySymbol,
     fbFreqToNote, fbAutoCorrelate,
-    fbDegreeChordName,
-    FB_CAGED_SHAPES, fbShapeDegreeLabels, fbShapePositionsForShape, fbShapeDegreeSetup,
+    FB_CAGED_SHAPES, fbShapeDegreeLabels,
     FB_EAR_SCALES, fbEarIntervalName, fbEarPossibleIntervals, fbEarAdjacentIntervals, fbEarPickOrder,
     FB_EAR_RANGE_BASE, FB_EAR_INTERVAL_HINTS,
     FB_CHORD_PROGRESSIONS, fbChordBestQualityFor, fbChordEligibleProgressions, fbChordBuildProgressionChords,
@@ -3938,5 +3869,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbChordPickTargetFixedRoot,
     FB_NATURAL_NOTE_NAMES, fbPitchPickTarget,
     fbChordPickTargetProgression, fbChordPreviewProgression,
+    FB_SEQ_SCALE_KEYS, FB_SEQ_PATTERNS, fbSeqScaleSteps, fbSeqBuildAscending, fbSeqBuildSemitoneOffsets,
+    fbSeqAnchorPosition, fbSeqAssignFretting,
   };
 }

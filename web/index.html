@@ -2,8 +2,10 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>Music Practice</title>
+  <title>MyMusicStdio</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,14 +16,12 @@
   <button class="nav-btn active" data-page="vamp"      onclick="showPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"        onclick="showPage('jam')">Jam</button>
   <span class="nav-sep"></span>
-  <!-- Chart-based -->
-  <button class="nav-btn"        data-page="songs"      onclick="showPage('songs')">Songs</button>
-  <button class="nav-btn"        data-page="sightread"  onclick="showPage('sightread')">Sight Read</button>
-  <span class="nav-sep"></span>
   <!-- Practice tools -->
   <button class="nav-btn"        data-page="licks"      onclick="showPage('licks')">Licks</button>
   <button class="nav-btn"        data-page="fretboard"  onclick="showPage('fretboard')">Fretboard</button>
+  <button class="nav-btn"        data-page="fretboard"  onclick="showPage('fretboard'); fbShowMode('chord');">Chord Match</button>
   <button class="nav-btn"        data-page="speed"      onclick="showPage('speed')">Speed Trainer</button>
+  <button class="nav-btn"        data-page="songloop"   onclick="showPage('songloop')">Song Loop</button>
   <span class="nav-sep"></span>
   <!-- Settings -->
   <button class="nav-btn"        data-page="prefs"      onclick="showPage('prefs')">Preferences</button>
@@ -65,125 +65,21 @@
   <div id="jam-chart"></div>
 </div>
 
-<!-- SONGS PAGE -->
-<div class="page" id="page-songs">
-  <div class="page-header">
-    <h2 class="page-title">Songs</h2>
-    <button class="btn btn-primary" onclick="newSong()">+ New Song</button>
-  </div>
-  <div id="songs-list"></div>
-</div>
-
-<!-- SONG EDITOR PAGE -->
-<div class="page" id="page-editor">
-  <div id="editor-controls"></div>
-  <div class="playback-panel" id="editor-playback">
-    <div class="playback-elapsed" id="editor-elapsed">—</div>
-    <div class="playback-meta">
-      <span class="playback-meta-val" id="editor-loop-val">—</span>
-      <span class="playback-meta-lbl">loop</span>
-    </div>
-    <div class="playback-state" id="editor-state">stopped</div>
-  </div>
-  <div id="editor-chart"></div>
-</div>
-
-<!-- SIGHT READ PAGE -->
-<div class="page" id="page-sightread">
-  <div id="sightread-picker">
-    <div class="page-header"><h2 class="page-title">Sight Read — pick a song</h2></div>
-    <div id="sightread-song-list"></div>
-  </div>
-  <div id="sightread-view" style="display:none">
-    <div id="sightread-controls"></div>
-    <div class="playback-panel" id="sightread-playback">
-      <div class="playback-elapsed" id="sightread-elapsed">—</div>
-      <div class="playback-meta">
-        <span class="playback-meta-val" id="sightread-loop-val">—</span>
-        <span class="playback-meta-lbl">loop</span>
-      </div>
-      <div class="playback-state" id="sightread-state">stopped</div>
-    </div>
-    <div id="sightread-chart"></div>
-  </div>
-</div>
-
 <!-- FRETBOARD PAGE -->
 <div class="page" id="page-fretboard">
   <div class="fb-tabs-row">
     <div class="fb-tabs">
-      <button class="fb-tab active" data-fbmode="notes" onclick="fbShowMode('notes')">Note Names</button>
-      <button class="fb-tab" data-fbmode="caged" onclick="fbShowMode('caged')">CAGED Shapes</button>
-      <button class="fb-tab" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
+      <button class="fb-tab active" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
       <button class="fb-tab" data-fbmode="tuner" onclick="fbShowMode('tuner')">Tuner</button>
       <button class="fb-tab" data-fbmode="chord" onclick="fbShowMode('chord')">Chord Match</button>
-      <button class="fb-tab" data-fbmode="keymap" onclick="fbShowMode('keymap')">Key Map</button>
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
       <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
-    </div>
-    <a class="fb-ref-link" href="chord-reference-sheet-by-chord.html" target="_blank">📄 和弦指型参考表 ↗</a>
-  </div>
-
-  <!-- Note Names drill -->
-  <div class="fb-panel active" id="fb-notes">
-    <div class="fb-options" id="fb-notes-options"></div>
-    <div class="fb-stats" id="fb-notes-stats"></div>
-    <div id="fb-notes-board"></div>
-    <div class="fb-answer-grid" id="fb-notes-answers"></div>
-    <div class="fb-feedback" id="fb-notes-feedback"></div>
-    <div class="fb-stats-table-wrap" id="fb-notes-stats-table"></div>
-  </div>
-
-  <!-- CAGED Shapes drill -->
-  <div class="fb-panel" id="fb-caged">
-    <div class="fb-subtabs" id="fb-caged-mode-tabs">
-      <button class="fb-subtab active" data-cagedmode="barre" onclick="fbCagedSetMode('barre')">Barre Position</button>
-      <button class="fb-subtab" data-cagedmode="degrees" onclick="fbCagedSetMode('degrees')">Shape Degrees</button>
-    </div>
-
-    <!-- Barre Position: given a root + shape letter, name the barre fret -->
-    <div id="fb-caged-barre-panel">
-      <div class="fb-stats" id="fb-caged-stats"></div>
-      <div class="fb-prompt" id="fb-caged-prompt"></div>
-      <div class="fb-caged-answer">
-        <label>Fret</label>
-        <input type="number" id="fb-caged-fret" min="0" max="15" style="width:64px">
-        <button class="btn btn-primary btn-sm" onclick="fbCagedCheck()">Check</button>
-        <button class="btn btn-ghost btn-sm" onclick="fbCagedNext()">Next →</button>
-      </div>
-      <div class="fb-feedback" id="fb-caged-feedback"></div>
-      <div id="fb-caged-board"></div>
-    </div>
-
-    <!-- Shape Degrees: which finger position in a CAGED shape is the root/3rd/5th -->
-    <div id="fb-caged-degrees-panel" style="display:none">
-      <div class="fb-options" id="fb-shapedeg-options"></div>
-      <div class="fb-subtabs" id="fb-shapedeg-mode-tabs">
-        <button class="fb-subtab active" data-degreemode="identify" onclick="fbShapeDegreeSetMode('identify')">Identify</button>
-        <button class="fb-subtab" data-degreemode="locate" onclick="fbShapeDegreeSetMode('locate')">Locate</button>
-      </div>
-
-      <!-- Identify: a position is highlighted, name its scale degree -->
-      <div id="fb-shapedeg-identify-panel">
-        <div class="fb-stats" id="fb-shapedeg-identify-stats"></div>
-        <div class="fb-prompt" id="fb-shapedeg-identify-prompt"></div>
-        <div id="fb-shapedeg-identify-board"></div>
-        <div class="fb-answer-grid" id="fb-shapedeg-identify-answers" style="max-width:220px"></div>
-        <div class="fb-feedback" id="fb-shapedeg-identify-feedback"></div>
-      </div>
-
-      <!-- Locate: given a scale degree, click a matching position on the shape -->
-      <div id="fb-shapedeg-locate-panel" style="display:none">
-        <div class="fb-stats" id="fb-shapedeg-locate-stats"></div>
-        <div class="fb-prompt" id="fb-shapedeg-locate-prompt"></div>
-        <div id="fb-shapedeg-locate-board"></div>
-        <div class="fb-feedback" id="fb-shapedeg-locate-feedback"></div>
-      </div>
+      <button class="fb-tab" data-fbmode="seq" onclick="fbShowMode('seq')">Scale Sequences</button>
     </div>
   </div>
 
   <!-- Pitch Match (mic ear training) -->
-  <div class="fb-panel" id="fb-pitch">
+  <div class="fb-panel active" id="fb-pitch">
     <div class="fb-options" id="fb-pitch-options"></div>
     <div class="fb-stats" id="fb-pitch-stats"></div>
     <div class="fb-pitch-target" id="fb-pitch-target"></div>
@@ -210,6 +106,7 @@
   <!-- Chord Match (mic-based chord sight-reading: strum the named chord, get confirmation) -->
   <div class="fb-panel" id="fb-chord">
     <div class="fb-options" id="fb-chord-options"></div>
+    <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
 
     <div id="fb-chord-exam-panel">
       <div class="fb-stats" id="fb-chord-stats"></div>
@@ -224,33 +121,6 @@
       <div class="fb-feedback" id="fb-chord-feedback"></div>
       <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
       <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
-    </div>
-  </div>
-
-  <!-- Key Map: relative major/minor lookup + scale-degree-to-chord lookup, both timed -->
-  <div class="fb-panel" id="fb-keymap">
-    <div class="fb-subtabs">
-      <button class="fb-subtab active" data-keymapmode="relative" onclick="fbKeymapSetMode('relative')">Relative Key</button>
-      <button class="fb-subtab" data-keymapmode="degree" onclick="fbKeymapSetMode('degree')">Scale Degree</button>
-    </div>
-
-    <!-- Relative Key: given a chord, name the root of its relative major/minor -->
-    <div id="fb-keymap-relative-panel">
-      <div class="fb-stats" id="fb-keymap-relative-stats"></div>
-      <div class="fb-prompt" id="fb-keymap-relative-prompt"></div>
-      <div class="fb-answer-grid" id="fb-keymap-relative-answers"></div>
-      <div class="fb-feedback" id="fb-keymap-relative-feedback"></div>
-      <button class="btn btn-ghost btn-sm" onclick="fbRelativeNext()">Next →</button>
-    </div>
-
-    <!-- Scale Degree: given a major key + a Roman-numeral degree, name the chord -->
-    <div id="fb-keymap-degree-panel" style="display:none">
-      <div class="fb-options" id="fb-keymap-degree-options"></div>
-      <div class="fb-stats" id="fb-keymap-degree-stats"></div>
-      <div class="fb-prompt" id="fb-keymap-degree-prompt"></div>
-      <div class="fb-answer-grid" id="fb-keymap-degree-answers"></div>
-      <div class="fb-feedback" id="fb-keymap-degree-feedback"></div>
-      <button class="btn btn-ghost btn-sm" onclick="fbDegreeNext()">Next →</button>
     </div>
   </div>
 
@@ -319,6 +189,35 @@
       <div class="fb-feedback" id="fb-vibrato-feedback"></div>
     </div>
   </div>
+
+  <!-- Scale Sequences: diatonic 3rds/6ths/triad/7th-arpeggio sequences, walked up/down a chosen scale -->
+  <div class="fb-panel" id="fb-seq">
+    <div class="fb-options" id="fb-seq-options"></div>
+    <div class="fb-subtabs" id="fb-seq-mode-tabs">
+      <button class="fb-subtab active" data-seqmode="reference" onclick="fbSeqSetMode('reference')">Reference</button>
+      <button class="fb-subtab" data-seqmode="verify" onclick="fbSeqSetMode('verify')">Play &amp; Verify</button>
+    </div>
+
+    <!-- Reference: the full note sequence + its fretboard positions in play order -->
+    <div id="fb-seq-reference-panel">
+      <div class="fb-prompt" id="fb-seq-reference-list"></div>
+      <div id="fb-seq-reference-board"></div>
+    </div>
+
+    <!-- Play & Verify: mic listens as you play the sequence, advancing note-by-note -->
+    <div id="fb-seq-verify-panel" style="display:none">
+      <div class="fb-stats" id="fb-seq-verify-stats"></div>
+      <div class="fb-pitch-target" id="fb-seq-verify-target"></div>
+      <div class="fb-pitch-meter" id="fb-seq-verify-meter"></div>
+      <label style="display:block;margin:4px 0"><input type="checkbox" id="fb-seq-hint-cb"
+        onchange="fbState.seq.showPositionHint=this.checked; fbPrefsSave(); fbRenderSeqVerify()"> Show fretboard position hint</label>
+      <div id="fb-seq-verify-board"></div>
+      <div class="fb-caged-answer">
+        <button class="btn btn-ghost btn-sm" onclick="fbSeqNewSequence()">New Sequence</button>
+      </div>
+      <div class="fb-feedback" id="fb-seq-verify-feedback"></div>
+    </div>
+  </div>
 </div>
 
 <!-- SPEED TRAINER PAGE -->
@@ -342,6 +241,15 @@
 
 <div class="page" id="page-speed">
   <div class="page-header"><h2 class="page-title">Speed Trainer</h2></div>
+
+  <!-- #st-panel is the metronome's actual DOM — its natural home is right
+       here, but licksSyncPracticePanelHome() (licks.js) relocates it into a
+       Lick's detail page automatically whenever that lick is open (opening
+       a lick IS starting practice — see practiceLick), so there's nothing
+       to click to reveal it. See that function's comment for the full
+       relocation contract. -->
+  <div id="st-panel-home">
+  <div id="st-panel">
   <div class="st-active-lick-banner" id="st-active-lick-banner" style="display:none"></div>
 
   <div class="st-options">
@@ -376,7 +284,129 @@
     <button class="btn btn-ghost btn-sm" onclick="stBumpUp()">⬆ Bump toward target (+step)</button>
     <button class="btn btn-ghost btn-sm" onclick="stReset()">Reset to start BPM</button>
   </div>
+  </div>
+  </div>
 
+</div>
+
+<!-- SONG LOOP PAGE -->
+<div class="page" id="page-songloop">
+  <div class="gp-outer">
+  <div class="gp-card">
+
+    <div class="gp-dropzone-row" id="sl-dropzone-row">
+      <label class="gp-dropzone" id="sl-dropzone">
+        <input type="file" id="sl-file-input" accept="audio/*" />
+        <span id="sl-dropzone-text">点击选择，或把音频文件拖到这里（mp3 / m4a / wav）——本地处理，不会上传</span>
+      </label>
+    </div>
+
+    <!-- toolbar -->
+    <div class="gp-toolbar">
+      <div class="gp-time" id="sl-time-readout">0:00 / 0:00</div>
+
+      <div class="gp-sep"></div>
+
+      <div class="gp-ctl-group">
+        <div class="gp-ctl-row">
+          <span class="gp-ctl-lbl">速度</span>
+          <input type="range" id="sl-speed-slider" min="50" max="150" step="1" value="100" class="gp-slider">
+          <input type="number" id="sl-speed-num" min="50" max="150" value="100" class="gp-num-sm">
+          <span class="gp-pct">%</span>
+        </div>
+        <div class="gp-ctl-sub">音高不变</div>
+      </div>
+
+      <div class="gp-sep"></div>
+
+      <div class="gp-ctl-group">
+        <div class="gp-ctl-row">
+          <span class="gp-ctl-lbl">移调</span>
+          <button class="gp-step-btn" id="sl-pitch-down">&minus;</button>
+          <span class="gp-pitch-label" id="sl-pitch-label">原调（不移调）</span>
+          <button class="gp-step-btn" id="sl-pitch-up">+</button>
+        </div>
+        <div class="gp-ctl-sub">每次 1 个半音（暂不影响实际音高，仅作标记）</div>
+      </div>
+
+      <div class="gp-sep"></div>
+
+      <div class="gp-loop-panel" id="sl-loop-panel">
+        <label class="gp-loop-check">
+          <input type="checkbox" id="sl-loop-toggle">
+          <span>循环</span>
+        </label>
+        <div class="gp-loop-range">
+          <span class="gp-ctl-lbl">第</span>
+          <input type="number" id="sl-loop-from" min="1" value="5" class="gp-num-sm">
+          <span class="gp-ctl-lbl">&ndash;</span>
+          <input type="number" id="sl-loop-to" min="1" value="8" class="gp-num-sm">
+          <span class="gp-ctl-lbl">小节</span>
+        </div>
+      </div>
+      <div class="gp-loop-hint" id="sl-loop-hint">关闭时正常播放全曲</div>
+
+      <div class="gp-offset-panel" id="sl-offset-panel">
+        <span class="gp-ctl-lbl">偏移</span>
+        <button class="gp-offset-btn" id="sl-offset-minus-bar" title="第 1 小节起点向前移一小节">-1 小节</button>
+        <button class="gp-offset-btn" id="sl-offset-minus-beat" title="第 1 小节起点向前移一拍">-1 拍</button>
+        <button class="gp-offset-btn gp-offset-accent" id="sl-offset-set-here" title="把当前播放位置设为第 1 小节起点">当前点=1</button>
+        <button class="gp-offset-btn" id="sl-offset-plus-beat" title="第 1 小节起点向后移一拍">+1 拍</button>
+        <button class="gp-offset-btn" id="sl-offset-plus-bar" title="第 1 小节起点向后移一小节">+1 小节</button>
+        <span class="gp-offset-readout" id="sl-offset-readout">0 拍</span>
+      </div>
+
+      <div class="gp-phrase-panel" id="sl-phrase-panel">
+        <span class="gp-ctl-lbl">句首</span>
+        <button class="gp-phrase-btn gp-phrase-accent" id="sl-phrase-set-here" title="把当前播放位置所在的小节设为句首">当前点=句首</button>
+        <button class="gp-phrase-btn" id="sl-phrase-prev" title="句首向前挪一小节">-1 小节</button>
+        <button class="gp-phrase-btn" id="sl-phrase-next" title="句首向后挪一小节">+1 小节</button>
+        <button class="gp-phrase-btn" id="sl-phrase-clear" title="删除当前选中的句首">删除句首</button>
+        <span class="gp-phrase-readout" id="sl-phrase-readout">尚未选择句首</span>
+      </div>
+
+      <div class="gp-sidecar-panel" id="sl-sidecar-panel">
+        <span class="gp-ctl-lbl">Sidecar</span>
+        <button class="gp-sidecar-btn gp-sidecar-accent" id="sl-sidecar-save">保存 sidecar</button>
+        <button class="gp-sidecar-btn" id="sl-sidecar-load">载入 sidecar</button>
+        <span class="gp-sidecar-hint" id="sl-sidecar-hint">保存句首 / 歌词 / 简谱 / 偏移到单独的 .json 文件</span>
+      </div>
+    </div>
+
+    <!-- waveform -->
+    <div class="gp-wave" id="sl-wave">
+      <div class="gp-wave-meta" id="sl-wave-meta">加载音频后显示文件信息</div>
+      <div class="gp-wave-loop" id="sl-wave-loop"></div>
+      <div class="gp-wave-bars" id="sl-wave-bars"></div>
+      <div class="gp-wave-playhead" id="sl-wave-playhead"></div>
+    </div>
+
+    <!-- score header -->
+    <div class="gp-score-header">
+      <select id="sl-key-select" class="gp-key-select"></select>
+      <span class="gp-tag" id="sl-key-tag">默认</span>
+      <div class="gp-sep gp-sep-sm"></div>
+      <div class="gp-timesig">4/4</div>
+      <div class="gp-sep gp-sep-sm"></div>
+      <div class="gp-bpm-row">
+        <span class="gp-bpm-eq">&#9833; =</span>
+        <input type="number" id="sl-bpm-input" min="40" max="220" value="96" class="gp-num-sm">
+        <span class="gp-tag" id="sl-bpm-tag">默认</span>
+      </div>
+      <button class="gp-tap-btn" id="sl-tap-btn">打拍子校准</button>
+      <div class="gp-flex-spacer"></div>
+      <div class="gp-score-hint">点击可改调 / BPM 手动输入</div>
+    </div>
+
+    <!-- bar grid -->
+    <div class="gp-bar-grid" id="sl-bar-grid">
+      <div class="gp-bar-grid-empty" id="sl-bar-grid-empty">还没有加载音频。</div>
+    </div>
+    <div class="gp-bar-footer" id="sl-bar-footer"></div>
+
+  </div>
+  </div>
+  <audio id="sl-player" preload="auto"></audio>
 </div>
 
 <!-- PREFERENCES PAGE -->
@@ -385,10 +415,12 @@
   <div id="prefs-form"></div>
 </div>
 
-<div class="statusbar">
-  <span id="status-msg">Ready</span>
-  <span id="status-sf"></span>
-</div>
+  <div class="statusbar">
+    <span id="status-msg">Ready</span>
+    <span id="status-sf"></span>
+  </div>
+
+  <input type="file" id="sl-sidecar-input" accept=".json,application/json" style="display:none">
 
 <!-- modal (song title, and chord entry from the chart's right-click menu) -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
@@ -405,15 +437,31 @@
 
 <!-- Lick edit modal (title + notes + target BPM) -->
 <div id="lick-edit-modal" class="modal-overlay" onclick="if(event.target===this)closeLickEditModal()">
-  <div class="modal" style="width:360px">
+  <div class="modal" style="width:440px">
     <h3 class="modal-subtitle">Edit Lick</h3>
     <div class="lick-edit-form">
       <label>Title
         <input type="text" id="lick-edit-title" autocomplete="off" style="flex:1">
       </label>
-      <label>Notes
-        <textarea id="lick-edit-notes" rows="3" style="flex:1"></textarea>
+      <label>Notes <span class="lick-edit-notes-hint">Markdown — **bold**, ![alt](image-url), links (YouTube/Bilibili/PDF/audio preview inline)</span>
+        <textarea id="lick-edit-notes" rows="8" style="flex:1"></textarea>
       </label>
+      <details class="lick-notes-syntax-help">
+        <summary>写法参考</summary>
+        <ul>
+          <li>图片：<code>![说明](链接)</code></li>
+          <li>视频（YouTube/Bilibili）自动预览，改宽度：<code>[说明](链接 "w=300")</code></li>
+          <li>PDF 自动预览，跳到第几页：<code>[说明](链接 "page=2")</code>，更精确到页内位置（仅 Chrome 生效）：<code>[说明](链接 "page=2,y=0.4")</code></li>
+          <li>音频链接自动变成"🎧 Practice with Song Loop"按钮，不用加参数</li>
+          <li>用"📎 Attach material"选已有材料时，这段链接会自动帮你插好，只需要照着改数字</li>
+        </ul>
+      </details>
+      <div class="lick-edit-attach-row">
+        <input type="file" id="lick-edit-image-input" accept="image/*" style="display:none" onchange="lickUploadImage(this)">
+        <button type="button" class="btn btn-ghost btn-sm" title="仅这个 Lick 私有，不能被别的 Lick 复用" onclick="document.getElementById('lick-edit-image-input').click()">📷 Attach image</button>
+        <button type="button" class="btn btn-ghost btn-sm" title="共享材料库，多个 Lick 可以引用同一份文件" onclick="openMaterialPicker()">📎 Attach material (PDF/Audio)</button>
+        <span id="lick-edit-image-status" class="lick-edit-image-status"></span>
+      </div>
       <label>Target BPM (optional)
         <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" style="width:80px">
       </label>
@@ -425,32 +473,45 @@
   </div>
 </div>
 
-<!-- Lick session log modal -->
-<div id="lick-log-modal" class="modal-overlay" onclick="if(event.target===this)closeLickLogModal()">
-  <div class="modal">
-    <h3 class="modal-subtitle">Log Practice Session</h3>
-    <div class="lick-log-form">
-      <label>BPM
-        <input type="number" id="lick-log-bpm" min="20" max="300">
-      </label>
-      <label>Duration (min)
-        <input type="number" id="lick-log-dur" min="0.5" max="180" step="0.5">
-      </label>
+<!-- Material picker modal (shared PDF/audio library — upload new or reuse an
+     existing one; either way, a Markdown link gets inserted into the Lick
+     notes textarea above, which must already be open). -->
+<div id="material-picker-modal" class="modal-overlay" onclick="if(event.target===this)closeMaterialPicker()">
+  <div class="modal" style="width:420px">
+    <h3 class="modal-subtitle">Attach Material</h3>
+    <div class="material-picker-upload-row">
+      <input type="file" id="material-upload-input" accept=".pdf,audio/*" style="display:none" onchange="materialUploadAndInsert(this)">
+      <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('material-upload-input').click()">⬆️ Upload new</button>
+      <span id="material-upload-status" class="lick-edit-image-status"></span>
     </div>
+    <div id="material-picker-list" class="material-picker-list"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost btn-sm" onclick="closeLickLogModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="submitLickSession()">Log</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeMaterialPicker()">Close</button>
     </div>
   </div>
 </div>
 
-<!-- App-wide transport bar: the current page's primary action, pinned to the
-     bottom so it's always reachable and never scrolls away. Filled by app.js. -->
-<div id="transport-bar" class="transport-bar"></div>
+
+<!-- App-wide floating control panel: one draggable pill (position remembered)
+     combining the current page's primary Play/Listen action (top row; empty
+     when the page has none) with the generic practice timer (bottom row,
+     always present — it works on every page, not just ones with a
+     registered transport). app.js fills #transport-body; practice-timer.js
+     fills #pt-row. -->
+<div id="transport-pill" class="transport-pill">
+  <div class="transport-row">
+    <span class="transport-grip" id="transport-grip" title="拖动到任意位置（双击复位）">⠿</span>
+    <span class="transport-body" id="transport-body"></span>
+  </div>
+  <div class="transport-row pt-row" id="pt-row"></div>
+</div>
 
 <script src="vendor/svguitar.umd.js"></script>
+<script src="vendor/marked.umd.js"></script>
 <script src="fretboard.js"></script>
+<script src="practice-timer.js"></script>
 <script src="speed-trainer.js"></script>
+<script src="song-loop.js"></script>
 <script src="licks.js"></script>
 <script src="app.js"></script>
 </body>

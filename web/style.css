@@ -121,20 +121,46 @@ body {
 .btn-play   { background: var(--primary); color: var(--text-inverse); }
 .btn-listen { background: var(--danger); color: var(--text-inverse); }
 
-/* App-wide transport bar — fixed at the bottom of the window, hosts the current
-   page's primary action so it's always in the same reachable spot. */
-.transport-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  display: none; align-items: center; justify-content: center; gap: 18px;
-  padding: 10px 20px;
-  background: var(--bg-card); border-top: 1px solid var(--border);
-  box-shadow: 0 -2px 14px rgba(0, 0, 0, 0.07);
+/* App-wide floating control panel — one draggable pill, always visible,
+   combining two stacked rows: the current page's primary Play/Listen action
+   (top; empty when the page has none registered) and the generic practice
+   timer (bottom; always present, works on every page). Draggable by the
+   whole pill (position persisted), so it can sit right next to whatever
+   you're working on instead of a far fixed corner. */
+.transport-pill {
+  position: fixed; z-index: 60; display: flex; flex-direction: column; gap: 4px;
+  padding: 6px 8px; background: var(--bg-card);
+  border: 1px solid var(--border-dim); border-radius: 12px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.16);
 }
-.transport-bar.active { display: flex; }
-.transport-label { font-size: 13px; color: var(--text-dim); font-weight: 500; }
-.transport-actions { display: flex; align-items: center; gap: 10px; }
-/* Reserve room so page content can scroll clear of the fixed bar. */
-body.has-transport { padding-bottom: 68px; }
+/* Grip + label + padding are all drag surface (cursor:grab); only the buttons
+   opt back out. touch-action:none keeps touch-drag from scrolling the page. */
+.transport-pill { cursor: grab; touch-action: none; user-select: none; }
+.transport-pill.dragging { opacity: 0.92; cursor: grabbing; }
+.transport-row { display: flex; align-items: center; gap: 8px; }
+.transport-row + .transport-row { border-top: 1px solid var(--border-dim); padding-top: 4px; }
+.transport-grip { color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 2px; }
+.transport-body { display: flex; align-items: center; gap: 10px; }
+.transport-label { font-size: 12.5px; color: var(--text-dim); font-weight: 500; }
+.transport-actions { display: flex; align-items: center; gap: 8px; cursor: auto; }
+
+/* Practice timer row (bottom row of the panel above) — see
+   practice-timer.js header comment for why it's a separate concept from
+   the transport action row despite sharing one pill. */
+.pt-row { cursor: auto; font-size: 13px; }
+.pt-row.done { background: var(--warn-bg); border-radius: 6px; margin: -2px -4px; padding: 2px 4px; }
+.pt-label { color: var(--text-muted); font-size: 15px; }
+.pt-time { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 15px; color: var(--primary); min-width: 40px; }
+.pt-presets { display: flex; gap: 4px; }
+.pt-preset-btn {
+  background: var(--bg-raised); border: 1px solid var(--border-dim); border-radius: 6px;
+  padding: 3px 7px; font-size: 12px; color: var(--text-dim); cursor: pointer;
+}
+.pt-preset-btn:hover { background: var(--primary-bg); color: var(--text); }
+.pt-done-label { font-weight: 600; color: var(--warn-dark); white-space: nowrap; }
+.pt-today { font-size: 11px; color: var(--text-faint); white-space: nowrap; border-left: 1px solid var(--border-dim); padding-left: 8px; }
+.pt-link-btn { opacity: 0.4; padding: 3px 6px; }
+.pt-link-btn.linked { opacity: 1; background: var(--primary-bg); }
 
 .field { display: flex; align-items: center; gap: 6px; }
 .field label { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
@@ -172,7 +198,7 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Playback progress panel */
 .playback-panel {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 20px; display: flex; align-items: center;
+  padding: 10px 20px; display: flex; align-items: center; max-width: 480px;
   gap: 32px; margin-bottom: 16px; min-height: 56px;
 }
 .playback-panel.playing { border-color: var(--primary-lt); }
@@ -298,14 +324,6 @@ input[type="number"] { width: 64px; text-align: center; }
 .beat-cell { position: relative; }
 .beat-cell:hover .chord-del { display: block; }
 
-/* Sight Read: read-only, bigger chord text for reading at a glance while playing */
-.sightread-readonly { font-size: 14px; color: var(--text); }
-.sightread-wrap .chart-bar { min-height: 84px; }
-.sightread-wrap .beat-cell { cursor: default; }
-.sightread-wrap .beat-cell:hover { background: none; }
-.sightread-wrap .beat-cell .chord-name { font-size: 26px; cursor: default; }
-.sightread-wrap .beat-cell .chord-name:hover { color: var(--text); }
-
 /* Chord name input in control bars (Vamp, Jam) — Georgia, large, centred */
 .input-chord { font-family: Georgia, serif; font-size: 17px; font-weight: bold; text-align: center; width: 80px; }
 
@@ -429,7 +447,7 @@ input[type="number"] { width: 64px; text-align: center; }
    being tucked into each drill's options row. */
 .fb-stats-table-head {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin-bottom: 6px;
+  gap: 12px; margin-bottom: 6px; max-width: 480px;
 }
 .fb-stats-table-head > span { font-size: 12px; color: var(--text-muted); font-weight: 600; }
 
@@ -727,10 +745,14 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* ── Page structure ─────────────────────────────────────────────────────── */
 
-/* Standard page-level header: title left, optional primary CTA right */
+/* Standard page-level header: title left, optional primary CTA right.
+   Capped to match the content below it (e.g. #licks-list's 720px) so the
+   CTA sits close to the title instead of pinned to the far edge of a wide
+   window — .page itself has no max-width (some content, like the Jam
+   chart, genuinely wants full width), so this has to be set per-element. */
 .page-header {
   display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: 16px; max-width: 720px;
 }
 .page-title { font-size: 18px; font-weight: 600; color: var(--text); }
 
@@ -742,22 +764,30 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* ── Lick Tracker ────────────────────────────────────────────────────────── */
 
+#licks-list { max-width: 720px; }
+
 .lick-card {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   padding: 14px 16px; margin-bottom: 8px; cursor: pointer;
   transition: box-shadow 0.15s;
 }
 .lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.lick-card.dragging { opacity: 0.4; }
+.lick-drag-handle {
+  flex-shrink: 0; cursor: grab; color: var(--text-faint); font-size: 16px;
+  padding: 0 2px; line-height: 1; user-select: none;
+}
+.lick-drag-handle:active { cursor: grabbing; }
 .lick-card-body { flex: 1; min-width: 0; }
 .lick-card-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .lick-card-meta  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.lick-practice-btn { flex-shrink: 0; }
+.lick-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .lick-list-summary { font-size: 12px; color: var(--text-faint); margin-bottom: 12px; }
 
 /* Practice heatmap (GitHub-style calendar) */
 .lick-heatmap-wrap {
-  margin-top: 32px; padding: 16px;
+  margin-top: 32px; padding: 16px; max-width: 720px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
 }
 .lick-heatmap-title { font-size: 14px; font-weight: 600; margin: 0 0 12px; color: var(--text); }
@@ -777,11 +807,60 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Detail page */
 .lick-detail-header {
   display: flex; justify-content: space-between; align-items: flex-start;
-  margin-bottom: 8px;
+  margin-bottom: 8px; max-width: 720px;
 }
 .lick-detail-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
 .lick-target { font-size: 12px; color: var(--warn); font-weight: 600; }
-.lick-notes  { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; }
+.lick-live-bpm { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 8px; }
+
+/* Notes, rendered from Markdown (headings/lists/images/YouTube embeds) */
+.lick-notes-md { font-size: 13px; color: var(--text-dim); margin-bottom: 16px; line-height: 1.5; }
+.lick-notes-md h1, .lick-notes-md h2, .lick-notes-md h3 { font-size: 14px; font-weight: 600; color: var(--text); margin: 12px 0 4px; }
+.lick-notes-md p { margin: 6px 0; }
+.lick-notes-md img { max-width: 100%; border-radius: 6px; margin: 6px 0; display: block; }
+.lick-notes-md a { color: var(--primary); }
+.lick-notes-md code { background: var(--bg-faint); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+.lick-notes-md ul, .lick-notes-md ol { margin: 6px 0; padding-left: 20px; }
+/* Video embeds (YouTube/Bilibili): click-to-play thumbnail, not an eager
+   iframe — an iframe per link means every note render fires off a full
+   player-page load for videos the user may never watch, which is the ~few
+   seconds of lag. Loading only starts once the thumbnail is clicked. */
+.lick-video-embed {
+  position: relative; width: 480px; max-width: 100%; min-width: 200px;
+  aspect-ratio: 16 / 9; margin: 8px 0; border-radius: 6px 6px 6px 0;
+  overflow: hidden; background: #111;
+  /* Drag the bottom-right corner to resize — height follows via aspect-ratio,
+     so it can't be distorted into a non-16:9 box. This is a per-view sizing
+     tweak, not a saved preference (see the `w=` markdown link directive
+     above for the way to set a lasting width in the note text itself). */
+  resize: horizontal;
+}
+.lick-video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.lick-video-thumb { position: relative; width: 100%; height: 100%; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.lick-video-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lick-video-thumb-fallback { color: #fff; font-size: 14px; opacity: 0.85; }
+.lick-video-play {
+  position: absolute; width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(0,0,0,.6); color: #fff; font-size: 20px;
+  display: flex; align-items: center; justify-content: center; pointer-events: none;
+}
+
+/* PDF embeds (score/exercise sheets): click-to-open thumbnail, same
+   click-to-load reasoning as video embeds above. Expands into an iframe
+   using the browser's own built-in PDF viewer — no rendering library. */
+.lick-pdf-embed { width: 100%; max-width: 480px; margin: 8px 0; }
+.lick-pdf-embed iframe { display: block; width: 100%; height: 600px; border: 1px solid var(--border); border-radius: 6px; }
+.lick-pdf-thumb {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+  padding: 14px 16px; transition: background 0.1s;
+}
+.lick-pdf-thumb:hover { background: var(--bg-faint); }
+.lick-pdf-thumb-icon { font-size: 22px; }
+.lick-pdf-thumb-label { font-size: 13px; color: var(--text-dim); }
+
+/* Audio: not a player, a hand-off button into Song Loop's speed/A-B-loop tooling */
+.lick-audio-embed { margin: 8px 0; }
 
 /* Progress chart */
 .lick-chart-wrap   { margin: 12px 0 20px; }
@@ -797,7 +876,6 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Session list */
 .lick-sessions-header { margin-bottom: 8px; }
 .lick-sessions-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
-.lick-detail-cta { margin-top: 20px; }
 .lick-session-row {
   display: flex; gap: 16px; padding: 6px 0;
   border-bottom: 1px solid var(--bg-faint); font-size: 13px;
@@ -806,15 +884,40 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-session-dur  { color: var(--text-muted); min-width: 50px; }
 .lick-session-date { color: var(--text-faint); }
 
-/* Lick session log modal form (BPM + duration — compact inputs) */
-.lick-log-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-.lick-log-form label { font-size: 13px; }
-.lick-log-form input { width: 80px; margin-left: 8px; }
+/* Practice panel, embedded below the sessions list (see
+   licksSyncPracticePanelHome) — capped to match the rest of the detail
+   page's content width instead of stretching the #st-panel cards
+   (.st-options/.st-display/.st-active-lick-banner) edge to edge, which is
+   fine on the standalone Speed Trainer page but not here. */
+#lick-practice-slot { margin-top: 20px; max-width: 720px; }
 
 /* Lick edit modal form (title + notes + target BPM — full-width inputs) */
 .lick-edit-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
 .lick-edit-form label { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.lick-edit-notes-hint { font-weight: 400; color: var(--text-faint); font-size: 11px; }
+.lick-edit-attach-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lick-edit-image-status { font-size: 12px; color: var(--text-muted); }
 .modal-subtitle { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+
+/* Notes syntax reference — collapsed by default (native <details>, no JS) */
+.lick-notes-syntax-help { font-size: 12px; color: var(--text-muted); margin-top: -6px; }
+.lick-notes-syntax-help summary { cursor: pointer; color: var(--primary); user-select: none; }
+.lick-notes-syntax-help ul { margin: 6px 0 0; padding-left: 18px; }
+.lick-notes-syntax-help li { margin-bottom: 3px; }
+.lick-notes-syntax-help code { background: var(--bg-faint); padding: 1px 4px; border-radius: 3px; }
+
+/* Material picker modal (attach a PDF/audio: upload new or reuse a shared one) */
+.material-picker-upload-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.material-picker-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+.material-picker-item {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; font-size: 13px; color: var(--text-dim); transition: background 0.1s;
+}
+.material-picker-item:hover { background: var(--bg-faint); }
+.material-picker-item-icon { flex-shrink: 0; }
+.material-picker-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.material-picker-item-meta { flex-shrink: 0; font-size: 11px; color: var(--text-faint); }
 
 /* Speed Trainer active lick banner */
 .st-active-lick-banner {
@@ -823,3 +926,218 @@ input[type="number"] { width: 64px; text-align: center; }
   padding: 10px 14px; margin-bottom: 16px;
 }
 .st-lick-banner-text { flex: 1; font-size: 14px; }
+
+
+
+/* ── Song Loop — ported from design_handoff_guitar_practice_tool ────────
+   Deliberately hardcoded, standalone color/type tokens (not the app's
+   --primary/--accent etc.) since this page's whole point is to pixel-match
+   a specific external design handoff, not blend into the rest of the app's
+   visual system. Scoped entirely under #page-songloop. */
+#page-songloop { padding: 0; min-height: calc(100vh - 44px); }
+#page-songloop .gp-outer { display: block; padding: 0; }
+#page-songloop .gp-card {
+  width: 100%; max-width: none; min-height: calc(100vh - 44px - 36px);
+  background: #fdfbf7; border: 1px solid rgba(43,38,33,.14); border-radius: 0;
+  box-shadow: none;
+  padding: 14px 16px 18px;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  color: #2b2621;
+  display: flex; flex-direction: column; gap: 12px;
+}
+
+#page-songloop .gp-dropzone { display: block; cursor: pointer; }
+#page-songloop .gp-dropzone input { display: none; }
+#page-songloop .gp-dropzone-row { margin-bottom: 12px; }
+#page-songloop .gp-dropzone-row .gp-dropzone {
+  border: 1.5px dashed rgba(43,38,33,.25); border-radius: 8px; padding: 14px 16px;
+  text-align: center; font-size: 12.5px; color: rgba(43,38,33,.55);
+  transition: border-color .15s, background .15s;
+}
+#page-songloop .gp-dropzone-row .gp-dropzone:hover,
+#page-songloop .gp-dropzone-row .gp-dropzone.drag { border-color: #a8492f; background: #f5f1e9; }
+
+/* toolbar */
+#page-songloop .gp-toolbar { display: flex; align-items: center; gap: 18px; margin-bottom: 14px; flex-wrap: wrap; }
+#page-songloop .gp-sep { width: 1px; height: 26px; background: rgba(43,38,33,.12); flex-shrink: 0; }
+#page-songloop .gp-sep-sm { height: 20px; background: rgba(43,38,33,.15); }
+#page-songloop .gp-time { font: 600 13px 'IBM Plex Mono', monospace; color: #2b2621; min-width: 96px; font-variant-numeric: tabular-nums; }
+
+#page-songloop .gp-ctl-group { display: flex; flex-direction: column; gap: 2px; }
+#page-songloop .gp-ctl-row { display: flex; align-items: center; gap: 6px; }
+#page-songloop .gp-ctl-lbl { font: 500 11px 'IBM Plex Sans'; color: rgba(43,38,33,.55); white-space: nowrap; }
+#page-songloop .gp-ctl-sub { font: 400 9px 'IBM Plex Sans'; color: rgba(43,38,33,.4); }
+#page-songloop .gp-slider { width: 90px; accent-color: #a8492f; }
+#page-songloop .gp-num-sm {
+  width: 44px; padding: 3px 4px; border-radius: 5px; border: 1px solid rgba(43,38,33,.2);
+  font: 600 12px 'IBM Plex Mono', monospace; text-align: center; background: #fff; color: #2b2621;
+}
+#page-songloop .gp-num-sm:focus { outline: none; border-color: #a8492f; }
+#page-songloop .gp-pct { font: 500 11px 'IBM Plex Sans'; color: rgba(43,38,33,.45); }
+
+#page-songloop .gp-step-btn {
+  width: 24px; height: 24px; border-radius: 6px; border: 1px solid rgba(43,38,33,.2);
+  background: #fff; cursor: pointer; font: 600 13px sans-serif; color: #2b2621;
+}
+#page-songloop .gp-step-btn:hover { background: #f5f1e9; }
+#page-songloop .gp-pitch-label { font: 600 12px 'IBM Plex Mono', monospace; color: #2b2621; min-width: 100px; text-align: center; }
+
+#page-songloop .gp-loop-panel {
+  display: flex; align-items: center; gap: 10px; padding: 6px 12px; border-radius: 8px;
+  background: transparent; border: 1px solid transparent; transition: background .15s, border-color .15s;
+}
+#page-songloop .gp-loop-panel.gp-loop-on { background: rgba(47,111,104,.08); border-color: rgba(47,111,104,.3); }
+#page-songloop .gp-loop-check { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#page-songloop .gp-loop-check input { width: 15px; height: 15px; accent-color: #2f6f68; }
+#page-songloop .gp-loop-check span { font: 600 12px 'IBM Plex Sans'; color: #2b2621; }
+#page-songloop .gp-loop-range { display: flex; align-items: center; gap: 5px; }
+#page-songloop .gp-loop-hint { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.45); }
+
+#page-songloop .gp-offset-panel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 0 0;
+}
+#page-songloop .gp-offset-btn {
+  padding: 4px 10px; border-radius: 14px; border: 1px solid rgba(43,38,33,.18);
+  background: #fff; color: #2b2621; font: 600 11px 'IBM Plex Sans'; cursor: pointer;
+}
+#page-songloop .gp-offset-btn:hover { background: #f5f1e9; }
+#page-songloop .gp-offset-btn.gp-offset-accent { border-color: rgba(168,73,47,.35); color: #a8492f; }
+#page-songloop .gp-offset-readout { font: 600 11px 'IBM Plex Mono', monospace; color: rgba(43,38,33,.55); }
+
+#page-songloop .gp-phrase-panel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 2px 0 0;
+}
+#page-songloop .gp-phrase-panel.gp-phrase-on { background: rgba(76,124,76,.05); border-radius: 8px; padding: 6px 8px; }
+#page-songloop .gp-phrase-btn {
+  padding: 4px 10px; border-radius: 14px; border: 1px solid rgba(43,38,33,.18);
+  background: #fff; color: #2b2621; font: 600 11px 'IBM Plex Sans'; cursor: pointer;
+}
+#page-songloop .gp-phrase-btn:hover { background: #f5f1e9; }
+#page-songloop .gp-phrase-btn.gp-phrase-accent { border-color: rgba(76,124,76,.32); color: #4a7c4a; }
+#page-songloop .gp-phrase-readout { font: 600 11px 'IBM Plex Mono', monospace; color: rgba(43,38,33,.55); }
+
+#page-songloop .gp-sidecar-panel {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 2px 0 0;
+}
+#page-songloop .gp-sidecar-btn {
+  padding: 4px 10px; border-radius: 14px; border: 1px solid rgba(43,38,33,.18);
+  background: #fff; color: #2b2621; font: 600 11px 'IBM Plex Sans'; cursor: pointer;
+}
+#page-songloop .gp-sidecar-btn:hover { background: #f5f1e9; }
+#page-songloop .gp-sidecar-btn.gp-sidecar-accent { border-color: rgba(74,124,74,.32); color: #4a7c4a; }
+#page-songloop .gp-sidecar-hint { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.45); }
+
+/* waveform */
+#page-songloop .gp-wave {
+  position: relative; height: 96px; background: #f5f1e9; border-radius: 8px;
+  border: 1px solid rgba(43,38,33,.1); overflow: hidden; margin-bottom: 2px; cursor: pointer;
+}
+#page-songloop .gp-wave-meta {
+  position: absolute; top: 4px; right: 8px; z-index: 2;
+  font: 400 10px 'IBM Plex Mono', monospace; color: rgba(43,38,33,.4);
+  background: rgba(253,251,247,.7); padding: 1px 6px; border-radius: 4px;
+}
+#page-songloop .gp-wave-loop { position: absolute; top: 0; bottom: 0; background: rgba(47,111,104,.14); display: none; }
+#page-songloop .gp-wave-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; padding: 0 2px 10px; gap: 2px; pointer-events: none; }
+#page-songloop .gp-wave-bar { flex: 1; background: #c9927e; border-radius: 1px; opacity: .85; }
+#page-songloop .gp-wave-playhead { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: #a8492f; }
+
+/* score header */
+#page-songloop .gp-score-header {
+  display: flex; align-items: center; gap: 16px; padding: 9px 16px;
+  border: 1px solid rgba(43,38,33,.14); border-bottom: none; border-radius: 8px 8px 0 0;
+  background: #f5f1e9; flex-wrap: wrap;
+}
+#page-songloop .gp-key-select {
+  font: 700 16px 'Source Serif 4', serif; color: #2b2621; background: transparent;
+  border: none; cursor: pointer; padding: 2px 4px;
+}
+#page-songloop .gp-tag { font: 400 9px 'IBM Plex Sans'; color: rgba(43,38,33,.4); }
+#page-songloop .gp-timesig { font: 600 15px 'Source Serif 4', serif; color: #2b2621; }
+#page-songloop .gp-bpm-row { display: flex; align-items: center; gap: 6px; }
+#page-songloop .gp-bpm-eq { font: 600 13px 'IBM Plex Mono', monospace; color: #a8492f; }
+#page-songloop .gp-tap-btn {
+  padding: 5px 12px; border-radius: 16px; border: 1px solid rgba(43,38,33,.2);
+  background: #fff; color: #2b2621; font: 600 11px 'IBM Plex Sans'; cursor: pointer;
+}
+#page-songloop .gp-tap-btn:hover { background: #f5f1e9; }
+#page-songloop .gp-flex-spacer { flex: 1; }
+#page-songloop .gp-score-hint { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.4); }
+
+/* bar grid */
+#page-songloop .gp-bar-grid {
+  border: 1px solid rgba(43,38,33,.1); border-radius: 0 0 8px 8px;
+  overflow: auto; flex: 1 1 auto; min-height: 0; max-height: none;
+  background: #fff;
+}
+#page-songloop .gp-track-board {
+  display: grid;
+  grid-template-columns: 92px repeat(var(--sl-bar-count, 1), minmax(140px, 1fr));
+  grid-auto-rows: minmax(64px, auto);
+  min-width: 100%;
+}
+#page-songloop .gp-track-label,
+#page-songloop .gp-track-ruler-label {
+  position: sticky; left: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: flex-start;
+  padding: 10px 10px; border-right: 1px solid rgba(43,38,33,.08);
+  background: #f5f1e9; color: rgba(43,38,33,.62);
+  font: 600 10px 'IBM Plex Sans'; text-transform: uppercase; letter-spacing: 0.06em;
+}
+#page-songloop .gp-track-ruler-label { justify-content: center; background: #efe7d8; color: #2b2621; }
+#page-songloop .gp-track-row { display: contents; }
+#page-songloop .gp-track-cell {
+  border-right: 1px solid rgba(43,38,33,.08);
+  border-bottom: 1px solid rgba(43,38,33,.08);
+  background: #fff;
+  padding: 8px 10px;
+  display: flex;
+}
+#page-songloop .gp-track-cell.gp-bar-current { background: rgba(168,73,47,.14); }
+#page-songloop .gp-track-cell.gp-bar-in-loop:not(.gp-bar-current) { background: rgba(47,111,104,.10); }
+#page-songloop .gp-track-ruler-cell {
+  position: relative; min-height: 54px; align-items: flex-start; justify-content: center; cursor: pointer;
+}
+#page-songloop .gp-track-ruler-cell .gp-bar-num {
+  font: 600 11px 'IBM Plex Mono', monospace; color: rgba(43,38,33,.5);
+  cursor: pointer; user-select: none;
+}
+#page-songloop .gp-bar-phrase-badge {
+  position: absolute; top: 7px; left: 8px;
+  padding: 1px 6px; border-radius: 999px;
+  border: 1px solid rgba(76,124,76,.25); background: rgba(76,124,76,.08);
+  color: #4a7c4a; font: 600 10px 'IBM Plex Sans'; cursor: pointer;
+}
+#page-songloop .gp-bar-phrase-badge.active { background: rgba(76,124,76,.2); border-color: rgba(76,124,76,.38); }
+#page-songloop .gp-bar-phrase-badge:hover { background: rgba(76,124,76,.14); }
+#page-songloop .gp-track-phrase-cell {
+  align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#page-songloop .gp-track-ghost {
+  font: 500 11px 'IBM Plex Sans'; color: rgba(43,38,33,.24);
+}
+#page-songloop .gp-track-field {
+  width: 100%; box-sizing: border-box; border: none; background: none; padding: 0;
+  font: 500 13px 'IBM Plex Sans'; color: #2b2621; line-height: 1.35;
+}
+#page-songloop .gp-track-field:focus { outline: none; background: rgba(255,255,255,.72); border-radius: 4px; }
+#page-songloop .gp-track-field::placeholder { color: rgba(43,38,33,.28); }
+#page-songloop .gp-track-chord {
+  color: #a8492f; font: 700 14px 'IBM Plex Sans'; text-align: center;
+}
+#page-songloop .gp-track-lyric {
+  resize: vertical; min-height: 84px; overflow: auto; white-space: pre-wrap;
+  text-align: left; color: rgba(43,38,33,.82); font-size: 12px;
+}
+#page-songloop .gp-track-note {
+  resize: vertical; min-height: 84px; overflow: auto; white-space: pre-wrap;
+  text-align: left; color: rgba(76,124,76,.82); font-size: 12px;
+}
+#page-songloop .gp-bar-grid-empty {
+  font-size: 12.5px; color: rgba(43,38,33,.4); padding: 24px 16px; text-align: center;
+}
+#page-songloop .gp-bar-footer { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.4); margin-top: 6px; }

@@ -82,7 +82,7 @@ html = f'''<!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>吉他和弦指型参考表 — Music Practice</title>
+<title>吉他和弦指型参考表 — MyMusicStdio</title>
 <style>
   :root {{ --card-width: 140px; }}
   * {{ box-sizing: border-box; }}

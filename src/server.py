@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import mido
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -58,6 +59,12 @@ class LickBody(BaseModel):
     title: str = "Untitled"
     notes: str = ""
     target_bpm: Optional[float] = Field(default=None, ge=20.0, le=300.0)
+
+class LickBpmUpdate(BaseModel):
+    bpm: float = Field(ge=20.0, le=300.0)
+
+class LickMetronomeLinkUpdate(BaseModel):
+    linked: bool
 
 
 _player = Player()
@@ -123,11 +130,67 @@ def _read_lick(lick_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Lick not found")
     return json.loads(p.read_text())
 
+MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024  # 20MB — generous for a sheet-music photo
+
+def _attachment_filename(name: str) -> str:
+    """Sanitize an uploaded filename: keep only the basename (strips any
+    directory components an attacker could use for path traversal), restrict
+    to a safe charset, and prefix a timestamp so repeat uploads never collide."""
+    base = re.sub(r"[^\w.\-]", "_", Path(name).name) or "file"
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    return f"{stamp}_{base}"
+
+def _attachments_dir(lick_id: str) -> Path:
+    d = _lick_path(lick_id) / "attachments"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _attachment_path(lick_id: str, filename: str) -> Path:
+    base = _attachments_dir(lick_id)
+    p = (base / filename).resolve()
+    if not p.is_relative_to(base.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid attachment filename")
+    return p
+
 def _write_lick(lick_id: str, data: dict) -> None:
     d = _lick_path(lick_id)
     d.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     (d / "lick.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+
+
+# ── Materials library ──
+# Shared reference material (score PDFs, backing tracks) that multiple licks
+# link to from their notes — unlike a lick's own /attachments, these aren't
+# owned by any single lick, so uploading once and reusing the URL across
+# several licks doesn't duplicate storage and doesn't break when one of
+# those licks gets deleted.
+
+MAX_MATERIAL_BYTES = 100 * 1024 * 1024  # 100MB — generous for backing-track audio
+
+def _materials_dir() -> Path:
+    d = Path(prefs.load()["materials_dir"]).expanduser()
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+def _materials_index_path() -> Path:
+    return _materials_dir() / "_index.json"
+
+def _materials_index_load() -> dict:
+    p = _materials_index_path()
+    if not p.exists():
+        return {}
+    return json.loads(p.read_text())
+
+def _materials_index_save(index: dict) -> None:
+    _materials_index_path().write_text(json.dumps(index, ensure_ascii=False, indent=2))
+
+def _material_path(material_id: str) -> Path:
+    base = _materials_dir()
+    p = (base / material_id).resolve()
+    if not p.is_relative_to(base.resolve()):
+        raise HTTPException(status_code=400, detail="Invalid material id")
+    return p
 
 
 # ── API ──
@@ -349,6 +412,105 @@ def api_add_lick_session(lick_id: str, session: LickSession):
     })
     _write_lick(lick_id, data)
     return {**data, "id": lick_id}
+
+
+@app.post("/api/licks/{lick_id}/bpm")
+def api_update_lick_bpm(lick_id: str, body: LickBpmUpdate):
+    """Auto-save hook: called (debounced) whenever the Speed Trainer's tempo
+    changes while a lick is being actively practiced, so live progress isn't
+    lost if the user never explicitly logs a session (see licksNotifyBpmChange
+    in licks.js). Deliberately separate from the PUT endpoint above — that one
+    round-trips the full title/notes/target_bpm form, which would clobber a
+    concurrent edit if it fired on every tempo tick.
+    """
+    data = _read_lick(lick_id)
+    data["last_practiced_bpm"] = body.bpm
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
+
+
+@app.post("/api/licks/{lick_id}/metronome_linked")
+def api_update_lick_metronome_linked(lick_id: str, body: LickMetronomeLinkUpdate):
+    """Whether this lick's practice timer is linked to the metronome's
+    Play/Stop (see ptToggleLinked/licksNotifyLinkedChange in
+    practice-timer.js/licks.js) is a trait of the lick itself — some licks
+    are metronome-paired practice, some aren't — not a single app-wide
+    setting. Separate endpoint for the same reason as /bpm above: this
+    fires on every toggle click, and shouldn't round-trip (or risk
+    clobbering) the full title/notes/target_bpm form.
+    """
+    data = _read_lick(lick_id)
+    data["metronome_linked"] = body.linked
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
+
+
+@app.post("/api/licks/{lick_id}/attachments")
+async def api_upload_lick_attachment(lick_id: str, file: UploadFile = File(...)):
+    _read_lick(lick_id)  # 404s if the lick doesn't exist
+    content = await file.read()
+    if len(content) > MAX_ATTACHMENT_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 20MB)")
+    filename = _attachment_filename(file.filename or "image")
+    _attachment_path(lick_id, filename).write_bytes(content)
+    return {"url": f"/api/licks/{lick_id}/attachments/{filename}"}
+
+
+@app.get("/api/licks/{lick_id}/attachments/{filename}")
+def api_get_lick_attachment(lick_id: str, filename: str):
+    p = _attachment_path(lick_id, filename)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    return FileResponse(p)
+
+
+@app.post("/api/materials")
+async def api_upload_material(file: UploadFile = File(...)):
+    content = await file.read()
+    if len(content) > MAX_MATERIAL_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 100MB)")
+    material_id = _attachment_filename(file.filename or "file")
+    _material_path(material_id).write_bytes(content)
+    index = _materials_index_load()
+    index[material_id] = {
+        "filename": file.filename or material_id,
+        "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        "size": len(content),
+    }
+    _materials_index_save(index)
+    return {"id": material_id, "filename": index[material_id]["filename"], "url": f"/api/materials/{material_id}"}
+
+
+@app.get("/api/materials")
+def api_list_materials():
+    index = _materials_index_load()
+    out = []
+    for material_id, meta in index.items():
+        if not _material_path(material_id).exists():
+            continue  # stale index entry (file removed out-of-band) — skip rather than 500
+        out.append({"id": material_id, "url": f"/api/materials/{material_id}", **meta})
+    out.sort(key=lambda m: m["uploaded_at"], reverse=True)
+    return out
+
+
+@app.get("/api/materials/{material_id}")
+def api_get_material(material_id: str):
+    p = _material_path(material_id)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Material not found")
+    return FileResponse(p)
+
+
+@app.delete("/api/materials/{material_id}")
+def api_delete_material(material_id: str):
+    p = _material_path(material_id)
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Material not found")
+    p.unlink()
+    index = _materials_index_load()
+    index.pop(material_id, None)
+    _materials_index_save(index)
+    return {"ok": True}
 
 
 @app.post("/api/bpm")

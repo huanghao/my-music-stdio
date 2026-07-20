@@ -79,6 +79,33 @@ test('fbChordDisplaySymbol respects the selected notation style', () => {
   }
 });
 
+test('fbChordFormula covers the new pop/R&B qualities (6, m6, add9, madd9, 9, m9, maj9)', () => {
+  assert.equal(fb.fbChordFormula('6'), '1  3  5  6');
+  assert.equal(fb.fbChordFormula('m6'), '1  b3  5  6');
+  assert.equal(fb.fbChordFormula('add9'), '1  3  5  9');
+  assert.equal(fb.fbChordFormula('madd9'), '1  b3  5  9');
+  assert.equal(fb.fbChordFormula('9'), '1  3  5  b7  9');
+  assert.equal(fb.fbChordFormula('m9'), '1  b3  5  b7  9');
+  assert.equal(fb.fbChordFormula('maj9'), '1  3  5  7  9');
+});
+
+test('fbChordDisplaySymbol renders the new qualities in both notation styles', () => {
+  const s = fb.fbState.chord;
+  const original = s.notationStyle;
+  try {
+    s.notationStyle = 'standard';
+    assert.equal(fb.fbChordDisplaySymbol(0, 'add9'), 'Cadd9');
+    assert.equal(fb.fbChordDisplaySymbol(0, 'madd9'), 'Cm(add9)');
+    assert.equal(fb.fbChordDisplaySymbol(0, 'maj9'), 'Cmaj9');
+
+    s.notationStyle = 'jazz';
+    assert.equal(fb.fbChordDisplaySymbol(0, 'm6'), 'C-6');
+    assert.equal(fb.fbChordDisplaySymbol(0, 'maj9'), 'CΔ9');
+  } finally {
+    s.notationStyle = original;
+  }
+});
+
 function sineWave(freq, sampleRate, n, amplitude = 0.8) {
   const buf = new Float32Array(n);
   for (let i = 0; i < n; i++) buf[i] = amplitude * Math.sin((2 * Math.PI * freq * i) / sampleRate);
@@ -115,50 +142,11 @@ test('fbFreqToNote converts a frequency to note name, MIDI number, and cents', (
   assert.equal(sharp.cents, 10);
 });
 
-test('fbDegreeChordName: full diatonic set of G major matches G-Am-Bm-C-D-Em-F#dim', () => {
-  const G = 7;
-  const expected = ['G', 'Am', 'Bm', 'C', 'D', 'Em', 'F#dim'];
-  const actual = expected.map((_, i) => fb.fbDegreeChordName(G, i));
-  assert.deepEqual(actual, expected);
-});
-
 test('fbShapeDegreeLabels: every CAGED major shape reduces to root/3rd/5th only', () => {
   for (const letter of ['C', 'A', 'G', 'E', 'D']) {
     const labels = fb.fbShapeDegreeLabels(fb.FB_CAGED_SHAPES[letter], '').filter(Boolean);
     assert.deepEqual([...new Set(labels)].sort(), ['1', '3', '5']);
   }
-});
-
-test('fbShapePositionsForShape: G major via the E-shape barred at fret 3 (1-5-1-3-5-1)', () => {
-  const positions = fb.fbShapePositionsForShape(fb.FB_CAGED_SHAPES.E, 3);
-  assert.deepEqual(positions, [
-    { stringIdx: 0, fret: 3, degree: '1' },
-    { stringIdx: 1, fret: 5, degree: '5' },
-    { stringIdx: 2, fret: 5, degree: '1' },
-    { stringIdx: 3, fret: 4, degree: '3' },
-    { stringIdx: 4, fret: 3, degree: '5' },
-    { stringIdx: 5, fret: 3, degree: '1' },
-  ]);
-});
-
-test('fbShapeDegreeSetup only draws from shapes enabled in fbState.shapeDegree.shapes', () => {
-  const s = fb.fbState.shapeDegree;
-  const original = s.shapes.slice();
-  try {
-    s.shapes = [true, true, false, false, false]; // only C (1) and A (2)
-    for (let i = 0; i < 50; i++) {
-      const { shapeLetter } = fb.fbShapeDegreeSetup();
-      assert.ok(['C', 'A'].includes(shapeLetter));
-    }
-  } finally {
-    s.shapes = original;
-  }
-});
-
-test('fbShapePositionsForShape: skips muted strings (A-shape barre has no low-E note)', () => {
-  const positions = fb.fbShapePositionsForShape(fb.FB_CAGED_SHAPES.A, 3);
-  assert.equal(positions.length, 5);
-  assert.ok(!positions.some(p => p.stringIdx === 0));
 });
 
 test('fbEarPossibleIntervals: minor pentatonic (1 b3 4 5 b7 1\') yields M2 m3 M3 P4 P5 M6 m7 P8', () => {
@@ -232,6 +220,46 @@ test('fbChordEligibleProgressions excludes progressions needing a disabled quali
   }
 });
 
+test('fbChordEligibleProgressions respects categoryFilter, and every progression has exactly one recognized category', () => {
+  const validCategories = ['functional', 'circle5', 'stepwise', 'blues'];
+  fb.FB_CHORD_PROGRESSIONS.forEach(p => {
+    assert.ok(validCategories.includes(p.category), `${p.name} has an unrecognized category: ${p.category}`);
+  });
+
+  const qs = fb.fbState.chord.qualities;
+  const originalQs = { ...qs };
+  const originalFilter = fb.fbState.chord.progression.categoryFilter;
+  try {
+    Object.keys(qs).forEach(k => { qs[k] = true; }); // every quality enabled — filtering is purely by category now
+
+    fb.fbState.chord.progression.categoryFilter = 'stepwise';
+    const stepwise = fb.fbChordEligibleProgressions();
+    assert.ok(stepwise.length > 0);
+    assert.ok(stepwise.every(p => p.category === 'stepwise'));
+    assert.ok(stepwise.some(p => p.name === 'IV – iii – ii – I (stepwise descent)'));
+
+    fb.fbState.chord.progression.categoryFilter = 'all';
+    assert.equal(fb.fbChordEligibleProgressions().length, fb.FB_CHORD_PROGRESSIONS.length);
+  } finally {
+    Object.keys(originalQs).forEach(k => { qs[k] = originalQs[k]; });
+    fb.fbState.chord.progression.categoryFilter = originalFilter;
+  }
+});
+
+test('fbChordBuildProgressionChords resolves the new stepwise-descent progression (IV-iii-ii-I) in B to E-Dsharpm-Csharpm-B', () => {
+  const qs = fb.fbState.chord.qualities;
+  const original = { ...qs };
+  try {
+    Object.keys(qs).forEach(k => { qs[k] = false; });
+    qs[''] = true; qs.m = true;
+    const prog = fb.FB_CHORD_PROGRESSIONS.find(p => p.name === 'IV – iii – ii – I (stepwise descent)');
+    const chords = fb.fbChordBuildProgressionChords(prog, 11); // key of B (pc 11)
+    assert.deepEqual(chords.map(c => c.symbol), ['E', 'D#m', 'C#m', 'B']);
+  } finally {
+    Object.keys(original).forEach(k => { qs[k] = original[k]; });
+  }
+});
+
 test('fbChordBuildProgressionChords resolves I-V-vi-IV in G to G-D-Em-C', () => {
   const qs = fb.fbState.chord.qualities;
   const original = { ...qs };
@@ -241,6 +269,20 @@ test('fbChordBuildProgressionChords resolves I-V-vi-IV in G to G-D-Em-C', () => 
     const prog = fb.FB_CHORD_PROGRESSIONS.find(p => p.name === 'I – V – vi – IV (pop)');
     const chords = fb.fbChordBuildProgressionChords(prog, 7); // key of G (pc 7)
     assert.deepEqual(chords.map(c => c.symbol), ['G', 'D', 'Em', 'C']);
+  } finally {
+    Object.keys(original).forEach(k => { qs[k] = original[k]; });
+  }
+});
+
+test('fbChordBuildProgressionChords resolves the R&B ii-V-I-vi loop in C to Dm-G-C-Am', () => {
+  const qs = fb.fbState.chord.qualities;
+  const original = { ...qs };
+  try {
+    Object.keys(qs).forEach(k => { qs[k] = false; });
+    qs[''] = true; qs.m = true;
+    const prog = fb.FB_CHORD_PROGRESSIONS.find(p => p.name === 'ii – V – I – vi (R&B / neo-soul loop)');
+    const chords = fb.fbChordBuildProgressionChords(prog, 0); // key of C (pc 0)
+    assert.deepEqual(chords.map(c => c.symbol), ['Dm', 'G', 'C', 'Am']);
   } finally {
     Object.keys(original).forEach(k => { qs[k] = original[k]; });
   }
@@ -490,4 +532,64 @@ test('fbChordPreviewProgression is a no-op (no AudioContext touched) outside pro
     s.source = original.source;
     s.progression.chords = original.chords;
   }
+});
+
+test('fbSeqBuildAscending: diatonic 3rds in C major produce the classic 1-3,2-4,3-5... sawtooth', () => {
+  const notes = fb.fbSeqBuildAscending('major', 'thirds');
+  // Semitone offsets from the tonic, not yet transposed to a key or fretted.
+  assert.deepEqual(notes, [0, 4, 2, 5, 4, 7, 5, 9, 7, 11, 9, 12, 11, 14]);
+});
+
+test('fbSeqBuildAscending: triad arpeggios in natural minor stack in scale-step 3rds (0,2,4 offsets per group)', () => {
+  const notes = fb.fbSeqBuildAscending('naturalMinor', 'triad');
+  assert.equal(notes.length, 21); // 7 groups x 3 notes
+  // First group (i minor triad): steps 0,2,4 -> semitone offsets 0,3,7
+  assert.deepEqual(notes.slice(0, 3), [0, 3, 7]);
+});
+
+test('fbSeqBuildSemitoneOffsets: desc reverses the ascending pass; both concatenates asc+desc', () => {
+  const asc = fb.fbSeqBuildSemitoneOffsets('major', 'sixths', 'asc');
+  const desc = fb.fbSeqBuildSemitoneOffsets('major', 'sixths', 'desc');
+  const both = fb.fbSeqBuildSemitoneOffsets('major', 'sixths', 'both');
+  assert.deepEqual(desc, asc.slice().reverse());
+  assert.deepEqual(both, asc.concat(desc));
+});
+
+test('fbSeqAnchorPosition finds the closest fret to startFret with the requested pitch class, restricted to strings with enough headroom for maxOffset', () => {
+  // maxOffset=14 (one octave of 3rds) leaves strings E/A/D eligible (open
+  // pitch + 14 <= high-e open + window - 1 = 68); closest C to fret 0 among
+  // those is the A string at fret 3 (MIDI 48).
+  const anchor = fb.fbSeqAnchorPosition(0, 0, 14); // C, near fret 0
+  assert.equal(((anchor.midi % 12) + 12) % 12, 0); // pitch class is C
+  assert.equal(anchor.stringIdx, 1); // A string
+  assert.equal(anchor.fret, 3);
+  assert.equal(anchor.midi, 48);
+});
+
+test('fbSeqAnchorPosition falls back to only the low strings when maxOffset is wide (7th arpeggios, both directions)', () => {
+  // maxOffset=21 (major, seventh, both) only leaves E (40) and A (45)
+  // strings with enough headroom (open + 21 <= 68). Search only moves up
+  // the neck from startFret=10: A string hits C at fret 15 (dist 5), E
+  // string hits C at fret 20 (dist 10) — A string wins.
+  const anchor = fb.fbSeqAnchorPosition(0, 10, 21);
+  assert.equal(anchor.stringIdx, 1);
+  assert.equal(anchor.fret, 15);
+  assert.equal(((anchor.midi % 12) + 12) % 12, 0);
+});
+
+test('fbSeqAssignFretting produces the correct absolute pitches for C major diatonic 3rds, confined to one 5-fret position', () => {
+  const offsets = fb.fbSeqBuildSemitoneOffsets('major', 'thirds', 'asc');
+  const anchor = fb.fbSeqAnchorPosition(0, 0, Math.max(...offsets));
+  const positions = fb.fbSeqAssignFretting(anchor, offsets);
+  assert.equal(positions.length, offsets.length);
+  assert.deepEqual(positions.map(p => p.midi), [48, 52, 50, 53, 52, 55, 53, 57, 55, 59, 57, 60, 59, 62]);
+  // The whole point of the position-based fretting: every note must fall
+  // within the same 5-fret span — no mid-sequence position shifts.
+  const frets = positions.map(p => p.fret);
+  assert.ok(Math.max(...frets) - Math.min(...frets) <= 4);
+  // Every position must land exactly on its target string's open-pitch + fret.
+  positions.forEach(p => {
+    assert.ok(p.fret >= 0);
+    assert.equal(fb.fbStringMidis(p.stringIdx)[0] + p.fret, p.midi);
+  });
 });

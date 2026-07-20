@@ -201,6 +201,7 @@ function stStart() {
   stState.nextTickTime = stState.audioCtx.currentTime + 0.05;
   stState.running = true;
   if (typeof setTransportState === 'function') setTransportState('playing');
+  if (typeof ptOnMetronomeStart === 'function') ptOnMetronomeStart(); // optional timer link — see practice-timer.js
   stScheduler();
   stState.timerId = setInterval(stScheduler, ST_LOOKAHEAD_MS);
   stUpdateDisplay();
@@ -212,8 +213,19 @@ function stStop() {
   clearInterval(stState.timerId);
   stState.timerId = null;
   if (typeof setTransportState === 'function') setTransportState('stopped');
+  if (typeof ptOnMetronomeStop === 'function') ptOnMetronomeStop(); // optional timer link — see practice-timer.js
   stFlashBeat(-1, false);
   stUpdateDisplay();
+}
+
+// Notifies the active lick (if any — see licksState.activeLick in licks.js)
+// that the live tempo changed, so it can be auto-saved and resumed from next
+// time, and so the eventual auto-logged session (see licksAutoLogSession)
+// records the tempo actually practiced at. Guarded the same way
+// fretboard.js guards its calls into app.js's transport bar — licks.js may
+// not be loaded (e.g. under the Node test harness).
+function stNotifyLickBpm() {
+  if (typeof licksNotifyBpmChange === 'function') licksNotifyBpmChange(stState.currentBpm);
 }
 
 // Manual "I nailed it, next tempo" — also called by auto-advance once enough
@@ -223,6 +235,7 @@ function stBumpUp() {
   stState.currentBpm = Math.min(stState.targetBpm, stState.currentBpm + stState.stepBpm);
   stState.barsCompletedAtCurrentBpm = 0;
   stUpdateDisplay();
+  stNotifyLickBpm();
 }
 
 // Free-form tempo control (+/- buttons or typing directly into the BPM box)
@@ -240,6 +253,7 @@ function stSetCurrentBpm(value) {
   stState.currentBpm = Math.max(20, Math.min(300, n));
   stState.barsCompletedAtCurrentBpm = 0;
   stUpdateDisplay();
+  stNotifyLickBpm();
 }
 
 function stReset() {
@@ -247,6 +261,7 @@ function stReset() {
   stState.currentBpm = stState.startBpm;
   stState.barsCompletedAtCurrentBpm = 0;
   stUpdateDisplay();
+  stNotifyLickBpm();
 }
 
 // Returns the chart's scrolling window in ms (4 bars at the current tempo).

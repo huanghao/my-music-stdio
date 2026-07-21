@@ -96,11 +96,13 @@ test('slPrefsLoad/slPrefsSave round-trip only the generic (non-song-specific) fi
   sl.slState.bar1TimeSec = -0.5;
   sl.slState.speed = 80;
   sl.slState.preservePitch = false;
+  sl.slState.zoomPxPerBar = 200;
   sl.slPrefsSave();
 
   // mutate away, then reload from the fake localStorage and confirm restoration
   sl.slState.loopOn = false;
   sl.slState.speed = 100;
+  sl.slState.zoomPxPerBar = 140;
   sl.slPrefsLoad();
   assert.equal(sl.slState.loopFromBar, 4);
   assert.equal(sl.slState.loopToBar, 12);
@@ -108,6 +110,7 @@ test('slPrefsLoad/slPrefsSave round-trip only the generic (non-song-specific) fi
   assert.equal(sl.slState.bar1TimeSec, -0.5);
   assert.equal(sl.slState.speed, 80);
   assert.equal(sl.slState.preservePitch, false);
+  assert.equal(sl.slState.zoomPxPerBar, 200);
 
   // corrupted storage must not crash or pollute state with garbage
   _store['sl_prefs'] = 'not json';
@@ -140,27 +143,50 @@ test('sidecar helpers build stable adjacent JSON names and unwrap nested state p
   assert.equal(parsedLegacy.bar1TimeSec, 2);
 });
 
-test('slSaveCurrentFileState is now a no-op shim and does not write localStorage', () => {
+test('slSaveCurrentFileState no-ops when the track has no materials-library url yet', () => {
   _store = {};
+  resetState();
+  sl.slState.sourceUrl = null;
   assert.doesNotThrow(() => sl.slSaveCurrentFileState());
   assert.deepEqual(_store, {});
 });
 
-test('slSaveUrlState/slLoadUrlState round-trip bpm/key/loop/offset/speed, keyed by URL', () => {
+test('slSaveCurrentFileState persists to per-URL storage once sourceUrl is set', () => {
+  _store = {};
+  resetState();
+  sl.slState.sourceUrl = '/api/materials/take-a-train-backing.mp3';
+  sl.slState.bpm = 133;
+  sl.slSaveCurrentFileState();
+  const restored = sl.slLoadUrlState('/api/materials/take-a-train-backing.mp3');
+  assert.equal(restored.bpm, 133);
+  sl.slState.sourceUrl = null;
+});
+
+test('slSaveUrlState/slLoadUrlState round-trip the full per-track payload (sidecar fields + speed), keyed by URL', () => {
   _store = {};
   resetState();
   sl.slState.bpm = 108;
+  sl.slState.bpmManual = true;
   sl.slState.key = 'C 大调';
+  sl.slState.keyManual = true;
+  sl.slState.pitch = -2;
   sl.slState.bar1TimeSec = 2.5;
   sl.slState.loopFromBar = 5;
   sl.slState.loopToBar = 9;
   sl.slState.loopOn = true;
   sl.slState.speed = 85;
+  sl.slState.phraseStarts = [1, 9];
+  sl.slState.selectedPhraseStartBar = 9;
+  sl.slState.annotations = { 9: { chord: 'G', lyric: 'la la', note: '' } };
   sl.slSaveUrlState('/api/materials/take-a-train-backing.mp3');
   const restored = sl.slLoadUrlState('/api/materials/take-a-train-backing.mp3');
   assert.deepEqual(restored, {
-    bpm: 108, key: 'C 大调', bar1TimeSec: 2.5,
-    loopFromBar: 5, loopToBar: 9, loopOn: true, speed: 85,
+    version: 1,
+    bar1TimeSec: 2.5, bpm: 108, bpmManual: true, key: 'C 大调', keyManual: true, pitch: -2,
+    loopFromBar: 5, loopToBar: 9, loopOn: true,
+    phraseStarts: [1, 9], selectedPhraseStartBar: 9,
+    annotations: { 9: { chord: 'G', lyric: 'la la', note: '' } },
+    speed: 85,
   });
 });
 
@@ -178,4 +204,72 @@ test('slSaveUrlState keys are independent per URL — saving one does not affect
   sl.slSaveUrlState('/api/materials/b.mp3');
   assert.equal(sl.slLoadUrlState('/api/materials/a.mp3').bpm, 60);
   assert.equal(sl.slLoadUrlState('/api/materials/b.mp3').bpm, 200);
+});
+
+test('slLocalUploadKey combines name and size so same-name-different-size files don\'t collide', () => {
+  assert.equal(sl.slLocalUploadKey('song.mp3', 12345), 'song.mp3::12345');
+  assert.notEqual(sl.slLocalUploadKey('song.mp3', 12345), sl.slLocalUploadKey('song.mp3', 54321));
+});
+
+test('slLoadLocalUploadMap returns {} when nothing has been uploaded yet, and tolerates corrupted storage', () => {
+  _store = {};
+  assert.deepEqual(sl.slLoadLocalUploadMap(), {});
+  _store['sl_local_upload_map'] = 'not json';
+  assert.doesNotThrow(() => sl.slLoadLocalUploadMap());
+  assert.deepEqual(sl.slLoadLocalUploadMap(), {});
+});
+
+test('slSaveLocalUploadMapEntry round-trips and keeps multiple entries independent', () => {
+  _store = {};
+  sl.slSaveLocalUploadMapEntry('song-a.mp3::100', '/api/materials/song-a-123.mp3');
+  sl.slSaveLocalUploadMapEntry('song-b.mp3::200', '/api/materials/song-b-456.mp3');
+  const map = sl.slLoadLocalUploadMap();
+  assert.equal(map['song-a.mp3::100'], '/api/materials/song-a-123.mp3');
+  assert.equal(map['song-b.mp3::200'], '/api/materials/song-b-456.mp3');
+});
+
+test('slClampZoom clamps to [SL_ZOOM_MIN, SL_ZOOM_MAX] and rounds', () => {
+  assert.equal(sl.slClampZoom(10), sl.SL_ZOOM_MIN);
+  assert.equal(sl.slClampZoom(9999), sl.SL_ZOOM_MAX);
+  assert.equal(sl.slClampZoom(140.6), 141);
+  assert.equal(sl.slClampZoom(NaN), sl.SL_ZOOM_MIN);
+});
+
+test('slFitZoomPxPerBar fits the container width to the bar count and stays within zoom range', () => {
+  // 1000px container, 92px label column -> 908px for bars; 20 bars -> 45.4px/bar
+  assert.equal(sl.slFitZoomPxPerBar(20, 1000, 92), 45);
+  // very few bars would compute an oversized per-bar width, clamped to SL_ZOOM_MAX
+  assert.equal(sl.slFitZoomPxPerBar(1, 1000, 92), sl.SL_ZOOM_MAX);
+  // a huge bar count would compute an undersized width, clamped to SL_ZOOM_MIN
+  assert.equal(sl.slFitZoomPxPerBar(5000, 1000, 92), sl.SL_ZOOM_MIN);
+  // totalBars <= 0 must not divide by zero / go negative
+  assert.equal(sl.slFitZoomPxPerBar(0, 1000, 92), sl.SL_ZOOM_MAX);
+});
+
+test('slShouldRecenter only fires once the cell nears the edge of the visible area', () => {
+  // viewport [0,1000), 15% margin = 150px; cell comfortably in the middle
+  assert.equal(sl.slShouldRecenter(400, 540, 0, 1000), false);
+  // cell poking past the right margin
+  assert.equal(sl.slShouldRecenter(880, 1020, 0, 1000), true);
+  // cell poking past the left margin
+  assert.equal(sl.slShouldRecenter(-20, 120, 0, 1000), true);
+});
+
+test('slCenterScrollLeft centers the cell in the viewport and never goes negative', () => {
+  assert.equal(sl.slCenterScrollLeft(900, 140, 1000), 900 - 500 + 70);
+  assert.equal(sl.slCenterScrollLeft(0, 140, 1000), 0); // near the very start, clamps to 0
+});
+
+test('slComputeViewportBox maps grid scroll position to an overview box, without dividing by zero', () => {
+  // 1000px client width, 92px label column -> 908px content, 140px/bar, 50 total bars
+  const box = sl.slComputeViewportBox(0, 1000, 140, 92, 50);
+  assert.equal(box.leftPct, 0);
+  assert.ok(Math.abs(box.widthPct - (908 / 140 / 50) * 100) < 1e-9);
+
+  // scrolled halfway through a 50-bar song
+  const scrolled = sl.slComputeViewportBox(50 * 140 / 2, 1000, 140, 92, 50);
+  assert.ok(Math.abs(scrolled.leftPct - 50) < 1e-9);
+
+  // totalBars of 0 must not throw or divide by zero
+  assert.doesNotThrow(() => sl.slComputeViewportBox(0, 1000, 140, 92, 0));
 });

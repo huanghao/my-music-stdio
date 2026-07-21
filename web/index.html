@@ -297,7 +297,7 @@
     <div class="gp-dropzone-row" id="sl-dropzone-row">
       <label class="gp-dropzone" id="sl-dropzone">
         <input type="file" id="sl-file-input" accept="audio/*" />
-        <span id="sl-dropzone-text">点击选择，或把音频文件拖到这里（mp3 / m4a / wav）——本地处理，不会上传</span>
+        <span id="sl-dropzone-text">点击选择，或把音频文件拖到这里（mp3 / m4a / wav）——会自动加入素材库，以便记住你的设置</span>
       </label>
     </div>
 
@@ -315,6 +315,18 @@
           <span class="gp-pct">%</span>
         </div>
         <div class="gp-ctl-sub">音高不变</div>
+      </div>
+
+      <div class="gp-sep"></div>
+
+      <div class="gp-ctl-group">
+        <div class="gp-ctl-row">
+          <span class="gp-ctl-lbl">缩放</span>
+          <input type="range" id="sl-zoom-slider" min="40" max="280" step="10" value="140" class="gp-slider">
+          <input type="number" id="sl-zoom-num" min="40" max="280" value="140" class="gp-num-sm">
+          <button class="gp-tap-btn" id="sl-zoom-fit" title="缩放到能看到整曲">适应整曲</button>
+        </div>
+        <div class="gp-ctl-sub">小节网格的横向缩放</div>
       </div>
 
       <div class="gp-sep"></div>
@@ -377,6 +389,7 @@
     <div class="gp-wave" id="sl-wave">
       <div class="gp-wave-meta" id="sl-wave-meta">加载音频后显示文件信息</div>
       <div class="gp-wave-loop" id="sl-wave-loop"></div>
+      <div class="gp-wave-viewport" id="sl-wave-viewport"></div>
       <div class="gp-wave-bars" id="sl-wave-bars"></div>
       <div class="gp-wave-playhead" id="sl-wave-playhead"></div>
     </div>

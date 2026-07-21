@@ -17,6 +17,7 @@ import src.prefs as prefs
 from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
+from src.materials_store import LocalFlatMaterialsStore
 
 logging.basicConfig(
     level=logging.INFO,
@@ -164,33 +165,15 @@ def _write_lick(lick_id: str, data: dict) -> None:
 # link to from their notes — unlike a lick's own /attachments, these aren't
 # owned by any single lick, so uploading once and reusing the URL across
 # several licks doesn't duplicate storage and doesn't break when one of
-# those licks gets deleted.
+# those licks gets deleted. Storage itself lives behind MaterialsStore
+# (src/materials_store.py) — routes below only see that interface.
 
 MAX_MATERIAL_BYTES = 100 * 1024 * 1024  # 100MB — generous for backing-track audio
 
 def _materials_dir() -> Path:
-    d = Path(prefs.load()["materials_dir"]).expanduser()
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    return Path(prefs.load()["materials_dir"]).expanduser()
 
-def _materials_index_path() -> Path:
-    return _materials_dir() / "_index.json"
-
-def _materials_index_load() -> dict:
-    p = _materials_index_path()
-    if not p.exists():
-        return {}
-    return json.loads(p.read_text())
-
-def _materials_index_save(index: dict) -> None:
-    _materials_index_path().write_text(json.dumps(index, ensure_ascii=False, indent=2))
-
-def _material_path(material_id: str) -> Path:
-    base = _materials_dir()
-    p = (base / material_id).resolve()
-    if not p.is_relative_to(base.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid material id")
-    return p
+_materials_store = LocalFlatMaterialsStore(_materials_dir)
 
 
 # ── API ──
@@ -469,47 +452,31 @@ async def api_upload_material(file: UploadFile = File(...)):
     content = await file.read()
     if len(content) > MAX_MATERIAL_BYTES:
         raise HTTPException(status_code=413, detail="File too large (max 100MB)")
-    material_id = _attachment_filename(file.filename or "file")
-    _material_path(material_id).write_bytes(content)
-    index = _materials_index_load()
-    index[material_id] = {
-        "filename": file.filename or material_id,
-        "uploaded_at": datetime.now(timezone.utc).isoformat(),
-        "size": len(content),
-    }
-    _materials_index_save(index)
-    return {"id": material_id, "filename": index[material_id]["filename"], "url": f"/api/materials/{material_id}"}
+    record = _materials_store.save(file.filename or "file", content)
+    return {"id": record.id, "filename": record.filename, "url": f"/api/materials/{record.id}"}
 
 
 @app.get("/api/materials")
 def api_list_materials():
-    index = _materials_index_load()
-    out = []
-    for material_id, meta in index.items():
-        if not _material_path(material_id).exists():
-            continue  # stale index entry (file removed out-of-band) — skip rather than 500
-        out.append({"id": material_id, "url": f"/api/materials/{material_id}", **meta})
-    out.sort(key=lambda m: m["uploaded_at"], reverse=True)
-    return out
+    return [
+        {"id": r.id, "url": f"/api/materials/{r.id}", "filename": r.filename,
+         "uploaded_at": r.uploaded_at, "size": r.size}
+        for r in _materials_store.list_all()
+    ]
 
 
 @app.get("/api/materials/{material_id}")
 def api_get_material(material_id: str):
-    p = _material_path(material_id)
-    if not p.exists():
+    p = _materials_store.path_for(material_id)
+    if p is None:
         raise HTTPException(status_code=404, detail="Material not found")
     return FileResponse(p)
 
 
 @app.delete("/api/materials/{material_id}")
 def api_delete_material(material_id: str):
-    p = _material_path(material_id)
-    if not p.exists():
+    if not _materials_store.delete(material_id):
         raise HTTPException(status_code=404, detail="Material not found")
-    p.unlink()
-    index = _materials_index_load()
-    index.pop(material_id, None)
-    _materials_index_save(index)
     return {"ok": True}
 
 

@@ -5,8 +5,11 @@
 // 32-bar demo and simulated timer-driven playback); this implementation
 // keeps that visual design but drives it with a real decoded audio file
 // (real waveform peaks, real seek/loop/speed) instead of the mockup's fake
-// data. All audio processing happens client-side via decodeAudioData;
-// nothing is uploaded anywhere.
+// data. Audio is decoded client-side via decodeAudioData for playback, but
+// a locally dropped/picked file is also uploaded to the server's materials
+// library (POST /api/materials, same endpoint Licks' material picker uses)
+// so it gets a stable URL and can be auto-persisted like any other track —
+// see the "per-URL state" block below.
 //
 // Known deliberate gap vs. a "real" tool, kept because the ported design
 // itself only supports a single constant BPM for the whole song (no per-
@@ -15,6 +18,8 @@
 // (UI-only, not wired to real audio, pending a phase-vocoder/WSOLA engine).
 
 const SL_STORAGE_KEY = 'sl_prefs';
+const SL_ZOOM_MIN = 40;
+const SL_ZOOM_MAX = 280;
 
 const SL_KEY_OPTIONS = ['C 大调', 'G 大调', 'D 大调', 'A 大调', 'E 大调', 'F 大调', 'Bb 大调', 'Am 小调', 'Em 小调', 'Dm 小调', 'Bm 小调', 'Gm 小调'];
 const SL_INTERVAL_NAMES = ['原调', '小二度', '大二度', '小三度', '大三度', '纯四度', '三全音'];
@@ -33,6 +38,7 @@ const slState = {
   loopFromBar: 5, loopToBar: 8, loopOn: false,
   bar1TimeSec: 0,
   speed: 100, preservePitch: true,
+  zoomPxPerBar: 140, // horizontal zoom of the bar grid; a viewing preference, not song-specific
 
   duration: 0, channelData: null, peaks: null, // peaks: cached real per-bar waveform amplitude, recomputed on load/resize
 
@@ -40,9 +46,10 @@ const slState = {
   annotations: {}, // { [barNumber]: { chord, lyric, note } } persisted only via explicit sidecar JSON
   phraseStarts: [1], selectedPhraseStartBar: 1,
 
-  // Set only when the current track was loaded via slLoadFromUrl (a Lick's
-  // materials-library backing track, which has a permanent server URL) —
-  // null for anything loaded via the local file picker/drop. See the
+  // Set once the current track has a stable materials-library URL: either
+  // it was loaded via slLoadFromUrl (a Lick's backing track), or a locally
+  // picked/dropped file finished uploading to /api/materials. Null only
+  // while a local file's upload is still in flight (or failed). See the
   // per-URL state block below for what this unlocks.
   sourceUrl: null,
 
@@ -50,9 +57,12 @@ const slState = {
 };
 
 // ── persistence ──────────────────────────────────────────────────────────
-// Only generic user preferences persist (speed, loop range, pitch-preserve).
-// bpm/key/pitch/annotations/phrase markers are song-specific with no stable identity for an
-// arbitrary local file to key them by, so they reset to defaults each load.
+// This is a rough starting point only — a last-used default that shows up
+// before a track's own per-URL state (below) has loaded and overridden it.
+// Every track-specific field (bpm/key/pitch/annotations/phrase markers/loop
+// range/offset/speed) has its own per-URL persistence once the track has a
+// materials-library URL — which, since local files now auto-upload on load,
+// is effectively always once that upload succeeds.
 function slPrefsLoad() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(SL_STORAGE_KEY)) || {}; } catch (_) {}
@@ -62,28 +72,32 @@ function slPrefsLoad() {
   if (Number.isFinite(saved.bar1TimeSec)) slState.bar1TimeSec = saved.bar1TimeSec;
   if (Number.isFinite(saved.speed)) slState.speed = saved.speed;
   if (typeof saved.preservePitch === 'boolean') slState.preservePitch = saved.preservePitch;
+  if (Number.isFinite(saved.zoomPxPerBar)) slState.zoomPxPerBar = slClampZoom(saved.zoomPxPerBar);
 }
 function slPrefsSave() {
   localStorage.setItem(SL_STORAGE_KEY, JSON.stringify({
     loopFromBar: slState.loopFromBar, loopToBar: slState.loopToBar, loopOn: slState.loopOn,
     bar1TimeSec: slState.bar1TimeSec,
     speed: slState.speed, preservePitch: slState.preservePitch,
+    zoomPxPerBar: slState.zoomPxPerBar,
   }));
 }
 
-// ── per-URL state (Lick-attached backing tracks only) ──────────────────────
-// Unlike an arbitrary local file, a materials-library URL is a stable id —
-// so bpm/key/loop range/offset can be remembered automatically per track,
-// without the manual sidecar-file round-trip local files still need (see
-// the persistence comment above this block).
+// ── per-URL state (any track with a materials-library URL) ─────────────────
+// A materials-library URL is a stable id — so every track-specific field can
+// be remembered automatically, keyed by that URL. Local files get here too:
+// see the local-upload dedupe map further below.
 const SL_URL_STATE_PREFIX = 'sl_url_state_';
 
 function slUrlStateKey(url) { return SL_URL_STATE_PREFIX + url; }
 
+// Reuses the sidecar's own payload shape (slCaptureFileStatePayload) so the
+// two persistence paths don't hand-copy the same field list twice; speed is
+// tacked on separately since it's outside that shape (the sidecar JSON export
+// intentionally doesn't include it, see slBuildSidecarDocument).
 function slSaveUrlState(url) {
   localStorage.setItem(slUrlStateKey(url), JSON.stringify({
-    bpm: slState.bpm, key: slState.key, bar1TimeSec: slState.bar1TimeSec,
-    loopFromBar: slState.loopFromBar, loopToBar: slState.loopToBar, loopOn: slState.loopOn,
+    ...slCaptureFileStatePayload(),
     speed: slState.speed,
   }));
 }
@@ -93,11 +107,34 @@ function slLoadUrlState(url) {
   catch (_) { return null; }
 }
 
-// Called alongside every existing user-edit persistence point (see
-// slSaveCurrentFileState/slPrefsSave call sites below) — a no-op unless the
-// current track came from slLoadFromUrl.
+// Called alongside every user-edit persistence point (see
+// slSaveCurrentFileState call sites below) — a no-op unless the current
+// track has a materials-library URL yet (e.g. a local file's upload is
+// still in flight or failed).
 function slPersistUrlStateIfApplicable() {
   if (slState.sourceUrl) slSaveUrlState(slState.sourceUrl);
+}
+
+// ── local-file upload dedupe (name+size -> materials-library url) ──────────
+// A locally picked/dropped file has no server identity of its own, so on
+// first load it gets uploaded to /api/materials and the resulting url is
+// cached here — keyed by name+size, not content hash, which is good enough
+// for a personal practice tool (a same-name-same-size-but-different-content
+// collision just means that reload won't be recognized as "new"). Re-opening
+// the same file next time reuses the cached url instead of uploading again.
+const SL_LOCAL_UPLOAD_MAP_KEY = 'sl_local_upload_map';
+
+function slLocalUploadKey(name, size) { return `${name}::${size}`; }
+
+function slLoadLocalUploadMap() {
+  try { return JSON.parse(localStorage.getItem(SL_LOCAL_UPLOAD_MAP_KEY)) || {}; }
+  catch (_) { return {}; }
+}
+
+function slSaveLocalUploadMapEntry(key, url) {
+  const map = slLoadLocalUploadMap();
+  map[key] = url;
+  localStorage.setItem(SL_LOCAL_UPLOAD_MAP_KEY, JSON.stringify(map));
 }
 
 function slBaseName(fileName) {
@@ -131,7 +168,7 @@ function slNormalizeAnnotations(raw) {
   return out;
 }
 
-function slSaveCurrentFileState() {}
+function slSaveCurrentFileState() { slPersistUrlStateIfApplicable(); }
 
 function slCaptureFileStatePayload() {
   return {
@@ -202,6 +239,38 @@ function slTotalBars() {
   return Math.max(1, Math.ceil((slState.duration - slState.bar1TimeSec) / slSecPerBar()));
 }
 
+// ── bar-grid zoom/scroll math (pure — no DOM) ─────────────────────────────
+function slClampZoom(px) {
+  return Math.max(SL_ZOOM_MIN, Math.min(SL_ZOOM_MAX, Math.round(px) || SL_ZOOM_MIN));
+}
+function slFitZoomPxPerBar(totalBars, containerWidth, labelWidth) {
+  const bars = Math.max(1, totalBars);
+  const available = Math.max(0, containerWidth - labelWidth);
+  return slClampZoom(available / bars);
+}
+// Only recenter once the current bar's cell gets within marginRatio of either
+// edge of the visible area — mirrors a DAW's "keep playhead roughly centered"
+// follow behavior instead of scrollIntoView('nearest')'s edge-snap-every-bar.
+function slShouldRecenter(cellLeft, cellRight, viewLeft, viewWidth, marginRatio = 0.15) {
+  const margin = viewWidth * marginRatio;
+  const viewRight = viewLeft + viewWidth;
+  return cellLeft < viewLeft + margin || cellRight > viewRight - margin;
+}
+function slCenterScrollLeft(cellLeft, cellWidth, viewWidth) {
+  return Math.max(0, cellLeft - viewWidth / 2 + cellWidth / 2);
+}
+// Maps the bar grid's current horizontal scroll position to a {leftPct,
+// widthPct} box overlaid on the always-full-song overview waveform above it.
+function slComputeViewportBox(scrollLeft, clientWidth, zoomPx, labelWidth, totalBars) {
+  const bars = Math.max(1, totalBars);
+  const contentWidth = Math.max(1, clientWidth - labelWidth);
+  const barFrom = Math.max(0, scrollLeft / zoomPx);
+  const barSpan = contentWidth / zoomPx;
+  const leftPct = Math.min(100, (barFrom / bars) * 100);
+  const widthPct = Math.max(0, Math.min(100 - leftPct, (barSpan / bars) * 100));
+  return { leftPct, widthPct };
+}
+
 function slFmtTime(t) {
   const s = Math.max(0, t);
   const m = Math.floor(s / 60), sec = Math.floor(s % 60);
@@ -265,6 +334,7 @@ function initSongLoopPage() {
     dropzoneRow: $('sl-dropzone-row'), dropzone: $('sl-dropzone'), dropzoneText: $('sl-dropzone-text'),
     timeReadout: $('sl-time-readout'),
     speedSlider: $('sl-speed-slider'), speedNum: $('sl-speed-num'),
+    zoomSlider: $('sl-zoom-slider'), zoomNum: $('sl-zoom-num'), zoomFitBtn: $('sl-zoom-fit'),
     pitchDownBtn: $('sl-pitch-down'), pitchUpBtn: $('sl-pitch-up'), pitchLabel: $('sl-pitch-label'),
     loopPanel: $('sl-loop-panel'), loopToggle: $('sl-loop-toggle'),
     loopFromInput: $('sl-loop-from'), loopToInput: $('sl-loop-to'), loopHint: $('sl-loop-hint'),
@@ -276,7 +346,7 @@ function initSongLoopPage() {
     phrasePrev: $('sl-phrase-prev'), phraseNext: $('sl-phrase-next'),
     phraseClear: $('sl-phrase-clear'), phraseReadout: $('sl-phrase-readout'),
     wave: $('sl-wave'), waveMeta: $('sl-wave-meta'), waveLoop: $('sl-wave-loop'),
-    waveBars: $('sl-wave-bars'), wavePlayhead: $('sl-wave-playhead'),
+    waveBars: $('sl-wave-bars'), wavePlayhead: $('sl-wave-playhead'), waveViewport: $('sl-wave-viewport'),
     keySelect: $('sl-key-select'), keyTag: $('sl-key-tag'),
     bpmInput: $('sl-bpm-input'), bpmTag: $('sl-bpm-tag'), tapBtn: $('sl-tap-btn'),
     barGrid: $('sl-bar-grid'), barGridEmpty: $('sl-bar-grid-empty'), barFooter: $('sl-bar-footer'),
@@ -288,12 +358,16 @@ function initSongLoopPage() {
   let rowsByBar = new Map(); // rebuilt each renderBarGrid() call — bar -> [cells for that bar across rows]
   let lastHighlightedBar = null;
   let fileLabel = { name: '', sampleRate: 0 };
+  let sidecarHandle = null; // FileSystemFileHandle from the first showSaveFilePicker save this track — reused so later saves overwrite silently instead of re-prompting
+  let loadGeneration = 0; // bumped on every loadFile() call, so a stale in-flight upload from a since-replaced track can detect it's obsolete and bail out
 
   els.keySelect.innerHTML = SL_KEY_OPTIONS.map(k => `<option value="${htmlEsc(k)}">${htmlEsc(k)}</option>`).join('');
 
   function applyPrefsToUI() {
     els.speedSlider.value = slState.speed;
     els.speedNum.value = slState.speed;
+    els.zoomSlider.value = slState.zoomPxPerBar;
+    els.zoomNum.value = slState.zoomPxPerBar;
     els.loopFromInput.value = slState.loopFromBar;
     els.loopToInput.value = slState.loopToBar;
     els.loopToggle.checked = slState.loopOn;
@@ -405,7 +479,6 @@ function initSongLoopPage() {
     renderBarGrid();
     updateWaveOverlays();
     slSaveCurrentFileState();
-    slPersistUrlStateIfApplicable();
   }
 
   function setBar1ToCurrentTime() {
@@ -416,7 +489,6 @@ function initSongLoopPage() {
     updateTimeReadout();
     updateBarGridHighlight();
     slSaveCurrentFileState();
-    slPersistUrlStateIfApplicable();
   }
 
   // ── waveform: real per-segment peak amplitude, rendered as plain DOM bars
@@ -460,6 +532,19 @@ function initSongLoopPage() {
     els.wavePlayhead.style.left = pct + '%';
   }
 
+  // Shows, as a box on the always-full-song overview waveform, which slice
+  // of the (independently zoomable/scrollable) bar grid below is visible.
+  function updateWaveViewportBox() {
+    if (slState.duration <= 0) { els.waveViewport.style.display = 'none'; return; }
+    const { leftPct, widthPct } = slComputeViewportBox(
+      els.barGrid.scrollLeft, els.barGrid.clientWidth, slState.zoomPxPerBar, 92, slTotalBars()
+    );
+    if (widthPct >= 100) { els.waveViewport.style.display = 'none'; return; }
+    els.waveViewport.style.display = 'block';
+    els.waveViewport.style.left = leftPct + '%';
+    els.waveViewport.style.width = widthPct + '%';
+  }
+
   // ── bar grid: click the bar number to seek; click elsewhere in the cell
   // to edit the bar's chord/lyric metadata. That keeps seeking on the
   // least ambiguous hit target and makes the rest of the row feel like an
@@ -484,6 +569,7 @@ function initSongLoopPage() {
 
     const total = slTotalBars();
     els.barGrid.style.setProperty('--sl-bar-count', total);
+    els.barGrid.style.setProperty('--sl-bar-width', slState.zoomPxPerBar + 'px');
     const board = document.createElement('div');
     board.className = 'gp-track-board';
 
@@ -598,6 +684,7 @@ function initSongLoopPage() {
     els.barGrid.appendChild(board);
     els.barFooter.textContent = '共 ' + total + ' 小节 · 上排数字负责跳转，句首行负责标记句子边界，其余三行直接编辑';
     applyBarGridHighlightClasses();
+    updateWaveViewportBox();
   }
 
   function applyBarGridHighlightClasses() {
@@ -617,14 +704,32 @@ function initSongLoopPage() {
     if (rowsByBar.has(curBar)) {
       const cells = rowsByBar.get(curBar);
       cells.forEach(cell => cell.classList.add('gp-bar-current'));
-      cells[0].scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      scrollGridToBar(curBar, { behavior: 'smooth' });
     }
     lastHighlightedBar = curBar;
+  }
+
+  // Keeps the playhead's bar roughly centered instead of scrollIntoView's
+  // edge-snap (which, during continuous forward playback, looks like the
+  // grid staying pinned to the right edge). Only scrolls when the bar's
+  // cell actually nears an edge, so steady playback doesn't jitter-scroll
+  // every single bar.
+  function scrollGridToBar(bar, opts = {}) {
+    const cells = rowsByBar.get(bar);
+    if (!cells || !cells.length) return;
+    const cell = cells[0];
+    const container = els.barGrid;
+    const cellLeft = cell.offsetLeft, cellRight = cellLeft + cell.offsetWidth;
+    const viewLeft = container.scrollLeft, viewWidth = container.clientWidth;
+    if (!slShouldRecenter(cellLeft, cellRight, viewLeft, viewWidth)) return;
+    const target = slCenterScrollLeft(cellLeft, cell.offsetWidth, viewWidth);
+    container.scrollTo({ left: target, behavior: opts.behavior || 'auto' });
   }
 
   // ── file loading ──────────────────────────────────────────────────────
   function resetForNewTrack(label, sampleRate) {
     fileLabel = { name: label, sampleRate };
+    sidecarHandle = null; // new track — don't silently overwrite the previous track's sidecar file
     slState.annotations = {};
     slState.phraseStarts = [1];
     slState.selectedPhraseStartBar = 1;
@@ -686,18 +791,26 @@ function initSongLoopPage() {
     const doc = slBuildSidecarDocument(fileLabel.name);
     if (window.showSaveFilePicker) {
       try {
-        const handle = await window.showSaveFilePicker({
-          suggestedName,
-          types: [{ description: 'Song Loop sidecar', accept: { 'application/json': ['.json'] } }],
-        });
-        const writable = await handle.createWritable();
+        // Only prompt for a location on the first save of this track; every
+        // save after that reuses the same handle and just overwrites it —
+        // no repeat picker, no extra confirmation.
+        if (!sidecarHandle) {
+          sidecarHandle = await window.showSaveFilePicker({
+            suggestedName,
+            types: [{ description: 'Song Loop sidecar', accept: { 'application/json': ['.json'] } }],
+          });
+        }
+        const writable = await sidecarHandle.createWritable();
         await writable.write(JSON.stringify(doc, null, 2));
         await writable.close();
-        updateSidecarHint(`已保存为 ${suggestedName}`);
+        updateSidecarHint(`已保存为 ${sidecarHandle.name}（${new Date().toLocaleTimeString('zh-CN', { hour12: false })}）`);
         slSaveCurrentFileState();
         return;
       } catch (err) {
         if (err && err.name === 'AbortError') return;
+        sidecarHandle = null; // handle went stale (e.g. permission revoked) — next click reopens the picker
+        updateSidecarHint('保存失败，请重试');
+        return;
       }
     }
     slSidecarDownloadBlob(doc, suggestedName);
@@ -755,7 +868,8 @@ function initSongLoopPage() {
   }
 
   async function loadFile(file) {
-    slState.sourceUrl = null; // any local-file load leaves per-URL state behind
+    loadGeneration++; // invalidates any in-flight upload from a track we're replacing
+    slState.sourceUrl = null; // cleared until loadFileFromUrl / a successful local upload sets it
     const url = URL.createObjectURL(file);
     els.audioEl.src = url;
     const arrBuf = await file.arrayBuffer();
@@ -769,11 +883,34 @@ function initSongLoopPage() {
     resetForNewTrack(file.name, sampleRate);
   }
 
+  // Applies this track's remembered bpm/key/loop/offset/speed/pitch/phrase
+  // markers/annotations (if any) and refreshes every bit of UI that depends
+  // on them. Shared by a Lick's materials-library track (loadFileFromUrl)
+  // and a local file that's already been seen before (loadLocalFile's
+  // dedupe-hit path) — both end up with the same kind of stable url.
+  function applySavedUrlStateIfAny(url) {
+    const saved = slLoadUrlState(url);
+    if (!saved) return;
+    slApplyFileStatePayload(saved);
+    if (Number.isFinite(saved.speed)) { slState.speed = saved.speed; applySpeed(); }
+    normalizePhraseStarts();
+    applyPrefsToUI();
+    updateKeyTag();
+    updateBpmTag();
+    updateOffsetReadout();
+    updatePhrasePanelStyle();
+    updatePhraseReadout();
+    renderWaveBars();
+    renderBarGrid();
+    updateWaveOverlays();
+    updateTimeReadout();
+  }
+
   // External entry point for a Lick's materials-library backing track (see
   // slLoadFromUrl below, module scope) — fetches the URL into a Blob and
   // funnels it through the exact same decode/waveform pipeline as a local
-  // file, then (unlike a local file) restores this specific track's
-  // remembered bpm/key/loop/offset/speed, since the URL is a stable id.
+  // file, then restores this specific track's remembered state, since the
+  // URL is a stable id.
   async function loadFileFromUrl(url, label) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`fetch failed (${res.status})`);
@@ -785,28 +922,58 @@ function initSongLoopPage() {
     const name = label || decodeURIComponent(url.split('/').pop() || 'track');
     await loadFile(new File([blob], name, { type: blob.type }));
     slState.sourceUrl = url;
-    const saved = slLoadUrlState(url);
-    if (!saved) return;
-    if (Number.isFinite(saved.bpm)) { slState.bpm = saved.bpm; slState.bpmManual = true; }
-    if (typeof saved.key === 'string') { slState.key = saved.key; slState.keyManual = true; }
-    if (Number.isFinite(saved.bar1TimeSec)) slState.bar1TimeSec = saved.bar1TimeSec;
-    if (Number.isFinite(saved.loopFromBar)) slState.loopFromBar = saved.loopFromBar;
-    if (Number.isFinite(saved.loopToBar)) slState.loopToBar = saved.loopToBar;
-    if (typeof saved.loopOn === 'boolean') slState.loopOn = saved.loopOn;
-    if (Number.isFinite(saved.speed)) { slState.speed = saved.speed; applySpeed(); }
-    applyPrefsToUI();
-    updateKeyTag();
-    updateBpmTag();
-    updateOffsetReadout();
-    renderWaveBars();
-    renderBarGrid();
-    updateWaveOverlays();
-    updateTimeReadout();
+    applySavedUrlStateIfAny(url);
+    updateSidecarHint('来自素材库 · 改动会自动保存 · 也可用"保存 sidecar"额外导出备份');
   }
   slState.loadFileFromUrl = loadFileFromUrl;
 
+  // Uploads a freshly-picked local file to the same materials library Licks
+  // uses (POST /api/materials — see web/licks.js's materialUploadAndInsert
+  // for the same call shape), then treats it exactly like a Lick's track
+  // from then on: sourceUrl gets set, so every future edit auto-persists.
+  // Failure (offline, server down, >100MB) leaves sourceUrl null — the
+  // track still plays fine locally, just falls back to manual "保存
+  // sidecar" for anything you want to keep across a refresh.
+  async function registerAsLibraryMaterial(file, dedupeKey) {
+    const myGeneration = loadGeneration;
+    updateSidecarHint('正在加入素材库…');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/materials', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(`upload failed (${res.status})`);
+      const { url } = await res.json();
+      if (myGeneration !== loadGeneration) return; // a different track has since been loaded
+      slSaveLocalUploadMapEntry(dedupeKey, url);
+      slState.sourceUrl = url;
+      slSaveCurrentFileState(); // persists the current (default) state under the new url right away
+      updateSidecarHint('已加入素材库 · 改动会自动保存 · 也可用"保存 sidecar"额外导出备份');
+    } catch (err) {
+      if (myGeneration !== loadGeneration) return;
+      updateSidecarHint('未加入素材库（离线或上传失败）· 请用"保存 sidecar"手动备份，避免刷新丢失');
+    }
+  }
+
+  // Entry point for the local file picker/dropzone. Decodes+plays
+  // immediately (doesn't wait on the network), then either recognizes the
+  // file from a previous session (same name+size, see the local-upload
+  // dedupe map at module scope) and restores its saved state, or uploads it
+  // as a brand-new materials-library entry.
+  async function loadLocalFile(file) {
+    await loadFile(file);
+    const key = slLocalUploadKey(file.name, file.size);
+    const knownUrl = slLoadLocalUploadMap()[key];
+    if (knownUrl) {
+      slState.sourceUrl = knownUrl;
+      applySavedUrlStateIfAny(knownUrl);
+      updateSidecarHint('已从素材库恢复上次进度 · 改动会自动保存');
+      return;
+    }
+    await registerAsLibraryMaterial(file, key);
+  }
+
   const fileInput = document.getElementById('sl-file-input');
-  fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+  fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadLocalFile(e.target.files[0]); });
   els.sidecarSaveBtn.addEventListener('click', saveSidecarFile);
   els.sidecarLoadBtn.addEventListener('click', pickAndLoadSidecar);
   els.sidecarInput.addEventListener('change', (e) => {
@@ -815,7 +982,7 @@ function initSongLoopPage() {
   });
   ['dragover', 'dragenter'].forEach(ev => els.dropzone.addEventListener(ev, (e) => { e.preventDefault(); els.dropzone.classList.add('drag'); }));
   ['dragleave', 'drop'].forEach(ev => els.dropzone.addEventListener(ev, (e) => { e.preventDefault(); els.dropzone.classList.remove('drag'); }));
-  els.dropzone.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) loadFile(f); });
+  els.dropzone.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) loadLocalFile(f); });
   // clicking the waveform before a file is loaded re-opens the file picker,
   // since the dropzone row hides itself after a track loads (matches the
   // ported design's single always-visible waveform slot)
@@ -877,21 +1044,40 @@ function initSongLoopPage() {
     els.speedNum.value = v;
     applySpeed();
     slPrefsSave();
-    slPersistUrlStateIfApplicable();
+    slSaveCurrentFileState();
   }
   els.speedSlider.addEventListener('input', () => setSpeed(parseInt(els.speedSlider.value)));
   els.speedNum.addEventListener('change', () => setSpeed(parseInt(els.speedNum.value)));
 
+  // ── zoom (bar grid horizontal scale — a viewing preference, saved via
+  // slPrefsSave alongside speed/loopOn, not per-song) ──────────────────────
+  function setZoom(px) {
+    slState.zoomPxPerBar = slClampZoom(px);
+    els.zoomSlider.value = slState.zoomPxPerBar;
+    els.zoomNum.value = slState.zoomPxPerBar;
+    renderBarGrid();
+    updateWaveOverlays();
+    scrollGridToBar(slTimeToBar(els.audioEl.currentTime), { behavior: 'auto' });
+    slPrefsSave();
+  }
+  function fitZoomToWidth() {
+    setZoom(slFitZoomPxPerBar(slTotalBars(), els.barGrid.clientWidth, 92));
+  }
+  els.zoomSlider.addEventListener('input', () => setZoom(parseInt(els.zoomSlider.value)));
+  els.zoomNum.addEventListener('change', () => setZoom(parseInt(els.zoomNum.value)));
+  els.zoomFitBtn.addEventListener('click', fitZoomToWidth);
+  els.barGrid.addEventListener('scroll', () => requestAnimationFrame(updateWaveViewportBox));
+
   // ── pitch (UI-only — see file header) ────────────────────────────────
-  els.pitchUpBtn.addEventListener('click', () => { slState.pitch = Math.min(6, slState.pitch + 1); updatePitchLabel(); });
-  els.pitchDownBtn.addEventListener('click', () => { slState.pitch = Math.max(-6, slState.pitch - 1); updatePitchLabel(); });
+  els.pitchUpBtn.addEventListener('click', () => { slState.pitch = Math.min(6, slState.pitch + 1); updatePitchLabel(); slSaveCurrentFileState(); });
+  els.pitchDownBtn.addEventListener('click', () => { slState.pitch = Math.max(-6, slState.pitch - 1); updatePitchLabel(); slSaveCurrentFileState(); });
 
   // ── key / BPM / tap-tempo ─────────────────────────────────────────────
   els.keySelect.addEventListener('change', () => {
     slState.key = els.keySelect.value;
     slState.keyManual = true;
     updateKeyTag();
-    slPersistUrlStateIfApplicable();
+    slSaveCurrentFileState();
   });
 
   function setBpm(v, manual) {
@@ -903,7 +1089,7 @@ function initSongLoopPage() {
     renderWaveBars(); // bar boundaries moved — nothing to redraw for peaks themselves, but overlays/grid depend on them
     renderBarGrid();
     updateWaveOverlays();
-    slPersistUrlStateIfApplicable();
+    slSaveCurrentFileState();
   }
   els.bpmInput.addEventListener('change', () => setBpm(parseInt(els.bpmInput.value), true));
 
@@ -933,7 +1119,7 @@ function initSongLoopPage() {
     if (slState.loopOn && !els.audioEl.paused) startLoopGuard();
     else if (!slState.loopOn) stopLoopGuard();
     slPrefsSave();
-    slPersistUrlStateIfApplicable();
+    slSaveCurrentFileState();
   }
   [els.loopFromInput, els.loopToInput].forEach(el => el.addEventListener('change', readLoopInputs));
   els.loopToggle.addEventListener('change', readLoopInputs);
@@ -1002,8 +1188,11 @@ if (typeof module !== 'undefined' && module.exports) {
     slFmtTime, slPitchLabelFor, slPlaybackVolume, slApplyPlaybackVolume, initSongLoopPage,
     slBaseName, slSidecarFileName,
     slBuildSidecarDocument, slParseSidecarText, slExtractSidecarState,
-    slSaveCurrentFileState,
+    slSaveCurrentFileState, slPersistUrlStateIfApplicable,
     slSaveUrlState, slLoadUrlState,
-    SL_KEY_OPTIONS, SL_INTERVAL_NAMES,
+    slLocalUploadKey, slLoadLocalUploadMap, slSaveLocalUploadMapEntry,
+    slCaptureFileStatePayload, slApplyFileStatePayload,
+    slClampZoom, slFitZoomPxPerBar, slShouldRecenter, slCenterScrollLeft, slComputeViewportBox,
+    SL_KEY_OPTIONS, SL_INTERVAL_NAMES, SL_ZOOM_MIN, SL_ZOOM_MAX,
   };
 }

@@ -299,6 +299,9 @@
         <input type="file" id="sl-file-input" accept="audio/*" />
         <span id="sl-dropzone-text">点击选择，或把音频文件拖到这里（mp3 / m4a / wav）——会自动加入素材库，以便记住你的设置</span>
       </label>
+      <div style="margin-top:8px; text-align:center;">
+        <button type="button" class="gp-tap-btn" id="sl-browse-library-btn">🎧 从资料库选择</button>
+      </div>
     </div>
 
     <!-- toolbar -->
@@ -500,6 +503,20 @@
     <div id="material-picker-list" class="material-picker-list"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeMaterialPicker()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Song Loop's "browse the materials library" picker — lists every audio
+     material (regardless of whether any Lick links to it) and opens the
+     picked one directly via slLoadFromUrl, same entry point Licks' "🎧
+     Practice with Song Loop" button uses. -->
+<div id="sl-library-modal" class="modal-overlay">
+  <div class="modal" style="width:420px">
+    <h3 class="modal-subtitle">从资料库选择</h3>
+    <div id="sl-library-list" class="material-picker-list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-sm" id="sl-library-close-btn">Close</button>
     </div>
   </div>
 </div>

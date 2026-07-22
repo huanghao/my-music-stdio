@@ -1,3 +1,5 @@
+import json
+
 from src.materials_store import LocalFlatMaterialsStore
 
 
@@ -44,6 +46,33 @@ def test_path_for_and_delete_reject_path_traversal_ids(tmp_path):
     store = make_store(tmp_path)
     assert store.path_for("../../etc/passwd") is None
     assert store.delete("../../etc/passwd") is False
+
+
+def test_save_state_then_load_state_round_trips(tmp_path):
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"data")
+    assert store.load_state(record.id) is None  # nothing saved yet
+
+    state = {"bpm": 120, "loopFromBar": 5, "annotations": {"1": {"chord": "C"}}}
+    assert store.save_state(record.id, state) is True
+    assert store.load_state(record.id) == state
+
+
+def test_save_state_and_load_state_return_false_and_none_for_unknown_id(tmp_path):
+    store = make_store(tmp_path)
+    assert store.save_state("nope.mp3", {"bpm": 100}) is False
+    assert store.load_state("nope.mp3") is None
+
+
+def test_list_all_tolerates_index_entries_without_a_state_key(tmp_path):
+    # Index entries written before this feature existed have no "state" key.
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"data")
+    index_path = tmp_path / "materials" / "_index.json"
+    index = json.loads(index_path.read_text())
+    assert "state" not in index[record.id]  # sanity check on the fixture itself
+    listed = store.list_all()
+    assert listed[0].state is None
 
 
 def test_root_dir_is_read_lazily_on_every_call(tmp_path):

@@ -84,35 +84,30 @@ function slPrefsSave() {
 }
 
 // ── per-URL state (any track with a materials-library URL) ─────────────────
-// A materials-library URL is a stable id — so every track-specific field can
-// be remembered automatically, keyed by that URL. Local files get here too:
-// see the local-upload dedupe map further below.
+// This now lives server-side, at PUT/GET /api/materials/<id>/state — see
+// scheduleUrlStateSave/pushUrlState/applySavedUrlStateIfAny inside
+// initSongLoopPage() (they need updateSidecarHint/els, so they can't live at
+// module scope like the rest of this file's pure logic). The localStorage
+// key below is kept only as a one-time migration source for tracks saved
+// before this moved server-side — see slReadLegacyUrlState.
 const SL_URL_STATE_PREFIX = 'sl_url_state_';
 
 function slUrlStateKey(url) { return SL_URL_STATE_PREFIX + url; }
 
-// Reuses the sidecar's own payload shape (slCaptureFileStatePayload) so the
-// two persistence paths don't hand-copy the same field list twice; speed is
-// tacked on separately since it's outside that shape (the sidecar JSON export
-// intentionally doesn't include it, see slBuildSidecarDocument).
-function slSaveUrlState(url) {
-  localStorage.setItem(slUrlStateKey(url), JSON.stringify({
-    ...slCaptureFileStatePayload(),
-    speed: slState.speed,
-  }));
-}
-
-function slLoadUrlState(url) {
+function slReadLegacyUrlState(url) {
   try { return JSON.parse(localStorage.getItem(slUrlStateKey(url))) || null; }
   catch (_) { return null; }
 }
 
 // Called alongside every user-edit persistence point (see
-// slSaveCurrentFileState call sites below) — a no-op unless the current
-// track has a materials-library URL yet (e.g. a local file's upload is
-// still in flight or failed).
+// slSaveCurrentFileState call sites below). A no-op until initSongLoopPage()
+// has wired up slState.scheduleUrlStateSave (or the current track has no
+// materials-library url yet — e.g. a local file's upload is still in flight
+// or failed).
 function slPersistUrlStateIfApplicable() {
-  if (slState.sourceUrl) slSaveUrlState(slState.sourceUrl);
+  if (slState.sourceUrl && typeof slState.scheduleUrlStateSave === 'function') {
+    slState.scheduleUrlStateSave();
+  }
 }
 
 // ── local-file upload dedupe (name+size -> materials-library url) ──────────
@@ -352,6 +347,8 @@ function initSongLoopPage() {
     barGrid: $('sl-bar-grid'), barGridEmpty: $('sl-bar-grid-empty'), barFooter: $('sl-bar-footer'),
     sidecarSaveBtn: $('sl-sidecar-save'), sidecarLoadBtn: $('sl-sidecar-load'),
     sidecarHint: $('sl-sidecar-hint'), sidecarInput: $('sl-sidecar-input'),
+    browseLibraryBtn: $('sl-browse-library-btn'), libraryModal: $('sl-library-modal'),
+    libraryList: $('sl-library-list'), libraryCloseBtn: $('sl-library-close-btn'),
     audioEl: $('sl-player'),
   };
 
@@ -883,13 +880,52 @@ function initSongLoopPage() {
     resetForNewTrack(file.name, sampleRate);
   }
 
+  // ── per-URL state: debounced write to the server, read on load ──────────
+  // Writes: coalesce rapid edits (typing a lyric, dragging a slider) into
+  // one PUT after 600ms of quiet. url+payload are snapshotted at *schedule*
+  // time, not when the timer fires — otherwise switching tracks mid-debounce
+  // would write the new track's data under the old track's url.
+  let urlStateSaveTimer = null;
+  function scheduleUrlStateSave() {
+    if (!slState.sourceUrl) return;
+    const url = slState.sourceUrl;
+    const payload = { ...slCaptureFileStatePayload(), speed: slState.speed };
+    clearTimeout(urlStateSaveTimer);
+    urlStateSaveTimer = setTimeout(() => pushUrlState(url, payload), 600);
+  }
+  async function pushUrlState(url, payload) {
+    try {
+      const res = await fetch(`${url}/state`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+    } catch (err) {
+      updateSidecarHint('自动保存失败（网络问题）· 请稍后重试或用"保存 sidecar"手动备份');
+    }
+  }
+  slState.scheduleUrlStateSave = scheduleUrlStateSave;
+
   // Applies this track's remembered bpm/key/loop/offset/speed/pitch/phrase
   // markers/annotations (if any) and refreshes every bit of UI that depends
   // on them. Shared by a Lick's materials-library track (loadFileFromUrl)
   // and a local file that's already been seen before (loadLocalFile's
   // dedupe-hit path) — both end up with the same kind of stable url.
-  function applySavedUrlStateIfAny(url) {
-    const saved = slLoadUrlState(url);
+  //
+  // Reads from the server first; if that comes back empty (a brand-new
+  // material, or a track saved before this state moved server-side), falls
+  // back to the legacy localStorage copy as a one-time migration seed, then
+  // pushes it server-side and clears the old key so this only happens once.
+  async function applySavedUrlStateIfAny(url) {
+    let saved = await fetch(`${url}/state`).then(r => (r.ok ? r.json() : null)).catch(() => null);
+    if (saved && Object.keys(saved).length === 0) saved = null;
+    if (!saved) {
+      const legacy = slReadLegacyUrlState(url);
+      if (legacy) {
+        saved = legacy;
+        pushUrlState(url, legacy);
+        localStorage.removeItem(slUrlStateKey(url));
+      }
+    }
     if (!saved) return;
     slApplyFileStatePayload(saved);
     if (Number.isFinite(saved.speed)) { slState.speed = saved.speed; applySpeed(); }
@@ -922,7 +958,7 @@ function initSongLoopPage() {
     const name = label || decodeURIComponent(url.split('/').pop() || 'track');
     await loadFile(new File([blob], name, { type: blob.type }));
     slState.sourceUrl = url;
-    applySavedUrlStateIfAny(url);
+    await applySavedUrlStateIfAny(url);
     updateSidecarHint('来自素材库 · 改动会自动保存 · 也可用"保存 sidecar"额外导出备份');
   }
   slState.loadFileFromUrl = loadFileFromUrl;
@@ -965,12 +1001,45 @@ function initSongLoopPage() {
     const knownUrl = slLoadLocalUploadMap()[key];
     if (knownUrl) {
       slState.sourceUrl = knownUrl;
-      applySavedUrlStateIfAny(knownUrl);
+      await applySavedUrlStateIfAny(knownUrl);
       updateSidecarHint('已从素材库恢复上次进度 · 改动会自动保存');
       return;
     }
     await registerAsLibraryMaterial(file, key);
   }
+
+  // "从资料库选择": lists every audio material regardless of whether any
+  // Lick links to it (unlike Licks' own material picker, which is really
+  // for inserting a link into a lick's notes). Reuses licksIsAudioUrl
+  // (defined in licks.js, loaded on the same page — see the existing
+  // cross-file precedent already used elsewhere in this app) and the
+  // existing slLoadFromUrl entry point, so opening a picked track goes
+  // through the exact same path as Licks' "🎧 Practice with Song Loop".
+  async function openLibraryPicker() {
+    els.libraryModal.classList.add('show');
+    els.libraryList.innerHTML = '加载中…';
+    try {
+      const materials = await (await fetch('/api/materials')).json();
+      const audio = materials.filter(m => licksIsAudioUrl(m.url));
+      els.libraryList.innerHTML = audio.length
+        ? audio.map(m => `<div class="material-picker-item" data-url="${htmlEsc(m.url)}" data-filename="${htmlEsc(m.filename)}">🎧 ${htmlEsc(m.filename)}</div>`).join('')
+        : '<p class="empty-state">资料库里还没有音频文件。</p>';
+    } catch (e) {
+      els.libraryList.innerHTML = '加载失败：' + htmlEsc(e.message);
+    }
+  }
+  function closeLibraryPicker() {
+    els.libraryModal.classList.remove('show');
+  }
+  els.browseLibraryBtn.addEventListener('click', openLibraryPicker);
+  els.libraryCloseBtn.addEventListener('click', closeLibraryPicker);
+  els.libraryModal.addEventListener('click', (e) => { if (e.target === els.libraryModal) closeLibraryPicker(); });
+  els.libraryList.addEventListener('click', (e) => {
+    const item = e.target.closest('.material-picker-item');
+    if (!item) return;
+    closeLibraryPicker();
+    slLoadFromUrl(item.dataset.url, item.dataset.filename);
+  });
 
   const fileInput = document.getElementById('sl-file-input');
   fileInput.addEventListener('change', (e) => { if (e.target.files[0]) loadLocalFile(e.target.files[0]); });
@@ -1189,7 +1258,7 @@ if (typeof module !== 'undefined' && module.exports) {
     slBaseName, slSidecarFileName,
     slBuildSidecarDocument, slParseSidecarText, slExtractSidecarState,
     slSaveCurrentFileState, slPersistUrlStateIfApplicable,
-    slSaveUrlState, slLoadUrlState,
+    slReadLegacyUrlState, slUrlStateKey,
     slLocalUploadKey, slLoadLocalUploadMap, slSaveLocalUploadMapEntry,
     slCaptureFileStatePayload, slApplyFileStatePayload,
     slClampZoom, slFitZoomPxPerBar, slShouldRecenter, slCenterScrollLeft, slComputeViewportBox,

@@ -20,6 +20,7 @@ class MaterialRecord:
     filename: str
     uploaded_at: str
     size: int
+    state: dict | None = None  # opaque, caller-owned JSON blob (e.g. Song Loop's practice settings)
 
 
 class MaterialsStore(ABC):
@@ -37,6 +38,18 @@ class MaterialsStore(ABC):
 
     @abstractmethod
     def delete(self, material_id: str) -> bool: ...
+
+    @abstractmethod
+    def save_state(self, material_id: str, state: dict) -> bool:
+        """Attach an arbitrary JSON-serializable blob to a material, keyed
+        by its id. The store doesn't interpret it. Returns False if the
+        material doesn't exist."""
+        ...
+
+    @abstractmethod
+    def load_state(self, material_id: str) -> dict | None:
+        """None if the material doesn't exist or has no state saved yet."""
+        ...
 
 
 def _safe_filename(name: str) -> str:
@@ -102,7 +115,10 @@ class LocalFlatMaterialsStore(MaterialsStore):
             p = self._resolve(material_id)
             if p is None or not p.exists():
                 continue  # stale index entry (file removed out-of-band) — skip rather than 500
-            out.append(MaterialRecord(id=material_id, **meta))
+            out.append(MaterialRecord(
+                id=material_id, filename=meta["filename"], uploaded_at=meta["uploaded_at"],
+                size=meta["size"], state=meta.get("state"),
+            ))
         out.sort(key=lambda m: m.uploaded_at, reverse=True)
         return out
 
@@ -119,3 +135,18 @@ class LocalFlatMaterialsStore(MaterialsStore):
         index.pop(material_id, None)
         self._save_index(index)
         return True
+
+    def save_state(self, material_id: str, state: dict) -> bool:
+        p = self._resolve(material_id)
+        if not p or not p.exists():
+            return False
+        index = self._load_index()
+        if material_id not in index:
+            return False
+        index[material_id]["state"] = state
+        self._save_index(index)
+        return True
+
+    def load_state(self, material_id: str) -> dict | None:
+        entry = self._load_index().get(material_id)
+        return entry.get("state") if entry else None

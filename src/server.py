@@ -460,7 +460,7 @@ async def api_upload_material(file: UploadFile = File(...)):
 def api_list_materials():
     return [
         {"id": r.id, "url": f"/api/materials/{r.id}", "filename": r.filename,
-         "uploaded_at": r.uploaded_at, "size": r.size}
+         "uploaded_at": r.uploaded_at, "size": r.size, "state": r.state}
         for r in _materials_store.list_all()
     ]
 
@@ -476,6 +476,20 @@ def api_get_material(material_id: str):
 @app.delete("/api/materials/{material_id}")
 def api_delete_material(material_id: str):
     if not _materials_store.delete(material_id):
+        raise HTTPException(status_code=404, detail="Material not found")
+    return {"ok": True}
+
+
+@app.get("/api/materials/{material_id}/state")
+def api_get_material_state(material_id: str):
+    if _materials_store.path_for(material_id) is None:
+        raise HTTPException(status_code=404, detail="Material not found")
+    return _materials_store.load_state(material_id) or {}
+
+
+@app.put("/api/materials/{material_id}/state")
+def api_put_material_state(material_id: str, state: dict):
+    if not _materials_store.save_state(material_id, state):
         raise HTTPException(status_code=404, detail="Material not found")
     return {"ok": True}
 

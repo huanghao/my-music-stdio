@@ -390,3 +390,26 @@ def test_material_too_large_rejected(client):
         files={"file": ("big.mp3", big, "audio/mpeg")},
     )
     assert r.status_code == 413
+
+
+def test_material_state_round_trips_and_shows_up_in_list(client):
+    body = client.post(
+        "/api/materials",
+        files={"file": ("song.mp3", b"fake mp3 bytes", "audio/mpeg")},
+    ).json()
+
+    # nothing saved yet
+    assert client.get(f"{body['url']}/state").json() == {}
+
+    state = {"bpm": 120, "loopFromBar": 5, "loopToBar": 9}
+    r = client.put(f"{body['url']}/state", json=state)
+    assert r.status_code == 200
+
+    assert client.get(f"{body['url']}/state").json() == state
+    listed = next(m for m in client.get("/api/materials").json() if m["id"] == body["id"])
+    assert listed["state"] == state
+
+
+def test_material_state_404s_for_unknown_material(client):
+    assert client.get("/api/materials/nope.mp3/state").status_code == 404
+    assert client.put("/api/materials/nope.mp3/state", json={"bpm": 100}).status_code == 404

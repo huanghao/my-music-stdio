@@ -151,59 +151,25 @@ test('slSaveCurrentFileState no-ops when the track has no materials-library url 
   assert.deepEqual(_store, {});
 });
 
-test('slSaveCurrentFileState persists to per-URL storage once sourceUrl is set', () => {
+// slSaveCurrentFileState's positive case (sourceUrl set) now schedules a
+// debounced network PUT to /api/materials/<id>/state instead of writing
+// localStorage synchronously — like the rest of this file's fetch/DOM-driven
+// code (loadFileFromUrl, registerAsLibraryMaterial), that path isn't unit
+// tested here; it's verified manually end-to-end against a real server.
+
+test('slReadLegacyUrlState reads the pre-migration localStorage blob (one-time migration source only)', () => {
   _store = {};
-  resetState();
-  sl.slState.sourceUrl = '/api/materials/take-a-train-backing.mp3';
-  sl.slState.bpm = 133;
-  sl.slSaveCurrentFileState();
-  const restored = sl.slLoadUrlState('/api/materials/take-a-train-backing.mp3');
-  assert.equal(restored.bpm, 133);
-  sl.slState.sourceUrl = null;
+  _store[sl.slUrlStateKey('/api/materials/take-a-train-backing.mp3')] = JSON.stringify({ bpm: 108, key: 'C 大调' });
+  const restored = sl.slReadLegacyUrlState('/api/materials/take-a-train-backing.mp3');
+  assert.deepEqual(restored, { bpm: 108, key: 'C 大调' });
 });
 
-test('slSaveUrlState/slLoadUrlState round-trip the full per-track payload (sidecar fields + speed), keyed by URL', () => {
+test('slReadLegacyUrlState returns null for a URL with no legacy blob, and tolerates corrupted storage', () => {
   _store = {};
-  resetState();
-  sl.slState.bpm = 108;
-  sl.slState.bpmManual = true;
-  sl.slState.key = 'C 大调';
-  sl.slState.keyManual = true;
-  sl.slState.pitch = -2;
-  sl.slState.bar1TimeSec = 2.5;
-  sl.slState.loopFromBar = 5;
-  sl.slState.loopToBar = 9;
-  sl.slState.loopOn = true;
-  sl.slState.speed = 85;
-  sl.slState.phraseStarts = [1, 9];
-  sl.slState.selectedPhraseStartBar = 9;
-  sl.slState.annotations = { 9: { chord: 'G', lyric: 'la la', note: '' } };
-  sl.slSaveUrlState('/api/materials/take-a-train-backing.mp3');
-  const restored = sl.slLoadUrlState('/api/materials/take-a-train-backing.mp3');
-  assert.deepEqual(restored, {
-    version: 1,
-    bar1TimeSec: 2.5, bpm: 108, bpmManual: true, key: 'C 大调', keyManual: true, pitch: -2,
-    loopFromBar: 5, loopToBar: 9, loopOn: true,
-    phraseStarts: [1, 9], selectedPhraseStartBar: 9,
-    annotations: { 9: { chord: 'G', lyric: 'la la', note: '' } },
-    speed: 85,
-  });
-});
-
-test('slLoadUrlState returns null for a URL with no saved state', () => {
-  _store = {};
-  assert.equal(sl.slLoadUrlState('/api/materials/never-saved.mp3'), null);
-});
-
-test('slSaveUrlState keys are independent per URL — saving one does not affect another', () => {
-  _store = {};
-  resetState();
-  sl.slState.bpm = 60;
-  sl.slSaveUrlState('/api/materials/a.mp3');
-  sl.slState.bpm = 200;
-  sl.slSaveUrlState('/api/materials/b.mp3');
-  assert.equal(sl.slLoadUrlState('/api/materials/a.mp3').bpm, 60);
-  assert.equal(sl.slLoadUrlState('/api/materials/b.mp3').bpm, 200);
+  assert.equal(sl.slReadLegacyUrlState('/api/materials/never-saved.mp3'), null);
+  _store[sl.slUrlStateKey('/api/materials/broken.mp3')] = 'not json';
+  assert.doesNotThrow(() => sl.slReadLegacyUrlState('/api/materials/broken.mp3'));
+  assert.equal(sl.slReadLegacyUrlState('/api/materials/broken.mp3'), null);
 });
 
 test('slLocalUploadKey combines name and size so same-name-different-size files don\'t collide', () => {

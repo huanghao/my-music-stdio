@@ -2,6 +2,22 @@
 // stub to load (it registers a visibilitychange listener at module scope).
 global.document = { addEventListener() {} };
 
+// FB_MEDIA_SETSINKID_SUPPORTED is computed once at module load from
+// `'setSinkId' in HTMLMediaElement.prototype` — stub the class (with the
+// method actually present) before requiring fretboard.js so the media-
+// element output-routing tests below exercise the real code path instead of
+// permanently short-circuiting on "unsupported browser".
+global.HTMLMediaElement = function HTMLMediaElement() {};
+global.HTMLMediaElement.prototype.setSinkId = function () {};
+
+// fbSoundVolumesLoad/Save (per-sound-category volume prefs) round-trip
+// through localStorage — stub it like song-loop.test.js does.
+let _store = {};
+global.localStorage = {
+  getItem(k) { return Object.prototype.hasOwnProperty.call(_store, k) ? _store[k] : null; },
+  setItem(k, v) { _store[k] = v; },
+};
+
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fb = require('../../web/fretboard.js');
@@ -592,4 +608,71 @@ test('fbSeqAssignFretting produces the correct absolute pitches for C major diat
     assert.ok(p.fret >= 0);
     assert.equal(fb.fbStringMidis(p.stringIdx)[0] + p.fret, p.midi);
   });
+});
+
+test('fbSoundGain defaults every known category to 1 before anything is loaded/set', () => {
+  _store = {};
+  fb.fbSoundVolumesLoad();
+  fb.FB_SOUND_CATEGORIES.forEach(({ id }) => assert.equal(fb.fbSoundGain(id), 1));
+});
+
+test('fbSetSoundVolume clamps to [0, FB_SOUND_VOLUME_MAX] and round-trips through localStorage', () => {
+  _store = {};
+  fb.fbSoundVolumesLoad();
+  fb.fbSetSoundVolume('metronome', 1.2);
+  assert.equal(fb.fbSoundGain('metronome'), 1.2);
+  fb.fbSetSoundVolume('metronome', 99); // above max
+  assert.equal(fb.fbSoundGain('metronome'), fb.FB_SOUND_VOLUME_MAX);
+  fb.fbSetSoundVolume('metronome', -5); // below min
+  assert.equal(fb.fbSoundGain('metronome'), 0);
+  // Other categories are untouched by setting one of them
+  assert.equal(fb.fbSoundGain('timerAlert'), 1);
+
+  fb.fbSoundVolumesLoad(); // simulate a fresh page load reading the same storage back
+  assert.equal(fb.fbSoundGain('metronome'), 0);
+});
+
+test('fbSoundVolumesLoad falls back to the default for corrupted/out-of-range/missing storage', () => {
+  global.localStorage.setItem('fb_sound_volumes', 'not json');
+  fb.fbSoundVolumesLoad();
+  fb.FB_SOUND_CATEGORIES.forEach(({ id }) => assert.equal(fb.fbSoundGain(id), 1));
+
+  global.localStorage.setItem('fb_sound_volumes', JSON.stringify({ metronome: 999, timerAlert: -1, practiceTones: 'loud' }));
+  fb.fbSoundVolumesLoad();
+  assert.equal(fb.fbSoundGain('metronome'), 1);
+  assert.equal(fb.fbSoundGain('timerAlert'), 1);
+  assert.equal(fb.fbSoundGain('practiceTones'), 1);
+  assert.equal(fb.fbSoundGain('progressionChords'), 1); // absent from storage entirely
+});
+
+test('fbRegisterMediaElement routes a media element (Song Loop\'s <audio>) through the selected output device', async () => {
+  const originalDeviceId = fb.fbOutput.deviceId;
+  try {
+    fb.fbOutput.deviceId = 'device-123';
+    let calledWith = null;
+    const fakeAudioEl = { setSinkId: async (id) => { calledWith = id; } };
+
+    fb.fbRegisterMediaElement(fakeAudioEl);
+    await Promise.resolve(); // fbApplySinkIdToMedia's setSinkId call is async
+    assert.equal(calledWith, 'device-123');
+  } finally {
+    fb.fbOutput.deviceId = originalDeviceId;
+  }
+});
+
+test('fbApplySinkIdToMedia is a no-op when no output device is selected yet, and swallows setSinkId rejections', async () => {
+  const originalDeviceId = fb.fbOutput.deviceId;
+  try {
+    fb.fbOutput.deviceId = '';
+    let called = false;
+    await fb.fbApplySinkIdToMedia({ setSinkId: async () => { called = true; } });
+    assert.equal(called, false); // no device selected -> never even tries
+
+    fb.fbOutput.deviceId = 'device-456';
+    await assert.doesNotReject(fb.fbApplySinkIdToMedia({
+      setSinkId: async () => { throw new Error('device gone'); },
+    }));
+  } finally {
+    fb.fbOutput.deviceId = originalDeviceId;
+  }
 });

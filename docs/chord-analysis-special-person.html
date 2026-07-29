@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>《特别的人》和声分析（独立页面，未接入系统）</title>
+<style>
+  /* ── tokens ──────────────────────────────────────────────────────────
+     Palette: a warm, low-lit "late-night soul" ground (this is a B major
+     neo-soul ballad — no bright white studio-doc look) with a dusky teal
+     for the primary/A voice and a warm amber for the comparison/B voice,
+     kept apart on the wheel so an A/B pair never reads as one blurred hue. */
+  :root {
+    --bg: #f1ece2;
+    --bg-card: #fbf8f2;
+    --ink: #2b241c;
+    --ink-soft: #6b6055;
+    --border: #ddd3c2;
+    --border-soft: #e8e0d2;
+    --accent-a: #2f6b73;      /* dusky teal — primary / "A" / verse-chorus */
+    --accent-a-soft: #dce8e7;
+    --accent-b: #a8672c;      /* warm amber — comparison / "B" / variant */
+    --accent-b-soft: #ecdfc9;
+    --code-bg: #eee4d3;
+    --shadow: 0 1px 2px rgba(43, 36, 28, .06);
+  }
+  :root[data-theme="dark"] {
+    --bg: #17130f;
+    --bg-card: #211b15;
+    --ink: #ece3d4;
+    --ink-soft: #a89a86;
+    --border: #3a3025;
+    --border-soft: #2c2419;
+    --accent-a: #6fb8bd;
+    --accent-a-soft: #24393a;
+    --accent-b: #d99a56;
+    --accent-b-soft: #3a2d1a;
+    --code-bg: #2a2116;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .35);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17130f;
+      --bg-card: #211b15;
+      --ink: #ece3d4;
+      --ink-soft: #a89a86;
+      --border: #3a3025;
+      --border-soft: #2c2419;
+      --accent-a: #6fb8bd;
+      --accent-a-soft: #24393a;
+      --accent-b: #d99a56;
+      --accent-b-soft: #3a2d1a;
+      --code-bg: #2a2116;
+      --shadow: 0 1px 3px rgba(0, 0, 0, .35);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); margin: 0;
+    padding: 32px clamp(16px, 5vw, 48px) 72px;
+    max-width: 840px; margin-inline: auto;
+    transition: background .2s ease, color .2s ease;
+  }
+  h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 24px; font-weight: 700; margin: 0 0 6px; letter-spacing: .01em;
+    text-wrap: balance;
+  }
+  h2.section-title {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 17px; font-weight: 700; margin: 40px 0 10px; color: var(--accent-a);
+  }
+  .sub { font-size: 13px; color: var(--ink-soft); margin-bottom: 22px; line-height: 1.75; max-width: 65ch; }
+  .sub a { color: var(--accent-a); }
+  .map {
+    background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 18px; font-size: 13px; box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+  .map table { border-collapse: collapse; width: 100%; }
+  .map td, .map th { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .map th { color: var(--ink-soft); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .map td:first-child { font-variant-numeric: tabular-nums; color: var(--ink-soft); white-space: nowrap; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 22px 26px; margin-bottom: 18px; box-shadow: var(--shadow);
+  }
+  .card h3 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 16px; font-weight: 700; margin: 0 0 10px; text-wrap: balance;
+  }
+  .note { font-size: 13px; color: var(--ink-soft); line-height: 1.8; margin: 0 0 14px; max-width: 65ch; }
+  .note b { color: var(--ink); font-weight: 600; }
+  .note a { color: var(--accent-a); }
+  .roman { color: var(--accent-b); font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
+  .variants { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font-size: 13px; padding: 9px 15px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--ink); cursor: pointer; font-family: inherit;
+    transition: background .12s ease, border-color .12s ease, transform .05s ease;
+  }
+  button:hover { background: var(--border-soft); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
+  button.variant-btn { border-color: var(--accent-a); color: var(--accent-a); background: var(--accent-a-soft); }
+  button.cmp-btn { border-color: var(--accent-b); color: var(--accent-b); background: var(--accent-b-soft); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .sep { flex-basis: 100%; height: 0; }
+  code {
+    background: var(--code-bg); padding: 1px 6px; border-radius: 4px; font-size: 12px;
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .bars {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.6; background: var(--code-bg); color: var(--ink);
+    padding: 10px 14px; border-radius: 7px; margin: 0 0 14px; overflow-x: auto; white-space: pre;
+  }
+</style>
+</head>
+<body>
+
+<h1>🎵 方大同《特别的人》和声分析</h1>
+<div class="sub">
+  独立页面，仅用于理解概念，没有接入 MyMusicStdio 系统 · 数据来自 Song Loop 页面里自己扒的和弦标记（B 大调，♩=70）。<br>
+  和声术语参照 <a href="tonal-harmony-map.md">调性和声地图</a> / <a href="chord-progressions-guide.md">和弦进行入门</a> /
+  <a href="chromatic-harmony-and-substitutions.md">和声进阶</a>，每张卡片都配了可以直接点的试听。
+</div>
+
+<div class="map">
+  <b>段落地图</b>（小节号来自 Song Loop 的句首标记）
+  <table>
+    <tr><th>小节</th><th>段落</th><th>核心和声内容</th></tr>
+    <tr><td>2–5</td><td>前奏</td><td>级进链：IV–iii–ii–I（纯器乐，没歌词）</td></tr>
+    <tr><td>6–13</td><td>主歌</td><td>同一条级进链唱两遍，第二遍结尾换成 借用 iv，真正的 V（F#7）改道不落 I（软化，不落地）</td></tr>
+    <tr><td>14–21</td><td>主歌（重复段 + 副歌前导）</td><td>"%"记号＝原样重复主歌的 4 小节循环，末尾用 F#7 作为 pickup 推进副歌</td></tr>
+    <tr><td>22–32</td><td>副歌①</td><td>核心 4 小节循环（I–iii｜vi｜IV–iii｜ii–V）连唱两遍，第二遍中途再借用一次 iv</td></tr>
+    <tr><td>33–40</td><td>主歌②</td><td>同 14–21</td></tr>
+    <tr><td>41–50</td><td>副歌②</td><td>同 22–31（不含尾部呼吸小节）</td></tr>
+    <tr><td>51–59</td><td>桥段</td><td>副歌循环的变体：iii–vi 之间插入 <b>附属和弦 V7/ii</b>；结尾整小节 <b>不弹</b>（tacet），人声清唱过渡</td></tr>
+    <tr><td>60–69</td><td>副歌③</td><td>回到标准版副歌循环（不再用附属和弦，和桥段的"加料版"形成对比）</td></tr>
+    <tr><td>70–72</td><td>尾声</td><td>IV–ii–I 的变格式收尾（分解和弦，弹得很少），不是标准的 V–I 正格终止</td></tr>
+  </table>
+</div>
+
+<h2 class="section-title">一、B 大调里的和弦表</h2>
+<div class="map">
+  <table>
+    <tr><th>级数</th><th>七和弦</th><th>本曲里出现的写法</th></tr>
+    <tr><td>I</td><td>Bmaj7</td><td>Bmaj7</td></tr>
+    <tr><td>ii</td><td>C#m7</td><td>C#m7（前奏偶尔简化成三和弦 C#m）</td></tr>
+    <tr><td>iii</td><td>D#m7</td><td>写成 <b>Ebm7</b>（同音异名，谱面习惯）</td></tr>
+    <tr><td>IV</td><td>Emaj7</td><td>Emaj7；关键位置借用成 <b>Em</b>（平行小调）</td></tr>
+    <tr><td>V</td><td>F#7</td><td>全曲统一写 F#7（原始 PDF 谱在 13、21、54 小节都系统性地错标成了 F#m7，Song Loop 里已按听感订正为 F#7，下面的分析按订正后的版本）</td></tr>
+    <tr><td>vi</td><td>G#m7</td><td>G#m7；桥段一处换成 <b>G#7</b>（附属和弦 V7/ii）</td></tr>
+    <tr><td>vii°</td><td>A#m7♭5</td><td>全曲没用到</td></tr>
+  </table>
+</div>
+
+<h2 class="section-title">二、逐段拆解</h2>
+
+<div class="card">
+  <h3>1. 前奏 / 主歌骨架：级进链 <span class="roman">IV → iii → ii → I</span></h3>
+  <div class="bars">Emaj7 | Ebm7 | C#m7 | Bmaj7
+ IV   | iii  | ii   | I</div>
+  <p class="note">
+    根音 E→D#→C#→B，每一步都只挪一个半音或全音——这是<b>级进链</b>（<a href="chord-progressions-guide.md#4-生成逻辑所有进行其实来自-3-4-个基础模型">和弦进行入门 §4</a>），
+    最平滑的一种和声运动，前奏和主歌用它来"平铺直叙"，不抢戏，把空间留给旋律。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('verse')">▶ 主歌骨架：Emaj7–Ebm7–C#m7–Bmaj7</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>2. 主歌结尾的软化：借用 iv，属和弦却"改道"不落回 I</h3>
+  <div class="bars">A（正常收尾）  C#m7 | Bmaj7
+B（实际用法）  C#m7 | Em  F#7
+                ii  |  iv(借)  V</div>
+  <p class="note">
+    第二遍主歌本该像第一遍一样落回 <span class="roman">I</span>（Bmaj7），但谱面在这里改道：先借平行小调的
+    <span class="roman">iv</span>（E大三 → E小三，见 <a href="chromatic-harmony-and-substitutions.md#3-借用和弦-borrowed-chords--modal-mixture">和声进阶 §3 借用和弦</a>），
+    再接<b>真正的属和弦 F#7</b>——旋律在这里唱到 5-6-1（F#-G#-B），结尾提前落在 B（Bmaj7 的根音）上，
+    是标准的"旋律预支目标和弦"写法，证明这里确实是有推力的正牌 V，不是借用和弦。但这个 V 最终<b>没有解决到 I</b>，
+    而是直接跳回下一句开头的 <span class="roman">IV</span>（14 小节，也就是重复段起点的 Emaj7）——属和弦落空、
+    绕回句首，同样制造"没讲完、悬在那"的效果，只是手法是"解决目标错位"，不是拔掉导音。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('softCloseA')">▶ A：C#m7 – Bmaj7（正常收尾，落回 I）</button>
+    <button class="variant-btn" onclick="play('softCloseB')">▶ B：C#m7 – Em – F#7（实际写法，属和弦改道回 IV，不落 I）</button>
+    <button class="cmp-btn" onclick="playSeq(['softCloseA','softCloseB'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>3. 副歌核心循环：一个 4 小节单元里塞了两条规律</h3>
+  <div class="bars">Bmaj7 Ebm7 | G#m7 | Emaj7 Ebm7 | C#m7 F#7 | (Bmaj7)
+  I    iii  |  vi  |  IV    iii |  ii   V   |  (I)</div>
+  <p class="note">
+    骨架是 <span class="roman">I → vi → IV → ii</span>，根音每步跳一个三度（B→G#→E→C#）——典型的
+    <b>三度下行链</b>。但每一步之间都塞进了 <span class="roman">iii</span>（Ebm7）当"连接词"：iii 与 I（Bmaj7：B D# F# A#）
+    共享 D#、F#、A# 三个音，几乎是 I 的影子；同时 iii 与 V（F#7：F# A# C# E）也共享 F#、A#、C# 三个音，
+    所以 iii 两头都能"贴"——这就是它能当连接和弦的原因（<a href="tonal-harmony-map.md#3-每个具体手法都是对某个功能组做的一种操作">调性和声地图 §3 功能替代</a>）。
+    末尾的 <span class="roman">ii → V</span>（C#m7–F#7）是标准的 ii-V 收束，把整个循环重新推回 I，形成闭环。
+  </p>
+  <div class="bars">A（骨架）    Bmaj7 | G#m7 | Emaj7 | C#m7 F#7 | (Bmaj7)
+                I    |  vi  |  IV   |  ii   V   |  (I)
+B（实际写法）  Bmaj7 Ebm7 | G#m7 | Emaj7 Ebm7 | C#m7 F#7 | (Bmaj7)
+                I    iii  |  vi  |  IV    iii |  ii   V   |  (I)</div>
+  <p class="note">
+    A、B 除了 iii 连接和弦有没有插入，其余（ii-V-I 收束、整体时长比例、首尾音区）完全一样——
+    这样两边唯一的变量就是 iii，能直接听出它加进去具体改变了什么。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('skeletonBare')">▶ A：骨架 I–vi–IV–ii–V–(I)（不含 iii）</button>
+    <button class="variant-btn" onclick="play('chorusCell')">▶ B：完整循环 I–iii｜vi｜IV–iii｜ii–V｜(I)</button>
+    <button class="cmp-btn" onclick="playSeq(['skeletonBare','chorusCell'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>4. 单独听 iii 连接和弦的作用：有它 vs 没它</h3>
+  <p class="note">
+    把副歌循环里 iii 的连接作用单独抽出来对比：I 直接跳到 vi，和 I 经过 iii 再到 vi，听听中间垫一步是不是更顺、
+    更像"走过去"而不是"跳过去"。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('iiiSkip')">▶ A：Bmaj7 – G#m7（跳过 iii，直接 I→vi）</button>
+    <button class="variant-btn" onclick="play('iiiConnect')">▶ B：Bmaj7 – Ebm7 – G#m7（经过 iii 连接）</button>
+    <button class="cmp-btn" onclick="playSeq(['iiiSkip','iiiConnect'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>5. 桥段的加料：把 vi 换成附属和弦 V7/ii（唯一用了这个手法的地方）</h3>
+  <div class="bars">副歌版（29–30小节）  Ebm7  G#m7 | C#m7
+桥段版（52–53小节）  Ebm7  G#7  | C#m7
+                     iii  V7/ii | ii</div>
+  <p class="note">
+    副歌循环里这个位置一直用调内的 <span class="roman">vi</span>（G#m7），但桥段唯一的一次经过这里时，
+    把它换成了 <b>G#7</b——不是 G 大调音阶里的音，是专门"借来"、只为了更用力地推向下一个和弦 C#m7 的
+    <b>附属和弦</b>（<a href="chromatic-harmony-and-substitutions.md#1-附属和弦-secondary-dominants">和声进阶 §1</a>，
+    ii 级 C#m 自己的属和弦记作 V7/ii）。两个和弦只差一个音（m7 的 ♭3 变成大 3），但导音的出现让推力明显更"扎"——
+    这是全曲唯一一次重配和声（reharmonization），专门留给桥段制造新鲜感，其余重复段都用回朴素版本。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('subdomA')">▶ A：Ebm7 – G#m7 – C#m7（副歌版，调内 vi）</button>
+    <button class="variant-btn" onclick="play('subdomB')">▶ B：Ebm7 – G#7 – C#m7（桥段版，附属和弦 V7/ii）</button>
+    <button class="cmp-btn" onclick="playSeq(['subdomA','subdomB'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>6. 副歌里另一处借用色彩：Emaj7 → Em</h3>
+  <div class="bars">G#m7 | Emaj7 | Ebm7  （标准）
+G#m7 | Em    | Ebm7  （实际，28 小节）</div>
+  <p class="note">
+    副歌第二遍循环中途，IV 短暂地借成了平行小调的 iv（和第 2 张卡片是同一种手法，但这里是瞬间闪过，
+    不像主歌结尾那样带着"悬而不解决"的功能，纯粹是一次色彩上的暗一下、马上又回到大调）。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('borrowIvA')">▶ A：G#m7 – Emaj7 – Ebm7（标准 IV）</button>
+    <button class="variant-btn" onclick="play('borrowIvB')">▶ B：G#m7 – Em – Ebm7（借用 iv，色彩变暗）</button>
+    <button class="cmp-btn" onclick="playSeq(['borrowIvA','borrowIvB'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>7. 桥段结尾：真的"不弹"</h3>
+  <p class="note">
+    桥段最后三小节现在 Song Loop 里记的是 <code>C#m7</code>（57 小节）→ <code>/</code>（58 小节）→ <code>/</code>（59 小节，
+    只留人声清唱"我们是"）——58、59 两小节直接标成空，比最初扒谱时"F#7（不弹）"这种"写了和弦但注明不弹"的记法更直接：
+    和声是真的被拿掉了，不是"弹一个和弦但刻意不出声"。也就是说编曲在这里主动把和声彻底抽掉，让人声在没有和声支撑的情况下
+    裸唱过渡，反而比任何一个替代和弦都更戏剧化——这是"和声的技巧"里最容易被忽略的一种：<b>什么都不弹，也是一种选择</b>。
+    这个乐器没法演示"没有声音"，但值得在分析里写下来。
+  </p>
+</div>
+
+<div class="card">
+  <h3>8. 尾声：变格式收尾，不是标准 V–I</h3>
+  <div class="bars">A（标准正格终止）  F#7    | Bmaj7
+                    V     |  I
+B（实际尾声写法）  Emaj7  C#m7 | Bmaj7
+                    IV     ii  |  I</div>
+  <p class="note">
+    全曲绝大部分的"回家"都靠 V–I（导音半音解决），但尾声（70–72 小节，谱面写"分解"、"弹3个音"，
+    意思是分解和弦、声音很少）偏偏不用 V，改成 <span class="roman">IV → ii → I</span>——没有导音的强制拉力，
+    落地感更轻、更"淡出"，配合"弹得很少"的演奏提示，是专门为了让歌曲安静地结束，而不是用力地终止。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('outroA')">▶ A：F#7 – Bmaj7（标准正格终止 V–I）</button>
+    <button class="variant-btn" onclick="play('outroB')">▶ B：Emaj7 – C#m7 – Bmaj7（实际尾声，无 V 的变格式收尾）</button>
+    <button class="cmp-btn" onclick="playSeq(['outroA','outroB'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<h2 class="section-title">三、旋律怎么印证这些判断</h2>
+<div class="card">
+  <p class="note">
+    这份 PDF 除了六线谱，还带一行简谱（1=B），是给弹唱对照唱腔用的，不是 TAB。下面几处旋律片段是从这行简谱里核对出来的，
+    只挑了跟前面判断直接相关的几个关键点，不是逐小节全文转录——简谱行和 TAB/鼓谱挤在同一页，文本层解析容易串行，
+    没把握的地方宁可不写，比这几个点是反复交叉核对过的。
+  </p>
+  <div class="bars">6 小节（Emaj7）　旋律 3-2-1-3 ＝ D#-C#-B-D#</div>
+  <p class="note">
+    D# 是 Emaj7 的大七度、B 是五度，两个和弦音夹着一个经过的九音（C#）——旋律完全贴着 Emaj7 的骨架音走，
+    跟卡片①把这一段定成平滑级进链、旋律不抢戏的判断一致。
+  </p>
+  <div class="bars">21 小节（F#7，副歌前的 pickup）　旋律 …5-6-1 ＝ …F#-G#-B</div>
+  <p class="note">
+    这一句结尾提前唱到了 B——正是下一小节 Bmaj7 的根音，是典型的"旋律预支目标和弦"写法。只有真正带推力的属和弦
+    才会这样指向 I，这也是把这里从原谱错标的 F#m7 订正回 F#7 的旁证之一（另一个证据是全曲 13/21/54 三处
+    这个位置字面全写成了 F#m7，是同一处系统性误标，不是各自独立的听感差异）。
+  </p>
+  <div class="bars">22 小节（Bmaj7 → Ebm7）　旋律 2-3…5-3-2 ＝ C#-D#…F#-D#-C#</div>
+  <p class="note">
+    D#、F# 同时是 Bmaj7 的三音/五音，也是 Ebm7（iii）的根音/五音——旋律经过这两个和弦时几乎不用换音区，
+    印证卡片③里 iii 能当连接和弦，是因为它跟 I 共享大半个音，而不是随便找了个和弦垫进去。
+  </p>
+</div>
+
+<h2 class="section-title">四、小结：这首歌用到的和声技巧清单</h2>
+<div class="map">
+  <table>
+    <tr><th>技巧</th><th>出现位置</th><th>作用</th></tr>
+    <tr><td>功能替代（iii 连接 I/vi/V）</td><td>副歌核心循环</td><td>三度下行链之间垫步，让跳进变成走过去</td></tr>
+    <tr><td>级进链 IV–iii–ii–I</td><td>前奏、主歌</td><td>最平滑的根音运动，衬托旋律不抢戏</td></tr>
+    <tr><td>ii–V–I 收束</td><td>副歌循环尾部</td><td>标准回家动作，闭合 4 小节循环</td></tr>
+    <tr><td>附属和弦 V7/ii</td><td>桥段（仅一次）</td><td>唯一的重配和声，制造新鲜感</td></tr>
+    <tr><td>借用 iv（平行小调）</td><td>主歌结尾、副歌中途</td><td>瞬间变暗的色彩点缀</td></tr>
+    <tr><td>V 不落地，改道解决</td><td>主歌结尾（12–14 小节）</td><td>真正的属和弦（F#7）不接回 I，改道回句首的 IV，制造"没到家"的悬念——比借用和弦更隐蔽</td></tr>
+    <tr><td>变格式收尾（无 V 的收束）</td><td>尾声</td><td>避免正格终止的"用力感"，安静淡出</td></tr>
+    <tr><td>留白 / 不弹</td><td>桥段末尾</td><td>比任何和弦替代都更强的对比手法</td></tr>
+  </table>
+</div>
+
+<script>
+// ── 极简 Web Audio 合成，独立于系统主页面 (fretboard.js) 之外，专用于本页；
+// 与 chord-progression-comparison.html 用同一套引擎，方便以后合并维护 ──
+const NOTE_INDEX = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,
+  G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
+
+const QUALITIES = {
+  '':      [0, 4, 7],
+  'm':     [0, 3, 7],
+  '7':     [0, 4, 7, 10],
+  'maj7':  [0, 4, 7, 11],
+  'm7':    [0, 3, 7, 10],
+};
+
+function noteMidi(name, octave) {
+  return NOTE_INDEX[name] + (octave + 1) * 12;
+}
+function freqFromMidi(m) {
+  return 440 * Math.pow(2, (m - 69) / 12);
+}
+
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playNote(ctx, midi, atTime, dur) {
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.value = freqFromMidi(midi);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2800;
+  filter.Q.value = 0.7;
+  const peak = 0.16;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, atTime);
+  gain.gain.linearRampToValueAtTime(peak, atTime + 0.02);
+  gain.gain.setValueAtTime(peak, atTime + dur - 0.08);
+  gain.gain.linearRampToValueAtTime(0, atTime + dur);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + dur + 0.02);
+}
+
+const BEAT_SEC = 0.4;
+
+// Resolves a pitch class to whichever octave lands closest to `refMidi` —
+// real nearest-voice-leading distance, not a fixed octave per pitch class.
+// Without this, root motion that crosses a pitch-class wrap point (e.g.
+// C#->B: index 1 -> index 11) produces a spurious ~octave leap in the wrong
+// direction even when the intended motion is a stepwise half/whole step
+// down — exactly what card 1's descending chain (IV-iii-ii-I) needs to get
+// right, since its whole point is a smooth stepwise bassline.
+function nearestMidi(pc, refMidi) {
+  const k = Math.round((refMidi - pc) / 12);
+  return pc + k * 12;
+}
+
+// `ch.octave`, if given, still pins that chord to a specific register
+// (an explicit escape hatch, same idea as the `tones` voicing override) —
+// auto voice-leading only kicks in when a chord doesn't specify one.
+function scheduleProgression(chords, startAt) {
+  const ctx = getCtx();
+  let t = startAt;
+  let prevRootMidi = null; // local to this call — each button press starts fresh
+  chords.forEach(ch => {
+    const pc = NOTE_INDEX[ch.root];
+    const rootMidi = ch.octave != null
+      ? noteMidi(ch.root, ch.octave)
+      : (prevRootMidi == null ? pc + 4 * 12 : nearestMidi(pc, prevRootMidi));
+    prevRootMidi = rootMidi;
+    const offsets = ch.tones || QUALITIES[ch.quality];
+    const notes = [rootMidi - 12, ...offsets.map(iv => rootMidi + iv)];
+    const dur = (ch.beats || 2) * BEAT_SEC;
+    notes.forEach(n => playNote(ctx, n, t, dur));
+    t += dur;
+  });
+  return t;
+}
+
+// Each progression is bar-for-bar off the actual saved chord chart (see the
+// 段落地图/section walkthrough cards above for exactly which bars). Beats
+// follow the same convention as chord-progression-comparison.html: a bar
+// split between two chords gets 1 beat each, a bar with one chord gets 2,
+// and the final landing chord of a snippet gets held longer (3-4) so the
+// demo actually resolves instead of cutting off mid-motion.
+const PROGRESSIONS = {
+  // Card 1 — 前奏/主歌骨架 (bars 2-5 / 6-9): IV iii ii I, one chord per bar
+  verse: [
+    {root:'E', quality:'maj7', beats:2}, {root:'Eb', quality:'m7', beats:2},
+    {root:'C#', quality:'m7', beats:2}, {root:'B', quality:'maj7', beats:4},
+  ],
+
+  // Card 2 — 主歌结尾 (bars 12-13 vs the "normal" bars 8-9 ending)
+  softCloseA: [{root:'C#', quality:'m7', beats:2}, {root:'B', quality:'maj7', beats:4}],
+  softCloseB: [{root:'C#', quality:'m7', beats:2}, {root:'E', quality:'m', beats:1}, {root:'F#', quality:'7', beats:3}],
+
+  // Card 3 — 副歌核心循环 (bars 22-25, then a closing I added so the demo resolves)
+  // Both B's pinned to the same explicit octave — this card's whole point is
+  // a *closed* 4-bar loop, so it needs to land back where it started; left to
+  // auto voice-leading alone, greedy nearest-pitch drifts this specific chain
+  // up about an octave over 7 chords (each step individually smooth, but with
+  // no anchor pulling the loop back home — see plNearestMidi's doc comment
+  // in progression-lab.js for the general tradeoff). The final F#7->Bmaj7
+  // still resolves as a clean down-a-5th authentic cadence even with the pin.
+  chorusCell: [
+    {root:'B', quality:'maj7', beats:1, octave:3}, {root:'Eb', quality:'m7', beats:1},
+    {root:'G#', quality:'m7', beats:2},
+    {root:'E', quality:'maj7', beats:1}, {root:'Eb', quality:'m7', beats:1},
+    {root:'C#', quality:'m7', beats:1}, {root:'F#', quality:'7', beats:1},
+    {root:'B', quality:'maj7', beats:3, octave:3},
+  ],
+  // The bare I-vi-IV-ii skeleton, with the iii connectors removed but
+  // everything else (the ii-V-I close, overall proportions, start/end
+  // register) kept identical to chorusCell above — iii's presence/absence
+  // is the only variable that changes between this and chorusCell, so A/B
+  // isolates exactly what the connector chords are doing.
+  skeletonBare: [
+    {root:'B', quality:'maj7', beats:2, octave:3},
+    {root:'G#', quality:'m7', beats:2},
+    {root:'E', quality:'maj7', beats:2},
+    {root:'C#', quality:'m7', beats:1}, {root:'F#', quality:'7', beats:1},
+    {root:'B', quality:'maj7', beats:3, octave:3},
+  ],
+
+  // Card 4 — iii 连接和弦：I->vi 有无 iii 垫步
+  iiiSkip: [{root:'B', quality:'maj7', beats:3}, {root:'G#', quality:'m7', beats:3}],
+  iiiConnect: [{root:'B', quality:'maj7', beats:2}, {root:'Eb', quality:'m7', beats:1}, {root:'G#', quality:'m7', beats:3}],
+
+  // Card 5 — 桥段附属和弦 (bars 29-30 vs bars 52-53)
+  subdomA: [{root:'Eb', quality:'m7', beats:1}, {root:'G#', quality:'m7', beats:1}, {root:'C#', quality:'m7', beats:3}],
+  subdomB: [{root:'Eb', quality:'m7', beats:1}, {root:'G#', quality:'7', beats:1}, {root:'C#', quality:'m7', beats:3}],
+
+  // Card 6 — 副歌中途借用 iv (bar 27-29, 标准 vs 实际 bar28)
+  borrowIvA: [{root:'G#', quality:'m7', beats:1}, {root:'E', quality:'maj7', beats:2}, {root:'Eb', quality:'m7', beats:2}],
+  borrowIvB: [{root:'G#', quality:'m7', beats:1}, {root:'E', quality:'m', beats:2}, {root:'Eb', quality:'m7', beats:2}],
+
+  // Card 8 — 尾声 (bars 70-72) vs 标准正格终止
+  outroA: [{root:'F#', quality:'7', beats:2}, {root:'B', quality:'maj7', beats:4}],
+  outroB: [{root:'E', quality:'maj7', beats:2}, {root:'C#', quality:'m7', beats:2}, {root:'B', quality:'maj7', beats:4}],
+};
+
+// Leading-edge debounce so a fast double-click can't overlap two copies of
+// the same progression (same convention as fretboard.js's guarded()).
+function guarded(fn, ms) {
+  let blocked = false;
+  return function (...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+
+function play(key) {
+  const ctx = getCtx();
+  const end = scheduleProgression(PROGRESSIONS[key], ctx.currentTime + 0.05);
+  return Math.ceil((end - ctx.currentTime) * 1000);
+}
+
+function playSeq(keys) {
+  const ctx = getCtx();
+  let t = ctx.currentTime + 0.05;
+  keys.forEach((key, idx) => {
+    t = scheduleProgression(PROGRESSIONS[key], t);
+    if (idx < keys.length - 1) t += 0.5;
+  });
+}
+
+play = guarded(play, 4000);
+playSeq = guarded(playSeq, 8500);
+</script>
+</body>
+</html>

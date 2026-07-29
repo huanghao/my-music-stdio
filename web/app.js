@@ -114,22 +114,44 @@ async function loadApp() {
   document.getElementById('status-sf').textContent = (p.soundfont_path || '').split('/').pop();
 }
 
+// Vamp/Jam play server-side via fluidsynth (src/player.py), not through the
+// browser's Web Audio graph, so the shared master-volume slider (fbMasterGain,
+// fretboard.js) can't reach it through gain nodes like the other pages do —
+// push live changes to the backend instead, which applies them as MIDI CC7.
+function vampJamApplyVolumeChange(e) {
+  api('/api/volume', 'PUT', { volume: e.detail.gain }).catch(() => {});
+}
+
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
-const NAV_PAGES = ['vamp', 'jam', 'licks', 'fretboard', 'speed', 'songloop', 'prefs'];
+const NAV_PAGES = ['vamp', 'jam', 'licks', 'fretboard', 'chordmatch', 'speed', 'songloop', 'progressions', 'prefs'];
 
 async function init() {
   transportLoadPos();  // restore the floating pill's last position before anything registers a transport
   initTransportDrag();
   transportApplyPos(); // the panel is visible from the start now (it hosts the always-on practice timer)
   fbRenderDeviceBar(); // global mic/speaker pickers — no server dependency, so this works even if the backend is down
+  document.addEventListener('fb-master-volume-change', vampJamApplyVolumeChange);
   ptInit();            // practice timer — page-independent, always available
   await pingServer();
   setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();
+  // Prefer a route already in the URL (a deep link, or a refresh after
+  // navigateTo already wrote one) over the old "last page" breadcrumb —
+  // falls back to that breadcrumb only for a plain reload with no hash yet
+  // (e.g. upgrading from before this routing existed). Either way this is a
+  // *restore*, not a new navigation, so it replaces the initial history
+  // entry instead of pushing on top of it.
   const savedPage = localStorage.getItem(CURRENT_PAGE_KEY);
-  if (savedPage && NAV_PAGES.includes(savedPage) && savedPage !== 'vamp') showPage(savedPage);
-  else updateTransportForPage('vamp'); // default page skips showPage — register its transport directly
+  const initialRoute = location.hash
+    ? navParseHash(location.hash)
+    : (savedPage && NAV_PAGES.includes(savedPage) && savedPage !== 'vamp') ? { page: savedPage } : { page: 'vamp' };
+  history.replaceState(initialRoute, '', navHashFor(initialRoute));
+  if (initialRoute.page === 'vamp' && !initialRoute.lickId) {
+    updateTransportForPage('vamp'); // default page skips showPage — register its transport directly
+  } else {
+    navApplyRoute(initialRoute);
+  }
 }
 
 // Stop polling when the tab is hidden; resume when it becomes visible again.
@@ -148,9 +170,91 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
+// ── URL-based navigation (Back/Forward) ─────────────────────────────────
+// showPage() below only ever toggled DOM classes + a localStorage "last
+// page" breadcrumb — the URL never changed, so there was nothing for the
+// browser's Back/Forward to act on, and a cross-feature jump (e.g. a Lick's
+// "Practice with Song Loop" button) left no trace of where you came from.
+//
+// navigateTo() is the fix: a single choke point for anything that should be
+// Back-able — both top-level page switches and deep jumps into a specific
+// sub-view (a Lick's detail page, a loaded Song Loop track). Every call
+// pushes one history entry; Back/Forward re-runs the *same* restore logic
+// (navApplyRoute) via the popstate listener below, not a separate "what
+// does Back do" code path — that symmetry is what makes it actually
+// correct instead of "go to the page, but reset its state".
+//
+// URL shape (hash-based — no server routing changes, works with the
+// existing single-page index.html):
+//   #/<page>                                  top-level page, e.g. #/fretboard
+//   #/licks/<lickId>                          a Lick's detail/practice view
+//   #/songloop?url=<enc>&label=<enc>          a loaded Song Loop track
+
+function navHashFor(route) {
+  if (route.lickId) return `#/licks/${encodeURIComponent(route.lickId)}`;
+  if (route.page === 'songloop' && route.songUrl) {
+    const params = new URLSearchParams({ url: route.songUrl });
+    if (route.songLabel) params.set('label', route.songLabel);
+    return `#/songloop?${params.toString()}`;
+  }
+  return `#/${route.page}`;
+}
+
+function navParseHash(hash) {
+  const raw = (hash || '').replace(/^#\/?/, '');
+  const [pathPart, queryPart] = raw.split('?');
+  const segments = pathPart.split('/').filter(Boolean);
+  const route = { page: segments[0] || 'vamp' };
+  if (route.page === 'licks' && segments[1]) route.lickId = decodeURIComponent(segments[1]);
+  if (route.page === 'songloop' && queryPart) {
+    const params = new URLSearchParams(queryPart);
+    if (params.has('url')) route.songUrl = params.get('url');
+    if (params.has('label')) route.songLabel = params.get('label');
+  }
+  return route;
+}
+
+// Actually performs the page switch / deep-link restore for `route` — shared
+// by navigateTo (new navigation), the popstate listener (Back/Forward), and
+// init() (restoring on a fresh load/refresh). Returns whatever the
+// underlying async call returns, so callers that need to sequence work
+// after the navigation (e.g. newLick() opening the edit modal right after)
+// can await it.
+function navApplyRoute(route) {
+  if (route.lickId) {
+    return typeof practiceLick === 'function' ? practiceLick(route.lickId) : undefined;
+  }
+  showPage(route.page);
+  if (route.page === 'songloop' && route.songUrl && typeof slLoadFromUrl === 'function') {
+    return slLoadFromUrl(route.songUrl, route.songLabel || undefined).catch((e) => {
+      if (typeof setStatus === 'function') setStatus('Error loading track: ' + e.message);
+    });
+  }
+}
+
+function navigateTo(route) {
+  history.pushState(route, '', navHashFor(route));
+  return navApplyRoute(route);
+}
+
+// Convenience wrappers for the common cases — keeps HTML onclick attributes
+// and call sites reading the same as the plain showPage()/practiceLick()
+// calls they replace.
+function navGoToPage(page) { return navigateTo({ page }); }
+function navOpenLick(lickId) { return navigateTo({ page: 'licks', lickId }); }
+
+window.addEventListener('popstate', (e) => {
+  navApplyRoute(e.state || navParseHash(location.hash));
+});
+
 // ── Page nav ──
 function showPage(name) {
-  if (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active')) fbLeavePage();
+  // Fretboard and Chord Match are separate pages that both drive the same
+  // shared mic (fbMic) — release it when leaving whichever one currently
+  // owns it, regardless of which of the two we're navigating away from.
+  const leavingMicPage = (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active'))
+    || (name !== 'chordmatch' && document.getElementById('page-chordmatch')?.classList.contains('active'));
+  if (leavingMicPage) fbLeavePage();
   // The metronome panel (#st-panel) can currently be hosted on either the
   // standalone Speed Trainer page or embedded in an actively-practiced
   // Lick's detail page (see licksSyncPracticePanelHome) — stop it when
@@ -175,10 +279,13 @@ function showPage(name) {
     b.classList.toggle('active', b.dataset.page === name);
   });
   if (name === 'licks')     loadLicks();
-  if (name === 'prefs')     renderPrefsForm();
+  if (name === 'prefs')     { renderPrefsForm(); fbRenderSoundVolumePrefs(); initMaterialsPrefsSection(); }
   if (name === 'fretboard') initFretboardPage();
+  if (name === 'chordmatch') initChordMatchPage();
   if (name === 'speed')     { initSpeedPage(); renderActiveLickBanner(); }
   if (name === 'songloop')  initSongLoopPage();
+  if (name === 'progressions') initProgressionLabPage();
+  if (name === 'keydrill') initKeyDrillPage();
   // Move the metronome panel back to its standalone-page home if it was
   // embedded in a Lick detail page we're now navigating away from.
   if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();
@@ -526,11 +633,11 @@ function renderVampControls() {
             oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:52px"
+          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:60px"
             oninput="state.vamp.loops=parseInt(this.value)||1; syncFromLoops('vamp'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
-          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" style="width:60px"
+          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" style="width:68px"
             oninput="syncFromDuration('vamp'); state.vamp.loops=getLoops('vamp'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
@@ -567,7 +674,7 @@ async function vampPlay() {
   const payload = {
     bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
     bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
-    fill_every: 8,
+    fill_every: 8, volume: fbMasterGain(),
   };
   setPlaybackUI('vamp', 'playing');
   renderVampPhrase(-1);
@@ -608,11 +715,11 @@ function renderJamControls() {
             oninput="state.jam.bpm=parseInt(this.value)||120; syncFromDuration('jam'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:52px"
+          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:60px"
             oninput="state.jam.loops=parseInt(this.value)||1; syncFromLoops('jam'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
-          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" style="width:60px"
+          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" style="width:68px"
             oninput="syncFromDuration('jam'); state.jam.loops=getLoops('jam'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
@@ -813,9 +920,10 @@ function updateTransportForPage(name) {
     case 'vamp':      registerTransport({ kind: 'playback', label: 'Vamp',          play: vampPlay,      stop: vampStop,      pause: vampPause,      resume: vampResume }); break;
     case 'jam':       registerTransport({ kind: 'playback', label: 'Jam',           play: jamPlay,       stop: jamStop,       pause: jamPause,       resume: jamResume }); break;
     case 'speed':     registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart,       stop: stStop }); break;
-    case 'songloop':  registerTransport({ kind: 'playback', label: 'Song Loop',     play: slPlay,        stop: slStop }); break;
-    case 'fretboard': fbRenderControlAction(); break; // fretboard registers per active sub-mode
-    default:          clearTransport();
+    case 'songloop':  registerTransport({ kind: 'playback', label: 'Song Loop',     play: slPlay,        stop: slStop,        pause: slPause,        resume: slPlay }); break;
+    case 'fretboard':   fbRenderControlAction(); break; // fretboard registers per active sub-mode
+    case 'chordmatch':  fbRenderControlAction(); break;
+    default:            clearTransport();
   }
 }
 
@@ -924,7 +1032,7 @@ async function jamPlay() {
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, fill_every: 8 });
+    await api('/api/play', 'POST', { ...state.jam, fill_every: 8, volume: fbMasterGain() });
     startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);
@@ -975,8 +1083,8 @@ async function renderPrefsForm() {
         <select id="pref-sf" style="flex:1" onchange="applyPrefs()">${sfOptions}</select>
       </div>
       <div class="field">
-        <label>Songs directory</label>
-        <input type="text" id="pref-songs-dir" value="${p.songs_dir}" style="flex:1">
+        <label>Accompaniments directory</label>
+        <input type="text" id="pref-accompaniments-dir" value="${p.accompaniments_dir}" style="flex:1">
       </div>
       <div>
         <button class="btn btn-primary" onclick="savePrefs()">Save</button>
@@ -997,7 +1105,7 @@ async function savePrefs() {
   const updates = {
     bars_per_row: parseInt(document.getElementById('pref-bars-per-row').value),
     soundfont_path: sfEl?.value || '',
-    songs_dir: document.getElementById('pref-songs-dir').value.trim(),
+    accompaniments_dir: document.getElementById('pref-accompaniments-dir').value.trim(),
   };
   await api('/api/prefs', 'PUT', updates);
   state.prefs = { ...state.prefs, ...updates };

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>和弦转位 vs 排列法（Voicing）：两个独立的维度（独立页面，未接入系统）</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f0efe8; color: #2a2a2a; margin: 0; padding: 24px 32px 60px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 24px; line-height: 1.6; }
+  .card {
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 8px; font-family: Georgia, serif; }
+  .card h3 { font-size: 13px; margin: 18px 0 8px; color: #444; }
+  .note { font-size: 12.5px; color: #666; line-height: 1.7; margin: 0 0 14px; }
+  .note b { color: #2a2a2a; }
+  .math { font-size: 12.5px; color: #555; line-height: 1.8; background: #f7f6f0;
+    border-left: 3px solid #b8843a; padding: 10px 14px; margin: 10px 0 14px; }
+  .math code { background: #efeee6; padding: 0 4px; border-radius: 3px; }
+  table { border-collapse: collapse; font-size: 12.5px; margin: 8px 0 14px; width: 100%; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+  th { background: #f7f6f0; }
+  .variants { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font-size: 13px; padding: 8px 14px; border-radius: 6px; border: 1px solid #ccc;
+    background: #fafaf7; cursor: pointer; font-family: inherit;
+  }
+  button:hover { background: #eee; }
+  button.variant-btn { border-color: #4a7c9c; color: #2a5a78; }
+  button.cmp-btn { border-color: #b8843a; color: #8a5f22; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0 14px; }
+  .grid2 .cell { border: 1px solid #ddd; border-radius: 6px; padding: 12px; background: #fafaf7; }
+  .grid2 .cell h4 { margin: 0 0 6px; font-size: 12.5px; color: #444; }
+  .sep { flex-basis: 100%; height: 0; }
+  .tag { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 10px;
+    background: #eee; color: #666; margin-left: 6px; }
+  .tag.math-tag { background: #f0e6d2; color: #8a5f22; }
+  .tag.convention-tag { background: #e3ecef; color: #2a5a78; }
+</style>
+</head>
+<body>
+
+<h1>🎵 和弦转位（Inversion）vs 排列法（Voicing）</h1>
+<div class="sub">
+  独立页面，仅用于理解概念，没有接入 MyMusicStdio 系统 · 每一节都配了能直接点了听的对比，
+  建议戴耳机、多点几次——概念上"是两回事"和耳朵里"听出是两回事"是两件不同的事，光看文字definitions 记不住。
+</div>
+
+<div class="card">
+  <h2>0. 先说结论：这是两个互相独立的维度，不是同一件事的两种说法</h2>
+  <p class="note">
+    <b>转位（inversion）只回答一个问题：哪个音在最低音（bass）</b>——根音在最低是原位，
+    3 音在最低是第一转位，以此类推。<br>
+    <b>排列法（voicing）回答的是另一组问题</b>：上面几个音摆在哪个八度、谁离得最近/最远、
+    有没有重复（doubling）、有没有省略（omission）、哪个音在最高声部（听感上的"旋律音"）。<br>
+    这两组问题**互不依赖**——同一个转位可以配任意排列法，同一个排列法思路也能套在任意转位上。
+    下面用耳朵直接验证这一点。
+  </p>
+</div>
+
+<div class="card">
+  <h2>1. 转位：只看最低音是谁</h2>
+  <p class="note">
+    Cmaj7（C-E-G-B）的四个转位，每次上面三个音原样往上叠，只是把"谁沉到最底下"轮换一遍。
+    重点听<b>最低音（贝斯线）</b>在移动，和弦本身的"上层色彩"其实没怎么变。
+  </p>
+  <table>
+    <tr><th>转位</th><th>最低音</th><th>从低到高</th></tr>
+    <tr><td>原位</td><td>C</td><td>C - E - G - B</td></tr>
+    <tr><td>第一转位</td><td>E</td><td>E - G - B - C</td></tr>
+    <tr><td>第二转位</td><td>G</td><td>G - B - C - E</td></tr>
+    <tr><td>第三转位</td><td>B</td><td>B - C - E - G</td></tr>
+  </table>
+  <div class="variants">
+    <button class="variant-btn" onclick="playVoicing('root')">▶ 原位（C 在最低）</button>
+    <button class="variant-btn" onclick="playVoicing('inv1')">▶ 第一转位（E 在最低）</button>
+    <button class="variant-btn" onclick="playVoicing('inv2')">▶ 第二转位（G 在最低）</button>
+    <button class="variant-btn" onclick="playVoicing('inv3')">▶ 第三转位（B 在最低）</button>
+    <div class="sep"></div>
+    <button class="cmp-btn" onclick="playSeq(['root','inv1','inv2','inv3'])">▶ 四个转位依次连播</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>2. Voicing：最低音不变，只重排上面的音</h2>
+  <p class="note">
+    这次反过来——四个都是<b>原位</b>（C 都在最低音），但上面三个音（E、G、B）的摆法不一样。
+    重点听<b>最高音（听感上的"旋律音"）</b>在变，贝斯这次是稳定不动的。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="playVoicing('closeRoot')">▶ 密排列（Close）：C-E-G-B 挤在一个八度内</button>
+    <button class="variant-btn" onclick="playVoicing('openTop3')">▶ 开放排列：3 音（E）挪到最高音</button>
+    <button class="variant-btn" onclick="playVoicing('openTop5')">▶ 开放排列：5 音（G）挪到最高音</button>
+    <div class="sep"></div>
+    <button class="cmp-btn" onclick="playSeq(['closeRoot','openTop3','openTop5'])">▶ 三种排列依次连播</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3. 两个维度独立组合：2×2 全部听一遍</h2>
+  <p class="note">
+    横轴是转位（谁在最低音），纵轴是排列法（上层音怎么摆）——四个格子互相独立，
+    任意转位都能配任意排列法，听完这四个就能确认这两件事真的没有强制绑定关系。
+  </p>
+  <div class="grid2">
+    <div class="cell">
+      <h4>原位 + 密排列</h4>
+      <button class="variant-btn" onclick="playVoicing('closeRoot')">▶ 播放</button>
+    </div>
+    <div class="cell">
+      <h4>原位 + 开放排列（3 音在上）</h4>
+      <button class="variant-btn" onclick="playVoicing('openTop3')">▶ 播放</button>
+    </div>
+    <div class="cell">
+      <h4>第一转位 + 密排列</h4>
+      <button class="variant-btn" onclick="playVoicing('inv1')">▶ 播放</button>
+    </div>
+    <div class="cell">
+      <h4>第一转位 + 开放排列（5 音在上）</h4>
+      <button class="variant-btn" onclick="playVoicing('inv1Open5')">▶ 播放</button>
+    </div>
+  </div>
+  <div class="variants">
+    <button class="cmp-btn" onclick="playSeq(['closeRoot','openTop3','inv1','inv1Open5'])">▶ 四格连播</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>4. 三全音为什么"移八度也不散"——精确验证，不是直觉 <span class="tag math-tag">可推导</span></h2>
+  <p class="note">
+    上一轮讨论里提到：把 G7 的 3 音（B）挪到最高音（八度移位），3 音和 7 音（B、F）之间的
+    <b>三全音关系居然还在</b>。这不是巧合，是三全音这个音程本身的数学性质——它正好是八度的一半
+    （6 + 6 = 12），所以把其中一个音移动一整个八度，两音的实际半音距离还是 6，只是谁在上谁在下
+    换了个位置。下面用两组对比直接验证：
+  </p>
+
+  <h3>4.1　三全音（B-F）：移八度前后，听感应该很接近</h3>
+  <div class="math">
+    密排列：B(offset 4) 在下，F(offset 10) 在上，差 <code>10-4=6</code> 个半音。<br>
+    3 音移八度后：F(offset 10) 在下，B(offset 16) 在上，差 <code>16-10=6</code> 个半音——<b>还是 6</b>。
+  </div>
+  <div class="variants">
+    <button class="variant-btn" onclick="playVoicing('tritoneClose')">▶ B 在下、F 在上（密排列）</button>
+    <button class="variant-btn" onclick="playVoicing('tritoneFlip')">▶ F 在下、B 在上（3 音移八度）</button>
+    <button class="cmp-btn" onclick="playSeq(['tritoneClose','tritoneFlip'])">▶ 连续对比</button>
+  </div>
+
+  <h3>4.2　对照组：大三度（G-B）移八度后，会变成完全不同感觉的大十度 <span class="tag convention-tag">对照</span></h3>
+  <div class="math">
+    密排列：G(offset 0) 在下，B(offset 4) 在上，差 4 个半音（大三度）。<br>
+    B 移八度后：差 <code>4+12=16</code> 个半音——变成了大十度，是一个明显"更空旷"的音程，
+    跟三全音那种"移完还是同一种张力"完全不一样。<b>三全音的八度对称性是特例，不是所有音程的通性</b>。
+  </div>
+  <div class="variants">
+    <button class="variant-btn" onclick="playVoicing('m3Close')">▶ G-B 大三度（密排列）</button>
+    <button class="variant-btn" onclick="playVoicing('m3Wide')">▶ G-B 大十度（B 移八度）</button>
+    <button class="cmp-btn" onclick="playSeq(['m3Close','m3Wide'])">▶ 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>5. 小结：哪些是可推导的，哪些是约定俗成的名字</h2>
+  <table>
+    <tr><th>概念</th><th>本质</th><th>能不能"算出来"</th></tr>
+    <tr><td>转位（inversion）</td><td>纯粹描述"谁在最低音"</td><td>是定义，不需要推导，但完全客观、不含糊</td></tr>
+    <tr><td>排列法（voicing）</td><td>上层音的register/顺序/doubling</td><td>同上，是描述性分类，没有唯一"正确答案"</td></tr>
+    <tr><td>三全音的八度对称性</td><td>6 + 6 = 12，八度被平分</td><td><span class="tag math-tag">可推导</span> 对任何调、任何八度都成立</td></tr>
+    <tr><td>"哪种排列法更常用/更好听"</td><td>风格、乐器指法、编曲习惯</td><td><span class="tag convention-tag">经验总结</span> 因流派/乐器而异</td></tr>
+  </table>
+  <p class="note">
+    这张表想说明的是：<b>"转位"和"voicing"这两个概念本身是精确定义，不是模糊的经验分类</b>；
+    但具体到"什么时候用第一转位"、"爵士钢琴喜欢用哪种 voicing"，那就是经验和风格的领域了，
+    跟上一轮聊到的"三全音代理为什么成立"是同一类问题——概念的定义和数学关系是硬的，
+    怎么具体使用是软的。
+  </p>
+</div>
+
+<script>
+// ── 极简 Web Audio 合成，独立于系统主页面 (fretboard.js) 之外，专用于本页 ──
+const NOTE_INDEX = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,
+  G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
+
+function noteMidi(name, octave) {
+  return NOTE_INDEX[name] + (octave + 1) * 12;
+}
+function freqFromMidi(m) {
+  return 440 * Math.pow(2, (m - 69) / 12);
+}
+
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playNote(ctx, midi, atTime, dur) {
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.value = freqFromMidi(midi);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2800;
+  filter.Q.value = 0.7;
+  const peak = 0.16;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, atTime);
+  gain.gain.linearRampToValueAtTime(peak, atTime + 0.02);
+  gain.gain.setValueAtTime(peak, atTime + dur - 0.08);
+  gain.gain.linearRampToValueAtTime(0, atTime + dur);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + dur + 0.02);
+}
+
+// Every entry is an explicit, fully-spelled voicing: {root, octave} pairs.
+// No quality-interval lookup here on purpose — inversion/voicing demos need
+// exact control over which note is lowest/highest, which a generic
+// "root + interval formula" builder can't express cleanly.
+const CHORD_DUR = 1.8;
+const VOICINGS = {
+  // §1 — Cmaj7 close-position, rotated through all four inversions.
+  // A low octave doubling of the lowest note is added so the bass is
+  // unambiguous, same convention as the other comparison pages.
+  root:  [['C',3], ['C',4], ['E',4], ['G',4], ['B',4]],
+  inv1:  [['E',3], ['E',4], ['G',4], ['B',4], ['C',5]],
+  inv2:  [['G',3], ['G',4], ['B',4], ['C',5], ['E',5]],
+  inv3:  [['B',3], ['B',4], ['C',5], ['E',5], ['G',5]],
+
+  // §2 — all root position (C in bass), only the upper voices rearranged.
+  closeRoot: [['C',3], ['C',4], ['E',4], ['G',4], ['B',4]],
+  openTop3:  [['C',3], ['C',4], ['G',4], ['B',4], ['E',5]],
+  openTop5:  [['C',3], ['C',4], ['E',4], ['B',4], ['G',5]],
+
+  // §3 — first inversion (E in bass) with a different voice moved to the top
+  inv1Open5: [['E',3], ['E',4], ['C',5], ['G',5], ['B',5]],
+
+  // §4.1 — the B-F tritone, close spacing vs octave-flipped spacing
+  tritoneClose: [['B',3], ['B',4], ['F',5]],
+  tritoneFlip:  [['F',3], ['F',4], ['B',5]],
+
+  // §4.2 — the G-B major 3rd, close spacing vs B moved up an octave (10th)
+  m3Close: [['G',3], ['G',4], ['B',4]],
+  m3Wide:  [['G',3], ['G',4], ['B',5]],
+};
+
+function scheduleVoicing(key, startAt) {
+  const ctx = getCtx();
+  VOICINGS[key].forEach(([note, octave]) => {
+    playNote(ctx, noteMidi(note, octave), startAt, CHORD_DUR);
+  });
+  return startAt + CHORD_DUR;
+}
+
+function playVoicing(key) {
+  const ctx = getCtx();
+  scheduleVoicing(key, ctx.currentTime + 0.05);
+}
+
+function playSeq(keys) {
+  const ctx = getCtx();
+  let t = ctx.currentTime + 0.05;
+  keys.forEach(key => { t = scheduleVoicing(key, t) + 0.3; });
+}
+
+// Leading-edge debounce so a fast double-click can't overlap two copies of
+// the same audio (same convention as fretboard.js's guarded()).
+function guarded(fn, ms) {
+  let blocked = false;
+  return function (...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+playVoicing = guarded(playVoicing, 2200);
+playSeq = guarded(playSeq, 12000);
+</script>
+
+</body>
+</html>

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 import mido
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
@@ -37,8 +38,8 @@ class BarEntry(BaseModel):
     chords: list[ChordEntry] = []
 
 
-class SongBody(BaseModel):
-    """Validated request body for song create/update and play endpoints."""
+class AccompanimentBody(BaseModel):
+    """Validated request body for accompaniment create/update and play endpoints."""
     model_config = {"extra": "allow"}
 
     title: str = "Untitled"
@@ -49,7 +50,12 @@ class SongBody(BaseModel):
     time_signature: str = "4/4"
     bars: list[BarEntry] = []
     fill_every: int = Field(default=4, ge=1, le=32)
+    volume: float = Field(default=1.0, ge=0.0, le=1.0)
     id: Optional[str] = None
+
+
+class VolumeBody(BaseModel):
+    volume: float = Field(ge=0.0, le=1.0)
 
 
 class LickSession(BaseModel):
@@ -80,34 +86,34 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
-def _songs_dir() -> Path:
-    d = Path(prefs.load()["songs_dir"]).expanduser()
+def _accompaniments_dir() -> Path:
+    d = Path(prefs.load()["accompaniments_dir"]).expanduser()
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _song_path(song_id: str) -> Path:
-    base = _songs_dir()
-    p = (base / song_id).resolve()
+def _accompaniment_path(accompaniment_id: str) -> Path:
+    base = _accompaniments_dir()
+    p = (base / accompaniment_id).resolve()
     if not p.is_relative_to(base.resolve()):
-        raise HTTPException(status_code=400, detail="Invalid song id")
+        raise HTTPException(status_code=400, detail="Invalid accompaniment id")
     return p
 
 
 def _slugify(title: str) -> str:
     s = re.sub(r"[^\w一-鿿-]", "-", title.strip())
-    return re.sub(r"-+", "-", s).strip("-") or "song"
+    return re.sub(r"-+", "-", s).strip("-") or "accompaniment"
 
 
-def _read_song(song_id: str) -> dict:
-    p = _song_path(song_id) / "song.json"
+def _read_accompaniment(accompaniment_id: str) -> dict:
+    p = _accompaniment_path(accompaniment_id) / "song.json"
     if not p.exists():
-        raise HTTPException(status_code=404, detail="Song not found")
+        raise HTTPException(status_code=404, detail="Accompaniment not found")
     return json.loads(p.read_text())
 
 
-def _write_song(song_id: str, data: dict) -> None:
-    d = _song_path(song_id)
+def _write_accompaniment(accompaniment_id: str, data: dict) -> None:
+    d = _accompaniment_path(accompaniment_id)
     d.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
     (d / "song.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
@@ -193,76 +199,76 @@ def api_put_prefs(updates: dict):
     return prefs.save(updates)
 
 
-@app.get("/api/songs")
-def api_list_songs():
-    songs = []
-    for d in _songs_dir().iterdir():
+@app.get("/api/accompaniments")
+def api_list_accompaniments():
+    accompaniments = []
+    for d in _accompaniments_dir().iterdir():
         p = d / "song.json"
         if p.exists():
             data = json.loads(p.read_text())
             data["id"] = d.name
             data["generated"] = (d / "accompaniment.mid").exists()
-            songs.append(data)
-    songs.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
-    return songs
+            accompaniments.append(data)
+    accompaniments.sort(key=lambda s: s.get("updated_at", ""), reverse=True)
+    return accompaniments
 
 
-@app.get("/api/songs/{song_id}")
-def api_get_song(song_id: str):
-    data = _read_song(song_id)
-    data["id"] = song_id
-    data["generated"] = (_song_path(song_id) / "accompaniment.mid").exists()
+@app.get("/api/accompaniments/{accompaniment_id}")
+def api_get_accompaniment(accompaniment_id: str):
+    data = _read_accompaniment(accompaniment_id)
+    data["id"] = accompaniment_id
+    data["generated"] = (_accompaniment_path(accompaniment_id) / "accompaniment.mid").exists()
     return data
 
 
-@app.post("/api/songs")
-def api_create_song(song: SongBody):
-    data = song.model_dump(exclude={"id"})
-    song_id = _slugify(data.get("title", "song"))
-    base = song_id
+@app.post("/api/accompaniments")
+def api_create_accompaniment(accompaniment: AccompanimentBody):
+    data = accompaniment.model_dump(exclude={"id"})
+    accompaniment_id = _slugify(data.get("title", "accompaniment"))
+    base = accompaniment_id
     i = 1
-    while _song_path(song_id).exists():
-        song_id = f"{base}-{i}"
+    while _accompaniment_path(accompaniment_id).exists():
+        accompaniment_id = f"{base}-{i}"
         i += 1
-    _write_song(song_id, data)
-    return {**data, "id": song_id, "generated": False}
+    _write_accompaniment(accompaniment_id, data)
+    return {**data, "id": accompaniment_id, "generated": False}
 
 
-@app.put("/api/songs/{song_id}")
-def api_update_song(song_id: str, song: SongBody):
-    _read_song(song_id)  # 404 if not found
-    data = song.model_dump(exclude={"id"})
-    _write_song(song_id, data)
-    return {**data, "id": song_id}
+@app.put("/api/accompaniments/{accompaniment_id}")
+def api_update_accompaniment(accompaniment_id: str, accompaniment: AccompanimentBody):
+    _read_accompaniment(accompaniment_id)  # 404 if not found
+    data = accompaniment.model_dump(exclude={"id"})
+    _write_accompaniment(accompaniment_id, data)
+    return {**data, "id": accompaniment_id}
 
 
-@app.delete("/api/songs/{song_id}")
-def api_delete_song(song_id: str):
-    p = _song_path(song_id)
+@app.delete("/api/accompaniments/{accompaniment_id}")
+def api_delete_accompaniment(accompaniment_id: str):
+    p = _accompaniment_path(accompaniment_id)
     if not p.exists():
-        raise HTTPException(status_code=404, detail="Song not found")
+        raise HTTPException(status_code=404, detail="Accompaniment not found")
     shutil.rmtree(p)
     return {"ok": True}
 
 
 @app.post("/api/play")
-def api_play(song: SongBody):
+def api_play(accompaniment: AccompanimentBody):
     p = prefs.load()
     soundfont = str(Path(p["soundfont_path"]).expanduser())
 
-    progression = [chord.name for bar in song.bars for chord in bar.chords]
+    progression = [chord.name for bar in accompaniment.bars for chord in bar.chords]
 
     if not progression:
         raise HTTPException(status_code=400, detail="No chords in song")
 
-    loops = song.loops
-    bpm = song.bpm
-    style = song.style
-    fill_every = song.fill_every
+    loops = accompaniment.loops
+    bpm = accompaniment.bpm
+    style = accompaniment.style
+    fill_every = accompaniment.fill_every
 
-    song_id = song.id
-    if song_id:
-        out_dir = _song_path(song_id)
+    accompaniment_id = accompaniment.id
+    if accompaniment_id:
+        out_dir = _accompaniment_path(accompaniment_id)
         out_dir.mkdir(parents=True, exist_ok=True)
         midi_path = str(out_dir / "accompaniment.mid")
     else:
@@ -277,7 +283,7 @@ def api_play(song: SongBody):
     mid.save(midi_path)
 
     # compute total duration
-    bars_per_loop = len(song.bars)
+    bars_per_loop = len(accompaniment.bars)
     sec_per_bar = 4 * 60 / bpm
     duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
 
@@ -287,14 +293,15 @@ def api_play(song: SongBody):
         "bars": bars_per_loop,
         "bpm": bpm,
     }
-    logger.info("play: %s bars, bpm=%s, style=%s, loops=%s → %s", len(song.get("bars", [])), bpm, style, loops, midi_path)
+    logger.info("play: %s bars, bpm=%s, style=%s, loops=%s → %s", len(accompaniment.bars), bpm, style, loops, midi_path)
     _player.set_soundfont(soundfont)
+    _player.set_volume(accompaniment.volume)
     _player.play(midi_path, bpm=bpm, session_meta=session_meta)
 
-    if song_id:
+    if accompaniment_id:
         try:
-            data = _read_song(song_id)
-            _write_song(song_id, data)
+            data = _read_accompaniment(accompaniment_id)
+            _write_accompaniment(accompaniment_id, data)
         except HTTPException:
             pass
 
@@ -460,9 +467,25 @@ async def api_upload_material(file: UploadFile = File(...)):
 def api_list_materials():
     return [
         {"id": r.id, "url": f"/api/materials/{r.id}", "filename": r.filename,
-         "uploaded_at": r.uploaded_at, "size": r.size, "state": r.state}
+         "uploaded_at": r.uploaded_at, "size": r.size, "state": r.state,
+         "content_hash": r.content_hash}
         for r in _materials_store.list_all()
     ]
+
+
+# Registered before /{material_id} below only for readability, not routing
+# correctness — FastAPI matches by segment count, and "by-hash/<hash>" is two
+# segments vs one, so there's no ambiguity either way. Lets the upload flow
+# check "does this content already exist?" *before* spending the bandwidth to
+# actually upload a duplicate — see materialUploadAndInsert (licks.js) /
+# registerAsLibraryMaterial (song-loop.js) for the client-side hash + confirm.
+@app.get("/api/materials/by-hash/{content_hash}")
+def api_material_by_hash(content_hash: str):
+    record = _materials_store.find_by_hash(content_hash)
+    if record is None:
+        raise HTTPException(status_code=404, detail="No matching material")
+    return {"id": record.id, "url": f"/api/materials/{record.id}", "filename": record.filename,
+             "uploaded_at": record.uploaded_at, "size": record.size}
 
 
 @app.get("/api/materials/{material_id}")
@@ -476,6 +499,20 @@ def api_get_material(material_id: str):
 @app.delete("/api/materials/{material_id}")
 def api_delete_material(material_id: str):
     if not _materials_store.delete(material_id):
+        raise HTTPException(status_code=404, detail="Material not found")
+    return {"ok": True}
+
+
+class MaterialRenameBody(BaseModel):
+    filename: str = Field(min_length=1)
+
+
+@app.put("/api/materials/{material_id}/filename")
+def api_rename_material(material_id: str, body: MaterialRenameBody):
+    name = body.filename.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="文件名不能为空")
+    if not _materials_store.rename(material_id, name):
         raise HTTPException(status_code=404, detail="Material not found")
     return {"ok": True}
 
@@ -494,11 +531,43 @@ def api_put_material_state(material_id: str, state: dict):
     return {"ok": True}
 
 
+# Unofficial NetEase Cloud Music lyric endpoint — widely used by open-source
+# lyric tools, no auth needed for most (non-VIP-only) tracks. Proxied
+# server-side because the browser can't call it directly (no CORS headers),
+# and so the server can attach the Referer NetEase's API expects.
+@app.get("/api/netease-lyric")
+def api_netease_lyric(song_id: str):
+    if not re.fullmatch(r"\d+", song_id):
+        raise HTTPException(status_code=400, detail="song_id 必须是数字")
+    try:
+        resp = httpx.get(
+            "https://music.163.com/api/song/lyric",
+            params={"id": song_id, "lv": 1, "kv": 1, "tv": -1},
+            headers={"Referer": "https://music.163.com", "User-Agent": "Mozilla/5.0"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("netease lyric fetch failed for id=%s: %s", song_id, e)
+        raise HTTPException(status_code=502, detail="拉取歌词失败（网络问题，或网易接口变更）")
+    lrc = (data.get("lrc") or {}).get("lyric", "")
+    if not lrc:
+        raise HTTPException(status_code=404, detail="没有找到这首歌的时间轴歌词（可能是纯音乐或没有 LRC）")
+    return {"lrc": lrc}
+
+
 @app.post("/api/bpm")
 def api_set_bpm(body: dict):
     bpm = float(body.get("bpm", 120))
     _player.set_bpm(bpm)
     return {"bpm": bpm}
+
+
+@app.put("/api/volume")
+def api_set_volume(body: VolumeBody):
+    _player.set_volume(body.volume)
+    return {"volume": body.volume}
 
 
 @app.post("/api/stop")

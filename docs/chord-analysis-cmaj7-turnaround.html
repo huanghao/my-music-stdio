@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>C 大调转调式收尾分析：A/B 两段进行</title>
+<style>
+  :root {
+    --bg: #eef1f4;
+    --bg-card: #ffffff;
+    --ink: #202632;
+    --ink-soft: #5b6472;
+    --border: #dde2e8;
+    --border-soft: #e6eaee;
+    --accent-a: #35618a;      /* slate blue — primary / "as written" */
+    --accent-a-soft: #dde7ef;
+    --accent-b: #b8863a;      /* muted gold — comparison / hypothetical alt */
+    --accent-b-soft: #f1e6d0;
+    --code-bg: #e7ebef;
+    --shadow: 0 1px 2px rgba(32, 38, 50, .06);
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c; --bg-card: #1b2129; --ink: #e6e9ee; --ink-soft: #99a3b0;
+    --border: #2a323d; --border-soft: #232b34;
+    --accent-a: #6fa3d1; --accent-a-soft: #223244;
+    --accent-b: #d9ab5e; --accent-b-soft: #3a2f1c;
+    --code-bg: #232b34; --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c; --bg-card: #1b2129; --ink: #e6e9ee; --ink-soft: #99a3b0;
+      --border: #2a323d; --border-soft: #232b34;
+      --accent-a: #6fa3d1; --accent-a-soft: #223244;
+      --accent-b: #d9ab5e; --accent-b-soft: #3a2f1c;
+      --code-bg: #232b34; --shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--ink); margin: 0;
+    padding: 32px clamp(16px, 5vw, 48px) 72px; max-width: 820px; margin-inline: auto;
+  }
+  h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 23px; font-weight: 700; margin: 0 0 6px; text-wrap: balance;
+  }
+  h2.section-title {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 17px; font-weight: 700; margin: 38px 0 10px; color: var(--accent-a);
+  }
+  .sub { font-size: 13px; color: var(--ink-soft); margin-bottom: 22px; line-height: 1.75; max-width: 65ch; }
+  .map {
+    background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 18px; font-size: 13px; box-shadow: var(--shadow); overflow-x: auto;
+  }
+  .map table { border-collapse: collapse; width: 100%; }
+  .map td, .map th { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border-soft); }
+  .map th { color: var(--ink-soft); font-weight: 600; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; }
+  .map td:first-child { font-variant-numeric: tabular-nums; color: var(--ink-soft); white-space: nowrap; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 10px;
+    padding: 22px 26px; margin-bottom: 18px; box-shadow: var(--shadow);
+  }
+  .card h3 {
+    font-family: "Iowan Old Style", "Palatino Linotype", "Songti SC", Georgia, serif;
+    font-size: 16px; font-weight: 700; margin: 0 0 10px; text-wrap: balance;
+  }
+  .note { font-size: 13px; color: var(--ink-soft); line-height: 1.8; margin: 0 0 14px; max-width: 65ch; }
+  .note b { color: var(--ink); font-weight: 600; }
+  .roman { color: var(--accent-b); font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 600; }
+  .bars {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 13px; line-height: 1.6; background: var(--code-bg); color: var(--ink);
+    padding: 10px 14px; border-radius: 7px; margin: 0 0 14px; overflow-x: auto; white-space: pre;
+  }
+  .variants { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font-size: 13px; padding: 9px 15px; border-radius: 7px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--ink); cursor: pointer; font-family: inherit;
+    transition: background .12s ease, border-color .12s ease, transform .05s ease;
+  }
+  button:hover { background: var(--border-soft); }
+  button:active { transform: translateY(1px); }
+  button:focus-visible { outline: 2px solid var(--accent-a); outline-offset: 2px; }
+  button.variant-btn { border-color: var(--accent-a); color: var(--accent-a); background: var(--accent-a-soft); }
+  button.cmp-btn { border-color: var(--accent-b); color: var(--accent-b); background: var(--accent-b-soft); }
+  button:disabled { opacity: 0.4; cursor: default; }
+</style>
+</head>
+<body>
+
+<h1>🎼 C 大调转调式收尾：A / B 两段进行分析</h1>
+<div class="sub">
+  独立页面，仅用于理解概念，没有接入 MyMusicStdio 系统。术语参照
+  <a href="tonal-harmony-map.md">调性和声地图</a> / <a href="chord-progressions-guide.md">和弦进行入门</a> /
+  <a href="chromatic-harmony-and-substitutions.md">和声进阶</a>，每张卡片都配了可以直接点的试听。
+</div>
+
+<div class="map">
+  <b>原始进行</b>（都按 C 大调分析，Cmaj7 = I）
+  <table>
+    <tr><th>段落</th><th>写法</th></tr>
+    <tr><td>A</td><td>Cmaj7 | D7 | Dm7 G7(9) | Cmaj7 G7(9)</td></tr>
+    <tr><td>B</td><td>Fmaj7 | D7 | Dm7 G7(9)</td></tr>
+  </table>
+</div>
+
+<h2 class="section-title">一、级数拆解</h2>
+<div class="map">
+  <table>
+    <tr><th>段落</th><th>小节</th><th>和弦</th><th>级数</th><th>功能</th></tr>
+    <tr><td>A</td><td>1</td><td>Cmaj7</td><td>I</td><td>主</td></tr>
+    <tr><td>A</td><td>2</td><td>D7</td><td>(V7/V)</td><td>见下—并非真正的属功能</td></tr>
+    <tr><td>A</td><td>3</td><td>Dm7 → G9</td><td>ii → V9</td><td>下属 → 属</td></tr>
+    <tr><td>A</td><td>4</td><td>Cmaj7 → G9</td><td>I → V9</td><td>主，然后属（收尾/循环用）</td></tr>
+    <tr><td>B</td><td>1</td><td>Fmaj7</td><td>IV</td><td>下属</td></tr>
+    <tr><td>B</td><td>2</td><td>D7</td><td>(V7/V)</td><td>同上，同一个手法</td></tr>
+    <tr><td>B</td><td>3</td><td>Dm7 → G9</td><td>ii → V9</td><td>下属 → 属</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>A、B 完整听一遍</h3>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('progA')">▶ A：Cmaj7–D7–Dm7 G9–Cmaj7 G9</button>
+    <button class="variant-btn" onclick="play('progB')">▶ B：Fmaj7–D7–Dm7 G9</button>
+    <button class="cmp-btn" onclick="playSeq(['progA','progA'])">▶ A 连播两遍（听收在 G9 上是不是"等着回去"的感觉）</button>
+  </div>
+</div>
+
+<h2 class="section-title">二、核心手法：D7 → Dm7，同根音换色，不是真的属和弦解决</h2>
+<div class="card">
+  <h3>D7 看起来像属和弦，但它没有"解决"到该去的地方</h3>
+  <div class="bars">D7  (D F# A C)
+     ↓ 只有 3 音变了：F# → F，D、A、C 三个音原地不动
+Dm7 (D F  A C)</div>
+  <p class="note">
+    D7 拼出来是 <span class="roman">V7/V</span>（G 的属和弦——G 是 C 的属，D 是 G 的属，套一层）。
+    <b>真正的 V7/V 应该往下解决五度到 G</b>（<a href="chromatic-harmony-and-substitutions.md#1-附属和弦-secondary-dominants">和声进阶 §1 附属和弦</a>）。
+    但这里它没有走五度，根音原地不动，只把 3 音从 F#（大三度）压半音到 F（小三度）——
+    D、A、C 三个音全是共同音，唯一的运动是这一个半音。所以 D7 在这里<b>不是真正在履行属功能</b>，
+    它只是提前一拍"借"一点属和弦的色彩，再用一个半音把它抹平、落回真正的 <span class="roman">ii</span>（Dm7）。
+    这也是为什么它听起来顺——真正的属和弦解决靠的是五度跳进或导音半音上行，这里完全没有跳进，
+    只有一个音悄悄挪了半音。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('pivotReal')">▶ 如果 D7 真的解决：Cmaj7 – D7 – G7（五度下行到属）</button>
+    <button class="variant-btn" onclick="play('pivotActual')">▶ 谱面实际写法：Cmaj7 – D7 – Dm7（根音不动，只变一个音）</button>
+    <button class="cmp-btn" onclick="playSeq(['pivotReal','pivotActual'])">▶ 先听"真解决"，再接"实际写法"</button>
+  </div>
+</div>
+
+<h2 class="section-title">三、A 和 B 共用同一套"收尾引擎"</h2>
+<div class="card">
+  <h3>A 从 I 起步，B 从 IV 起步，但后面接的是完全一样的 D7–Dm7–G9</h3>
+  <div class="bars">A：Cmaj7 | D7 | Dm7 G9 | ...
+      I    | (V7/V)| ii  V9 |
+B：Fmaj7 | D7 | Dm7 G9
+      IV   | (V7/V)| ii  V9</div>
+  <p class="note">
+    两段的开头和弦不同（A 是主和弦 I，B 是下属和弦 IV），色彩不一样——I 稳定、IV 松弛偏"预备"感。
+    但从第 2 小节起，两段用的是<b>完全相同的三个和弦</b>（D7、Dm7、G9）。单独拎出这三个和弦听，
+    就是这首/这段进行真正的"引擎"：不管从哪个和弦启动，只要接上这三步，耳朵都会认出"啊，
+    要往属和弦走了"。这是让 A、B 两段既有对比、又不显得脱节的常见写法——共用同一个尾巴，
+    开头随便换着来。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('tailShared')">▶ 单独听共用的尾巴：D7 – Dm7 – G9</button>
+    <button class="cmp-btn" onclick="playSeq(['progA','progB'])">▶ A 接 B 连续听（注意后半段是同一个东西）</button>
+  </div>
+  <p class="note" style="margin-top:14px">
+    另外留意一下：如果 B 确实只有给出的这 3 小节（A 有 4 小节），它大概率不是一个独立的完整乐段，
+    而更像是一段接回 A 的过渡/桥接句——具体要看它后面接的是什么，这里先按你给的内容分析。
+  </p>
+</div>
+
+<h2 class="section-title">四、G9 只是加了个音，功能没变</h2>
+<div class="card">
+  <h3>G7 vs G9：多一个大九度，听感更"甜"，不是更紧张</h3>
+  <p class="note">
+    9 音（A）是加在 7 和弦上方的自然大九度，属于协和的延伸音，不像 <span class="roman">♭9</span> 或
+    <span class="roman">♯9</span> 那样制造额外的不协和张力。所以 G7(9) 和 G7 在"想解决到 I"这件事上
+    功能完全一样，只是音色更圆润、更流行/波萨诺瓦一点。两段（A、B）从头到尾都用 G9，没有在别处换成
+    更尖锐的属和弦变体，说明这首/这段的整体色调是偏"柔"的，不是在制造强烈张力。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('g7plain')">▶ Dm7 – G7（不加 9）</button>
+    <button class="variant-btn" onclick="play('g9')">▶ Dm7 – G9（谱面实际写法）</button>
+    <button class="cmp-btn" onclick="playSeq(['g7plain','g9'])">▶ 先后对比</button>
+  </div>
+</div>
+
+<script>
+// ── 极简 Web Audio 合成，独立于系统主页面 (fretboard.js) 之外，专用于本页；
+// 和 chord-progression-comparison.html / chord-analysis-special-person.html
+// 用同一套引擎，方便以后合并维护 ──
+const NOTE_INDEX = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,
+  G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
+
+const QUALITIES = {
+  '':      [0, 4, 7],
+  'm':     [0, 3, 7],
+  '7':     [0, 4, 7, 10],
+  'maj7':  [0, 4, 7, 11],
+  'm7':    [0, 3, 7, 10],
+  '9':     [0, 4, 7, 10, 14],
+};
+
+function noteMidi(name, octave) {
+  return NOTE_INDEX[name] + (octave + 1) * 12;
+}
+function freqFromMidi(m) {
+  return 440 * Math.pow(2, (m - 69) / 12);
+}
+
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playNote(ctx, midi, atTime, dur) {
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.value = freqFromMidi(midi);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2800;
+  filter.Q.value = 0.7;
+  const peak = 0.16;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, atTime);
+  gain.gain.linearRampToValueAtTime(peak, atTime + 0.02);
+  gain.gain.setValueAtTime(peak, atTime + dur - 0.08);
+  gain.gain.linearRampToValueAtTime(0, atTime + dur);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + dur + 0.02);
+}
+
+const BEAT_SEC = 0.4;
+
+// Resolves a pitch class to whichever octave lands closest to `refMidi` —
+// real nearest-voice-leading distance, not a fixed octave per pitch class.
+// Without this, root motion that crosses a pitch-class wrap point produces
+// a spurious ~octave leap in the wrong direction — see the equivalent note
+// in progression-lab.js (plNearestMidi) for the full explanation and the
+// bug this was originally found fixing.
+function nearestMidi(pc, refMidi) {
+  const k = Math.round((refMidi - pc) / 12);
+  return pc + k * 12;
+}
+
+// `ch.octave`, if given, pins that chord to a specific register (escape
+// hatch, same idea as an explicit `tones` voicing override elsewhere) —
+// auto voice-leading only kicks in when a chord doesn't specify one.
+function scheduleProgression(chords, startAt) {
+  const ctx = getCtx();
+  let t = startAt;
+  let prevRootMidi = null; // local to this call — each button press starts fresh
+  chords.forEach(ch => {
+    const pc = NOTE_INDEX[ch.root];
+    const rootMidi = ch.octave != null
+      ? noteMidi(ch.root, ch.octave)
+      : (prevRootMidi == null ? pc + 4 * 12 : nearestMidi(pc, prevRootMidi));
+    prevRootMidi = rootMidi;
+    const offsets = ch.tones || QUALITIES[ch.quality];
+    const notes = [rootMidi - 12, ...offsets.map(iv => rootMidi + iv)];
+    const dur = (ch.beats || 2) * BEAT_SEC;
+    notes.forEach(n => playNote(ctx, n, t, dur));
+    t += dur;
+  });
+  return t;
+}
+
+const PROGRESSIONS = {
+  // Card: full A / B — bar-for-bar off the chart given (Dm7/G9 sharing one
+  // bar each get 1 beat, single-chord bars get 2, the closing G9 held a
+  // touch longer so the "wants to loop back" feel is audible, not clipped).
+  progA: [
+    {root:'C', quality:'maj7', beats:2}, {root:'D', quality:'7', beats:2},
+    {root:'D', quality:'m7', beats:1}, {root:'G', quality:'9', beats:1},
+    {root:'C', quality:'maj7', beats:1}, {root:'G', quality:'9', beats:3},
+  ],
+  progB: [
+    {root:'F', quality:'maj7', beats:2}, {root:'D', quality:'7', beats:2},
+    {root:'D', quality:'m7', beats:1}, {root:'G', quality:'9', beats:3},
+  ],
+
+  // Card: the D7 pivot in isolation — "real" applied-dominant resolution
+  // (down a 5th to G7) vs the chart's actual move (same root, quality shift
+  // only). Both start from the same Cmaj7 so the contrast is a fair A/B.
+  pivotReal:   [{root:'C', quality:'maj7', beats:2}, {root:'D', quality:'7', beats:2}, {root:'G', quality:'7', beats:4}],
+  pivotActual: [{root:'C', quality:'maj7', beats:2}, {root:'D', quality:'7', beats:2}, {root:'D', quality:'m7', beats:4}],
+
+  // Card: the shared cadential tail alone, decontextualized from either A or B
+  tailShared: [{root:'D', quality:'7', beats:2}, {root:'D', quality:'m7', beats:1}, {root:'G', quality:'9', beats:3}],
+
+  // Card: G7 vs G9 — same ii-V shape, only the dominant's color changes
+  g7plain: [{root:'D', quality:'m7', beats:2}, {root:'G', quality:'7', beats:4}],
+  g9:      [{root:'D', quality:'m7', beats:2}, {root:'G', quality:'9', beats:4}],
+};
+
+// Leading-edge debounce so a fast double-click can't overlap two copies of
+// the same progression (same convention as fretboard.js's guarded()).
+function guarded(fn, ms) {
+  let blocked = false;
+  return function (...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+
+function play(key) {
+  const ctx = getCtx();
+  const end = scheduleProgression(PROGRESSIONS[key], ctx.currentTime + 0.05);
+  return Math.ceil((end - ctx.currentTime) * 1000);
+}
+
+function playSeq(keys) {
+  const ctx = getCtx();
+  let t = ctx.currentTime + 0.05;
+  keys.forEach((key, idx) => {
+    t = scheduleProgression(PROGRESSIONS[key], t);
+    if (idx < keys.length - 1) t += 0.5;
+  });
+}
+
+play = guarded(play, 4000);
+playSeq = guarded(playSeq, 8500);
+</script>
+</body>
+</html>

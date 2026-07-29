@@ -46,6 +46,7 @@ class Player:
         self._bpm: float = 120.0  # dynamically adjustable
         self._midi_tempo: int = 500_000  # microseconds per beat from MIDI file
         self._session_meta: dict = {}
+        self._volume: float = 1.0  # 0.0-1.0, applied as MIDI CC7 (channel volume)
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
@@ -59,11 +60,13 @@ class Player:
 
     def _init_gm_channels(self) -> None:
         # GM standard: channel 9 is drums (bank 128), others default to bank 0
+        midi_volume = round(self._volume * 127)
         for ch in range(16):
             if ch == 9:
                 self._fs.program_select(ch, self._sfid, 128, 0)
             else:
                 self._fs.program_select(ch, self._sfid, 0, 0)
+            self._fs.cc(ch, 7, midi_volume)  # CC7 = channel volume
 
     def _all_notes_off(self) -> None:
         if self._fs:
@@ -145,6 +148,14 @@ class Player:
                 self._fs.sfunload(self._sfid, reset_presets=True)
             self._sfid = self._fs.sfload(path)
             self._init_gm_channels()
+
+    def set_volume(self, volume: float) -> None:
+        with self._lock:
+            self._volume = max(0.0, min(1.0, float(volume)))
+        if self._fs is not None:
+            midi_volume = round(self._volume * 127)
+            for ch in range(16):
+                self._fs.cc(ch, 7, midi_volume)
 
     def set_bpm(self, bpm: float) -> None:
         with self._lock:

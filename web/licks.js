@@ -78,9 +78,12 @@ function licksParseLinkDirectives(title) {
     // ordinary caption like "page 2" or an abbreviation like "y2" would
     // collide with this syntax and silently vanish as a swallowed directive
     // instead of rendering as the tooltip text the user actually wrote.
-    const m = part.trim().match(/^(w|width|page|y)[:=]\s*([\d.]+)$/i);
+    // `h`/`height` is PDF-specific (see licksPdfEmbedHtml) — video embeds
+    // ignore it since their aspect ratio is fixed by the player itself.
+    const m = part.trim().match(/^(w|width|h|height|page|y)[:=]\s*([\d.]+)$/i);
     if (!m) continue;
-    const key = m[1].toLowerCase() === 'width' ? 'w' : m[1].toLowerCase();
+    const lowered = m[1].toLowerCase();
+    const key = lowered === 'width' ? 'w' : lowered === 'height' ? 'h' : lowered;
     out[key] = parseFloat(m[2]);
   }
   return out;
@@ -158,21 +161,32 @@ function licksPlayVideoEmbed(thumbEl) {
 // here without vendoring a full PDF-rendering library.
 function licksPdfEmbedHtml(href, dir) {
   const page = Number.isFinite(dir.page) ? Math.max(1, Math.round(dir.page)) : 1;
+  // `w` overrides the default max-width (see .lick-pdf-embed in style.css —
+  // raised from a cramped 480px default, but still capped unless you ask
+  // for wider, e.g. for a two-page spread that needs real width to be
+  // legible). `h` overrides the fixed 600px iframe height for the same
+  // reason — a much wider embed with the old fixed height would letterbox.
+  // Height is carried via data-h and applied directly to the <iframe>
+  // itself in licksPlayPdfEmbed (not a CSS custom property inherited down
+  // to it) — one less layer of indirection to go wrong.
   const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : '';
+  const heightAttr = Number.isFinite(dir.h) ? ` data-h="${Math.max(100, Math.round(dir.h))}"` : '';
   const PAGE_HEIGHT_PT = 792; // US Letter height in PDF points — approximate for A4/other sizes
   const frag = Number.isFinite(dir.y)
     ? `page=${page}&zoom=100,0,${Math.round((1 - Math.min(1, Math.max(0, dir.y))) * PAGE_HEIGHT_PT)}`
     : `page=${page}`;
   const src = `${href}#${frag}`;
   return `<div class="lick-pdf-embed"${styleAttr}>` +
-    `<div class="lick-pdf-thumb" onclick="licksPlayPdfEmbed(this)" data-src="${htmlEsc(src)}">` +
+    `<div class="lick-pdf-thumb" onclick="licksPlayPdfEmbed(this)" data-src="${htmlEsc(src)}"${heightAttr}>` +
     `<span class="lick-pdf-thumb-icon">📄</span><span class="lick-pdf-thumb-label">点击查看谱例（第 ${page} 页）</span>` +
     `</div></div>`;
 }
 
 function licksPlayPdfEmbed(thumbEl) {
   const src = thumbEl.dataset.src;
-  thumbEl.parentElement.innerHTML = `<iframe src="${src}" title="PDF preview"></iframe>`;
+  const h = thumbEl.dataset.h;
+  const styleAttr = h ? ` style="height:${h}px"` : '';
+  thumbEl.parentElement.innerHTML = `<iframe src="${src}" title="PDF preview"${styleAttr}></iframe>`;
 }
 
 // Audio preview: not a plain <audio> tag — a button that hands the file off
@@ -187,20 +201,16 @@ function licksAudioEmbedHtml(href, label) {
     `</div>`;
 }
 
-async function licksPracticeWithSongLoop(btnEl) {
+// navigateTo (not plain showPage+slLoadFromUrl) so this jump lands in
+// history — Back from Song Loop now returns to this exact Lick instead of
+// leaving the browser with nothing to go back to. Error handling for a
+// failed fetch/decode (bad network, corrupt file) lives in navApplyRoute's
+// songloop branch, shared with every other way of reaching a Song Loop
+// deep link (a fresh page load, Back/Forward).
+function licksPracticeWithSongLoop(btnEl) {
   const url = btnEl.dataset.url;
   const label = btnEl.dataset.label || undefined;
-  showPage('songloop');
-  if (typeof slLoadFromUrl !== 'function') return;
-  try {
-    await slLoadFromUrl(url, label);
-  } catch (e) {
-    // Without this, a fetch/decode failure (bad network, corrupt file) left
-    // the user staring at an empty Song Loop page with zero indication
-    // anything went wrong — same status-bar mechanism used everywhere else
-    // in the app for this kind of error.
-    if (typeof setStatus === 'function') setStatus('Error loading track: ' + e.message);
-  }
+  navigateTo({ page: 'songloop', songUrl: url, songLabel: label });
 }
 
 function licksRenderNotes(notes) {
@@ -259,7 +269,7 @@ async function loadLicks() {
     const lastDate = l.last_date ? timeAgo(l.last_date) : '—';
     const count    = l.session_count || 0;
     return `
-      <div class="lick-card" data-lick-id="${l.id}" onclick="practiceLick('${l.id}')" ondragover="licksDragOver(event)">
+      <div class="lick-card" data-lick-id="${l.id}" onclick="navOpenLick('${l.id}')" ondragover="licksDragOver(event)">
         <span class="lick-drag-handle" draggable="true" title="Drag to reorder"
           onclick="event.stopPropagation()" ondragstart="licksDragStart(event)" ondragend="licksDragEnd(event)">⠿</span>
         <div class="lick-card-body">
@@ -415,11 +425,12 @@ async function newLick() {
   // misleading (they look like a "key" picker but just overwrite the title).
   openModal('New Lick', 'My practice lick', async title => {
     const r = await api('/api/licks', 'POST', { title, notes: '', target_bpm: null });
-    // practiceLick (not plain openLick) so the practice panel is already
-    // embedded when the edit modal closes — there's no other way to reach
-    // it now that opening a lick's detail page is the only "start
-    // practicing" signal (see practiceLick's comment).
-    await practiceLick(r.id);
+    // navOpenLick (not plain openLick/practiceLick) so this also lands in
+    // history — Back from the freshly created lick's detail page returns to
+    // wherever "New Lick" was clicked from, instead of nowhere. It resolves
+    // to practiceLick under the hood, so the practice panel is still already
+    // embedded when the edit modal closes below.
+    await navOpenLick(r.id);
     editLick(r.id); // then open edit modal to fill notes + target BPM
   }, false);
 }
@@ -686,8 +697,20 @@ async function materialUploadAndInsert(inputEl) {
   const file = inputEl.files[0];
   const statusEl = document.getElementById('material-upload-status');
   if (!file) return;
-  statusEl.textContent = 'Uploading…';
   try {
+    // Checks by content hash (see materials.js) before actually uploading —
+    // lets the user reuse an existing byte-identical material instead of
+    // silently accumulating duplicate copies.
+    statusEl.textContent = 'Checking for duplicates…';
+    const existing = typeof mtCheckDuplicateBeforeUpload === 'function'
+      ? await mtCheckDuplicateBeforeUpload(file) : null;
+    if (existing) {
+      licksInsertAtNotesCursor(licksMaterialLinkMarkdown(existing.filename, existing.url));
+      statusEl.textContent = `Reused existing ${existing.filename}`;
+      closeMaterialPicker();
+      return;
+    }
+    statusEl.textContent = 'Uploading…';
     const formData = new FormData();
     formData.append('file', file);
     const res = await fetch('/api/materials', { method: 'POST', body: formData });
@@ -724,7 +747,7 @@ async function submitLickEdit() {
 async function deleteLick(id) {
   if (!confirm('Delete this lick and all its session history?')) return;
   await api(`/api/licks/${id}`, 'DELETE');
-  showPage('licks');
+  navGoToPage('licks');
 }
 
 // ── Speed Trainer integration ──

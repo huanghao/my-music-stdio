@@ -75,6 +75,97 @@ def test_list_all_tolerates_index_entries_without_a_state_key(tmp_path):
     assert listed[0].state is None
 
 
+def test_save_state_writes_index_atomically_leaving_no_tmp_file_behind(tmp_path):
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"data")
+    store.save_state(record.id, {"bpm": 100})
+    index_dir = tmp_path / "materials"
+    names = {p.name for p in index_dir.iterdir()}
+    assert "_index.json" in names
+    assert "_index.json.tmp" not in names  # temp file was renamed away, not left dangling
+
+
+def test_save_state_survives_a_simulated_crash_mid_write(tmp_path, monkeypatch):
+    # If the process dies while writing the temp file, the real _index.json
+    # (written via os.replace, all-or-nothing) must still hold the last
+    # successfully saved state — not a truncated/corrupted file.
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"data")
+    store.save_state(record.id, {"bpm": 100})
+
+    from pathlib import Path
+    real_write_text = Path.write_text
+
+    def crash_on_tmp_write(self, *args, **kwargs):
+        if self.name.endswith(".tmp"):
+            raise OSError("simulated crash mid-write")
+        return real_write_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", crash_on_tmp_write)
+    try:
+        store.save_state(record.id, {"bpm": 200})
+    except OSError:
+        pass
+    monkeypatch.undo()
+
+    assert store.load_state(record.id) == {"bpm": 100}  # last good save, not corrupted/lost
+
+
+def test_save_computes_content_hash(tmp_path):
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"some bytes")
+    assert record.content_hash
+    listed = store.list_all()[0]
+    assert listed.content_hash == record.content_hash
+
+
+def test_find_by_hash_matches_identical_content_uploaded_under_different_names(tmp_path):
+    store = make_store(tmp_path)
+    a = store.save("original.wav", b"identical content")
+    store.save("renamed-copy.wav", b"identical content")
+    match = store.find_by_hash(a.content_hash)
+    assert match is not None
+    assert match.content_hash == a.content_hash
+
+
+def test_find_by_hash_returns_none_for_unknown_hash(tmp_path):
+    store = make_store(tmp_path)
+    store.save("song.mp3", b"data")
+    assert store.find_by_hash("0" * 64) is None
+
+
+def test_list_all_backfills_content_hash_for_legacy_entries_and_persists_it(tmp_path):
+    # Simulates a material saved before content_hash existed — the index
+    # entry has no such key at all.
+    store = make_store(tmp_path)
+    record = store.save("song.mp3", b"legacy bytes")
+    index_path = tmp_path / "materials" / "_index.json"
+    index = json.loads(index_path.read_text())
+    del index[record.id]["content_hash"]
+    index_path.write_text(json.dumps(index))
+
+    listed = store.list_all()
+    assert listed[0].content_hash  # backfilled in-memory...
+    reloaded = json.loads(index_path.read_text())
+    assert reloaded[record.id]["content_hash"]  # ...and persisted, not recomputed every call
+
+
+def test_rename_changes_filename_but_keeps_id_and_file_untouched(tmp_path):
+    store = make_store(tmp_path)
+    record = store.save("original.pdf", b"pdf bytes")
+    assert store.rename(record.id, "Better Name.pdf") is True
+
+    listed = store.list_all()[0]
+    assert listed.filename == "Better Name.pdf"
+    assert listed.id == record.id
+    assert store.path_for(record.id).read_bytes() == b"pdf bytes"
+
+
+def test_rename_returns_false_for_unknown_id(tmp_path):
+    store = make_store(tmp_path)
+    assert store.rename("nope.mp3", "new name") is False
+
+
 def test_root_dir_is_read_lazily_on_every_call(tmp_path):
     # root_dir_fn is a callable, not a fixed Path, so changing what it
     # returns (e.g. materials_dir changing via Preferences) takes effect

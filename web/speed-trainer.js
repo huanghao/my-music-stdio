@@ -140,21 +140,36 @@ function stScheduleClick(tickIndex, time) {
 
   // fbMasterGain() lives in fretboard.js — shared across every sound this
   // app generates, since some audio interfaces don't expose a software
-  // volume the OS volume keys can actually reach. Skip creating any audio
-  // nodes at all when muted — exponentialRampToValueAtTime throws if asked
-  // to ramp from/to exactly 0, and there's no point playing silence anyway.
-  const vol = (isDownbeat ? 0.9 : (isBeat ? 0.55 : 0.25)) * fbMasterGain();
+  // volume the OS volume keys can actually reach. fbSoundGain('metronome')
+  // is a second, independent knob (Preferences → 声音音量) for just this
+  // sound's own default loudness. Skip creating any audio nodes at all when
+  // muted — exponentialRampToValueAtTime throws if asked to ramp from/to
+  // exactly 0, and there's no point playing silence anyway.
+  //
+  // Peaks were previously 1 / 0.85 / 0.45, and the oscillator was a pure
+  // sine — at fbSoundGain('metronome') defaulting to 1 and fbMasterGain()
+  // defaulting to 1, the downbeat click's peak sample was already AT
+  // digital full scale (1.0). Turning the "声音音量" slider above 100% just
+  // pushed samples past ±1 into clipping, which reads as thinner/harsher,
+  // not louder — that's why 135% still sounded quiet. Fixed two ways:
+  // triangle (vs. sine) carries real harmonic energy, which is perceived as
+  // noticeably louder than a pure sine at the *same* peak amplitude; and
+  // peaks are pulled down to 0.7/0.6/0.32 so there's real headroom left for
+  // the volume slider (now up to 200%, see FB_SOUND_VOLUME_MAX) to actually
+  // do something before hitting the ceiling.
+  const soundGain = typeof fbSoundGain === 'function' ? fbSoundGain('metronome') : 1;
+  const vol = (isDownbeat ? 0.7 : (isBeat ? 0.6 : 0.32)) * fbMasterGain() * soundGain;
   if (vol > 0) {
     const osc = ctx.createOscillator();
-    osc.type = 'sine';
+    osc.type = 'triangle';
     osc.frequency.value = isDownbeat ? 1500 : (isBeat ? 1000 : 700);
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(vol, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.11);
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(time);
-    osc.stop(time + 0.06);
+    osc.stop(time + 0.12);
   }
 
   const delayMs = Math.max(0, (time - ctx.currentTime) * 1000);

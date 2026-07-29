@@ -52,6 +52,8 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 
 const fbState = {
   inited: false,
+  chordInited: false,
+  prefsLoaded: false,
   activeMode: 'pitch',
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,
            strings: [true, true, true, true, true, true], practiceMode: 'all', stats: {},
@@ -100,6 +102,7 @@ const fbState = {
 // behind visiting any particular page.
 function fbRenderDeviceBar() {
   fbMasterVolumeLoad();
+  fbSoundVolumesLoad();
   document.getElementById('fb-device-bar').innerHTML = `
     <span>Input device:</span>
     <select class="fb-device-select" onchange="fbMicDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
@@ -112,11 +115,23 @@ function fbRenderDeviceBar() {
   fbRefreshOutputDevices();
 }
 
+// fb_prefs bundles every drill's settings (pitch/chord/ear/bend/seq) into one
+// blob, but Fretboard and Chord Match are now separate pages that can be
+// visited in either order — this makes sure the blob loads exactly once
+// regardless of which page gets there first, so a later visit to the other
+// page doesn't re-run fbPrefsLoad() and clobber any in-memory state (stats,
+// unsaved option changes) accumulated since the first load.
+function fbEnsurePrefsLoaded() {
+  if (fbState.prefsLoaded) return;
+  fbState.prefsLoaded = true;
+  fbPrefsLoad();
+  fbApplyDiagramSize();  // apply saved diagram size as CSS variable
+}
+
 function initFretboardPage() {
   if (fbState.inited) return;
   fbState.inited = true;
-  fbPrefsLoad();
-  fbApplyDiagramSize();  // apply saved diagram size as CSS variable
+  fbEnsurePrefsLoaded();
   fbPitchLoadStats();
   fbRenderEarOptions();
   fbEarLoadStats();
@@ -127,15 +142,25 @@ function initFretboardPage() {
   fbPitchNewNote();
   fbRenderPitchStatsTable();
   fbRenderTunerStrings();
-  fbChordLoadStats();
-  fbRenderChordOptions();
-  fbChordNewChord();
-  fbRenderChordStatsTable();
   fbBendInit();
   fbRenderSeqOptions();
   fbSeqBuild();
   fbSeqSetMode(fbState.seq.mode);
   fbShowMode(fbState.activeMode);
+}
+
+// Chord Match used to be one of Fretboard's tabs (fbShowMode('chord')); it's
+// now a standalone top-level page so it isn't also nested a level down —
+// same fbState.chord / fbMic underneath, just its own page lifecycle.
+function initChordMatchPage() {
+  if (fbState.chordInited) return;
+  fbState.chordInited = true;
+  fbEnsurePrefsLoaded();
+  fbChordLoadStats();
+  fbRenderChordOptions();
+  fbChordNewChord();
+  fbRenderChordStatsTable();
+  fbRenderControlAction(); // register this page's mic drill on the shared transport bar
 }
 
 function fbShowMode(mode) {
@@ -154,7 +179,8 @@ function fbShowMode(mode) {
   fbPrefsSave();
 }
 
-// releases the mic when navigating away from the Fretboard page entirely
+// releases the mic when navigating away from Fretboard or Chord Match
+// entirely (see showPage()'s leavingMicPage check in app.js)
 function fbLeavePage() {
   if (fbMic.listening) fbMicStop();
 }
@@ -255,7 +281,11 @@ function fbPrefsLoad() {
     if (saved.seq.mode === 'reference' || saved.seq.mode === 'verify') fbState.seq.mode = saved.seq.mode;
     if (typeof saved.seq.showPositionHint === 'boolean') fbState.seq.showPositionHint = saved.seq.showPositionHint;
   }
-  if (['pitch', 'tuner', 'chord', 'ear', 'bend', 'seq'].includes(saved.activeMode)) {
+  // 'chord' deliberately excluded — Chord Match moved off the Fretboard tab
+  // strip onto its own page, so a stale saved 'chord' (from before that
+  // change) must fall through to the default 'pitch' rather than restore a
+  // mode fbShowMode can no longer find a tab/panel for.
+  if (['pitch', 'tuner', 'ear', 'bend', 'seq'].includes(saved.activeMode)) {
     fbState.activeMode = saved.activeMode;
   }
 }
@@ -592,7 +622,7 @@ function fbEarPlaySequence(midiNotes) {
     filter.type = 'lowpass';
     filter.frequency.value = 3200;
     filter.Q.value = 0.7;
-    const peak = 0.3 * fbMasterGain();
+    const peak = 0.3 * fbMasterGain() * fbSoundGain('practiceTones');
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, atTime);
     gain.gain.linearRampToValueAtTime(peak, atTime + 0.015);
@@ -1472,6 +1502,89 @@ function fbMasterGain() {
   return fbMasterVolume * fbMasterVolume;
 }
 
+// ── Per-sound-category default volume — a second, independent knob on top
+// of the master fader above. fbMasterGain() scales *everything* at once (for
+// audio interfaces with no other software volume control); these let you
+// fix one specific generated sound (the metronome, say) being too quiet by
+// default without turning up every other sound along with it. Each category
+// is a 0-1.5 multiplier on that sound's own baked-in peak amplitude, default
+// 1 (i.e. "use the baked-in default, unchanged") — same on-top-of-master
+// relationship fbMasterGain() has with a sound's own peak, just one layer
+// further out. Rendered in Preferences (fbRenderSoundVolumePrefs below);
+// persisted client-side same as fbMasterVolume, since it's a playback
+// preference, not a server-backed setting.
+const FB_SOUND_VOLUME_KEY = 'fb_sound_volumes';
+const FB_SOUND_VOLUME_DEFAULT = 1;
+// Raised from 1.5: the underlying click/beep peaks used to already sit at
+// (near) digital full scale by default, so this slider had almost no real
+// headroom before clipping regardless of its max — see the notes on
+// stScheduleClick (speed-trainer.js) and ptBeep (practice-timer.js). Now
+// that those peaks were pulled down, 2.0 has real room to be audible.
+const FB_SOUND_VOLUME_MAX = 2;
+// Every generated sound effect that already multiplies fbMasterGain() into
+// its own gain calculation gets an entry here — add a new one whenever a new
+// synthesized sound is added elsewhere, so it doesn't silently stay stuck at
+// its hardcoded default forever.
+const FB_SOUND_CATEGORIES = [
+  { id: 'metronome', label: '节拍器 Metronome', hint: 'Speed Trainer 的节拍点击声' },
+  { id: 'timerAlert', label: '计时器提醒音 Timer alert', hint: '练习计时器倒数结束时的三声提示音' },
+  { id: 'practiceTones', label: '练耳 / 和弦试听 Practice tones', hint: 'Fretboard 的 Ear Training 音程播放 + Chord Match 的和弦进行试听' },
+  { id: 'progressionChords', label: '级数进行试听 Progression playback', hint: 'Progressions 页面的和弦进行试听' },
+  { id: 'countIn', label: '预备拍 Count-in', hint: 'Song Loop 播放前，补齐弱起小节/预备小节用的鼓棒声' },
+];
+let fbSoundVolumes = {};
+
+function fbSoundVolumesLoad() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(FB_SOUND_VOLUME_KEY)) || {}; } catch (_) { saved = {}; }
+  fbSoundVolumes = {};
+  FB_SOUND_CATEGORIES.forEach(({ id }) => {
+    const v = saved[id];
+    fbSoundVolumes[id] = (Number.isFinite(v) && v >= 0 && v <= FB_SOUND_VOLUME_MAX) ? v : FB_SOUND_VOLUME_DEFAULT;
+  });
+}
+function fbSoundVolumesSave() {
+  localStorage.setItem(FB_SOUND_VOLUME_KEY, JSON.stringify(fbSoundVolumes));
+}
+// What a sound category's own gain calculation should multiply in, alongside
+// fbMasterGain(). Falls back to the neutral default for an unrecognized id
+// (shouldn't happen) rather than throwing, since this runs inline in every
+// note/click's gain math.
+function fbSoundGain(categoryId) {
+  const v = fbSoundVolumes[categoryId];
+  return Number.isFinite(v) ? v : FB_SOUND_VOLUME_DEFAULT;
+}
+function fbSetSoundVolume(categoryId, value) {
+  const v = Math.max(0, Math.min(FB_SOUND_VOLUME_MAX, parseFloat(value)));
+  fbSoundVolumes[categoryId] = Number.isFinite(v) ? v : FB_SOUND_VOLUME_DEFAULT;
+  fbSoundVolumesSave();
+}
+
+// Rendered into Preferences (#fb-sound-volume-prefs) — see updateTransportForPage-
+// style page-show hook in app.js's showPage('prefs') branch.
+function fbRenderSoundVolumePrefs() {
+  const el = document.getElementById('fb-sound-volume-prefs');
+  if (!el) return;
+  fbSoundVolumesLoad();
+  const rows = FB_SOUND_CATEGORIES.map(({ id, label, hint }) => `
+    <div class="field fb-sound-vol-row">
+      <label title="${htmlEsc(hint)}">${htmlEsc(label)}</label>
+      <input type="range" min="0" max="${FB_SOUND_VOLUME_MAX}" step="0.05" value="${fbSoundGain(id)}"
+        oninput="fbSetSoundVolume('${id}', this.value); this.nextElementSibling.textContent = Math.round(this.value*100)+'%'">
+      <span class="fb-sound-vol-pct">${Math.round(fbSoundGain(id) * 100)}%</span>
+      <button type="button" class="btn btn-ghost btn-sm" title="恢复默认 100%"
+        onclick="fbSetSoundVolume('${id}', 1); fbRenderSoundVolumePrefs()">重置</button>
+    </div>
+  `).join('');
+  el.innerHTML = `
+    <div class="prefs-form fb-sound-vol-form">
+      <h3 class="fb-sound-vol-title">声音音量 · Sound volume</h3>
+      <p class="fb-sound-vol-desc">在上面的总音量之外，单独调整每种合成音效的默认大小（100% = 默认值）。</p>
+      ${rows}
+    </div>
+  `;
+}
+
 // ── Shared output-device selection (which speaker/interface plays back any
 // audio the app generates — Ear Training and Speed Trainer's metronome so
 // far, each with its own AudioContext) ──
@@ -1494,8 +1607,28 @@ async function fbApplySinkId(ctx) {
   try { await ctx.setSinkId(fbOutput.deviceId); } catch (_) { /* device gone, or not permitted */ }
 }
 
+// HTMLMediaElement.setSinkId() is the same Audio Output Devices API, applied
+// to a <audio>/<video> element instead of a Web Audio AudioContext — needed
+// for anything that plays back real audio files (Song Loop's <audio id="sl-
+// player">) rather than synthesizing tones through an AudioContext. Checked
+// for support separately since in principle a browser could implement one
+// without the other, even though in practice they track together.
+const FB_MEDIA_SETSINKID_SUPPORTED = typeof HTMLMediaElement !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype;
+const fbRegisteredMediaElements = new Set();
+
+function fbRegisterMediaElement(el) {
+  fbRegisteredMediaElements.add(el);
+  fbApplySinkIdToMedia(el);
+}
+
+async function fbApplySinkIdToMedia(el) {
+  if (!el || !FB_MEDIA_SETSINKID_SUPPORTED || !fbOutput.deviceId) return;
+  try { await el.setSinkId(fbOutput.deviceId); } catch (_) { /* device gone, or not permitted */ }
+}
+
 function fbApplySinkIdToAll() {
   fbRegisteredAudioContexts.forEach(fbApplySinkId);
+  fbRegisteredMediaElements.forEach(fbApplySinkIdToMedia);
 }
 
 // Output device labels only become readable after mic permission has been
@@ -1627,15 +1760,21 @@ function fbMicDrillHandlers(mode) {
 const FB_MIC_DRILL_LABELS = { pitch: 'Pitch Match', tuner: 'Tuner', chord: 'Chord Match', bend: 'Bend & Vibrato', seq: 'Scale Sequences' };
 function fbRenderControlAction() {
   if (typeof registerTransport !== 'function') return; // app.js not loaded (e.g. unit tests)
+  // Chord Match is a separate page from Fretboard now, but still drives the
+  // same mic-drill transport pattern — its mode is implied by which page is
+  // active, not read from fbState.activeMode (that only ever varies across
+  // Fretboard's own remaining tabs).
+  const onChordMatch = document.getElementById('page-chordmatch')?.classList.contains('active');
   const onFretboard = document.getElementById('page-fretboard')?.classList.contains('active');
-  const handlers = onFretboard ? fbMicDrillHandlers(fbState.activeMode) : null;
+  const mode = onChordMatch ? 'chord' : (onFretboard ? fbState.activeMode : null);
+  const handlers = mode ? fbMicDrillHandlers(mode) : null;
   if (!handlers) { clearTransport(); return; }
   registerTransport({
-    kind: 'listen', label: FB_MIC_DRILL_LABELS[fbState.activeMode],
+    kind: 'listen', label: FB_MIC_DRILL_LABELS[mode],
     play: handlers.start, stop: handlers.stop,
   });
   // reflect the live listening state (e.g. re-registered mid-session on a device change)
-  setTransportState(fbMic.listening && fbMic.owner === fbState.activeMode ? 'listening' : 'stopped');
+  setTransportState(fbMic.listening && fbMic.owner === mode ? 'listening' : 'stopped');
 }
 
 // ── Pitch Match drill (mic-based ear training) ──
@@ -2865,7 +3004,7 @@ function fbChordPreviewProgression() {
       osc.type = 'sine';
       osc.frequency.value = fbFreqFromMidi(rootMidi + iv);
       const gain = ctx.createGain();
-      const peak = 0.22 * fbMasterGain();
+      const peak = 0.22 * fbMasterGain() * fbSoundGain('practiceTones');
       gain.gain.setValueAtTime(0, t);
       gain.gain.linearRampToValueAtTime(peak, t + 0.02);
       gain.gain.setValueAtTime(peak, t + chordDur - 0.1);
@@ -3871,5 +4010,8 @@ if (typeof module !== 'undefined' && module.exports) {
     fbChordPickTargetProgression, fbChordPreviewProgression,
     FB_SEQ_SCALE_KEYS, FB_SEQ_PATTERNS, fbSeqScaleSteps, fbSeqBuildAscending, fbSeqBuildSemitoneOffsets,
     fbSeqAnchorPosition, fbSeqAssignFretting,
+    FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
+    fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
+    fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,
   };
 }

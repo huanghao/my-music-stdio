@@ -100,6 +100,33 @@ def test_status_includes_session_metadata(player, tmp_path):
     player.stop()
 
 
+def test_set_volume_sends_cc7_to_all_channels(player):
+    player._fs.cc.reset_mock()
+    player.set_volume(0.5)
+    calls = [c for c in player._fs.cc.call_args_list if c.args[1] == 7]
+    assert len(calls) == 16
+    assert all(c.args[2] == 64 for c in calls)  # round(0.5 * 127)
+
+
+def test_set_volume_clamps_out_of_range(player):
+    player.set_volume(2.0)
+    assert player._volume == 1.0
+    player.set_volume(-1.0)
+    assert player._volume == 0.0
+
+
+def test_play_reapplies_current_volume_on_fresh_channels(player, tmp_path):
+    player.set_volume(0.25)
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player._fs.cc.reset_mock()
+    player.play(f)
+    time.sleep(0.05)
+    calls = [c for c in player._fs.cc.call_args_list if c.args[1] == 7]
+    assert len(calls) == 16
+    assert all(c.args[2] == round(0.25 * 127) for c in calls)
+    player.stop()
+
+
 def test_set_bpm_updates_session_metadata(player, tmp_path):
     f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
     player.play(

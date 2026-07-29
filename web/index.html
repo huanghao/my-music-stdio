@@ -13,18 +13,20 @@
 <nav class="nav">
   <span class="nav-title">🎵</span>
   <!-- Backing tracks -->
-  <button class="nav-btn active" data-page="vamp"      onclick="showPage('vamp')">Vamp</button>
-  <button class="nav-btn"        data-page="jam"        onclick="showPage('jam')">Jam</button>
+  <button class="nav-btn active" data-page="vamp"      onclick="navGoToPage('vamp')">Vamp</button>
+  <button class="nav-btn"        data-page="jam"        onclick="navGoToPage('jam')">Jam</button>
   <span class="nav-sep"></span>
   <!-- Practice tools -->
-  <button class="nav-btn"        data-page="licks"      onclick="showPage('licks')">Licks</button>
-  <button class="nav-btn"        data-page="fretboard"  onclick="showPage('fretboard')">Fretboard</button>
-  <button class="nav-btn"        data-page="fretboard"  onclick="showPage('fretboard'); fbShowMode('chord');">Chord Match</button>
-  <button class="nav-btn"        data-page="speed"      onclick="showPage('speed')">Speed Trainer</button>
-  <button class="nav-btn"        data-page="songloop"   onclick="showPage('songloop')">Song Loop</button>
+  <button class="nav-btn"        data-page="licks"      onclick="navGoToPage('licks')">Licks</button>
+  <button class="nav-btn"        data-page="fretboard"  onclick="navGoToPage('fretboard')">Fretboard</button>
+  <button class="nav-btn"        data-page="chordmatch" onclick="navGoToPage('chordmatch')">Chord Match</button>
+  <button class="nav-btn"        data-page="speed"      onclick="navGoToPage('speed')">Speed Trainer</button>
+  <button class="nav-btn"        data-page="songloop"   onclick="navGoToPage('songloop')">Song Loop</button>
+  <button class="nav-btn"        data-page="progressions" onclick="navGoToPage('progressions')">Progressions</button>
+  <button class="nav-btn"        data-page="keydrill"   onclick="navGoToPage('keydrill')">Key Drill</button>
   <span class="nav-sep"></span>
   <!-- Settings -->
-  <button class="nav-btn"        data-page="prefs"      onclick="showPage('prefs')">Preferences</button>
+  <button class="nav-btn"        data-page="prefs"      onclick="navGoToPage('prefs')">Preferences</button>
   <div class="nav-spacer"></div>
   <div class="conn-indicator" id="conn-indicator" title="Server connection">
     <div class="conn-dot" id="conn-dot"></div>
@@ -71,7 +73,6 @@
     <div class="fb-tabs">
       <button class="fb-tab active" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
       <button class="fb-tab" data-fbmode="tuner" onclick="fbShowMode('tuner')">Tuner</button>
-      <button class="fb-tab" data-fbmode="chord" onclick="fbShowMode('chord')">Chord Match</button>
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
       <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
       <button class="fb-tab" data-fbmode="seq" onclick="fbShowMode('seq')">Scale Sequences</button>
@@ -101,27 +102,6 @@
       <button class="btn btn-ghost btn-sm" onclick="fbTunerReset()">Reset</button>
     </div>
     <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
-  </div>
-
-  <!-- Chord Match (mic-based chord sight-reading: strum the named chord, get confirmation) -->
-  <div class="fb-panel" id="fb-chord">
-    <div class="fb-options" id="fb-chord-options"></div>
-    <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
-
-    <div id="fb-chord-exam-panel">
-      <div class="fb-stats" id="fb-chord-stats"></div>
-      <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
-      <div class="fb-pitch-target" id="fb-chord-target"></div>
-      <div class="fb-chord-formula" id="fb-chord-formula"></div>
-      <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
-      <div class="fb-caged-answer">
-        <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
-        <button class="btn btn-ghost btn-sm" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()" style="display:none">🔊 Preview progression</button>
-      </div>
-      <div class="fb-feedback" id="fb-chord-feedback"></div>
-      <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
-      <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
-    </div>
   </div>
 
   <!-- Ear Training: interval recognition within a pentatonic/blues scale -->
@@ -220,6 +200,32 @@
   </div>
 </div>
 
+<!-- CHORD MATCH PAGE (mic-based chord sight-reading: strum the named chord,
+     get confirmation) — promoted to its own top-level page so it isn't also
+     nested as a Fretboard sub-tab; still shares fbState.chord/fbMic with
+     fretboard.js since the underlying drill logic didn't need to move. -->
+<div class="page" id="page-chordmatch">
+  <div class="page-header"><h2 class="page-title">Chord Match</h2></div>
+
+  <div class="fb-options" id="fb-chord-options"></div>
+  <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
+
+  <div id="fb-chord-exam-panel">
+    <div class="fb-stats" id="fb-chord-stats"></div>
+    <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
+    <div class="fb-pitch-target" id="fb-chord-target"></div>
+    <div class="fb-chord-formula" id="fb-chord-formula"></div>
+    <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
+    <div class="fb-caged-answer">
+      <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
+      <button class="btn btn-ghost btn-sm" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()" style="display:none">🔊 Preview progression</button>
+    </div>
+    <div class="fb-feedback" id="fb-chord-feedback"></div>
+    <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
+    <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
+  </div>
+</div>
+
 <!-- SPEED TRAINER PAGE -->
 <!-- LICKS LIST PAGE -->
 <div class="page" id="page-licks">
@@ -234,7 +240,7 @@
 <!-- LICK DETAIL PAGE -->
 <div class="page" id="page-lick-detail">
   <div class="page-back-row">
-    <button class="btn btn-ghost btn-sm" onclick="showPage('licks')">← Licks</button>
+    <button class="btn btn-ghost btn-sm" onclick="navGoToPage('licks')">← Licks</button>
   </div>
   <div id="lick-detail-content"></div>
 </div>
@@ -253,10 +259,10 @@
   <div class="st-active-lick-banner" id="st-active-lick-banner" style="display:none"></div>
 
   <div class="st-options">
-    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:64px"></label>
-    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" style="width:64px"></label>
-    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" style="width:56px"> BPM</label>
-    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" style="width:56px"></label>
+    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:72px"></label>
+    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" style="width:72px"></label>
+    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" style="width:64px"> BPM</label>
+    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" style="width:64px"></label>
     <label>Subdivision:
       <select id="st-subdivision">
         <option value="1" selected>Quarter notes</option>
@@ -265,7 +271,7 @@
       </select>
     </label>
     <label><input type="checkbox" id="st-auto-advance"> Auto-advance every
-      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" style="width:48px"> bars</label>
+      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" style="width:56px"> bars</label>
   </div>
 
   <div class="st-display">
@@ -289,19 +295,56 @@
 
 </div>
 
+<!-- KEY DRILL PAGE -->
+<div class="page" id="page-keydrill">
+  <div class="page-header"><h2 class="page-title">Key Drill</h2></div>
+  <div class="kd-intro">看和弦秒答级数，看级数秒答和弦——练到像乘法口诀表一样条件反射。出题按常用调的实际使用频率加权，越常用的调（G/C/D/A/E）出现越多。</div>
+
+  <div class="kd-options">
+    <label>方向
+      <select id="kd-direction">
+        <option value="mixed">混合（两个方向都练）</option>
+        <option value="chordToDegree">看和弦猜级数</option>
+        <option value="degreeToChord">看级数猜和弦</option>
+      </select>
+    </label>
+    <label>练习范围
+      <select id="kd-focus-key"></select>
+    </label>
+  </div>
+
+  <div class="kd-stats-row">
+    <span>本次正确率 <b id="kd-session-stat">0 / 0</b></span>
+    <span>连对 <b id="kd-streak">0</b></span>
+    <span>反应时限 <b id="kd-time-limit">5.0s</b></span>
+  </div>
+
+  <div class="kd-card">
+    <div class="kd-key-label" id="kd-key-label"></div>
+    <div class="kd-timer-bar"><div class="kd-timer-fill" id="kd-timer-fill"></div></div>
+    <div class="kd-prompt" id="kd-prompt"></div>
+    <div class="kd-choices" id="kd-choices"></div>
+    <div class="kd-feedback" id="kd-feedback"></div>
+    <button type="button" class="kd-continue-btn" id="kd-continue-btn" style="display:none">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+  </div>
+
+  <div class="kd-keystats-title">各调正确率（按常用度排序）</div>
+  <div class="kd-keystats" id="kd-keystats"></div>
+</div>
+
 <!-- SONG LOOP PAGE -->
 <div class="page" id="page-songloop">
   <div class="gp-outer">
   <div class="gp-card">
 
     <div class="gp-dropzone-row" id="sl-dropzone-row">
-      <label class="gp-dropzone" id="sl-dropzone">
+      <span class="gp-ctl-lbl">音频</span>
+      <label class="gp-tap-btn gp-tap-btn-accent" id="sl-dropzone">
         <input type="file" id="sl-file-input" accept="audio/*" />
-        <span id="sl-dropzone-text">点击选择，或把音频文件拖到这里（mp3 / m4a / wav）——会自动加入素材库，以便记住你的设置</span>
+        选择文件
       </label>
-      <div style="margin-top:8px; text-align:center;">
-        <button type="button" class="gp-tap-btn" id="sl-browse-library-btn">🎧 从资料库选择</button>
-      </div>
+      <button type="button" class="gp-tap-btn" id="sl-browse-library-btn">从资料库选择</button>
+      <span class="gp-sidecar-hint" id="sl-dropzone-text">或把文件拖到这一行（mp3 / m4a / wav）——会自动加入素材库，以便记住你的设置</span>
     </div>
 
     <!-- toolbar -->
@@ -316,6 +359,9 @@
           <input type="range" id="sl-speed-slider" min="50" max="150" step="1" value="100" class="gp-slider">
           <input type="number" id="sl-speed-num" min="50" max="150" value="100" class="gp-num-sm">
           <span class="gp-pct">%</span>
+          <span class="gp-pct">=</span>
+          <input type="number" id="sl-speed-bpm" min="1" max="600" class="gp-num-sm" title="按目标 BPM 直接设定速度">
+          <span class="gp-pct">BPM</span>
         </div>
         <div class="gp-ctl-sub">音高不变</div>
       </div>
@@ -330,6 +376,18 @@
           <button class="gp-tap-btn" id="sl-zoom-fit" title="缩放到能看到整曲">适应整曲</button>
         </div>
         <div class="gp-ctl-sub">小节网格的横向缩放</div>
+      </div>
+
+      <div class="gp-sep"></div>
+
+      <div class="gp-ctl-group">
+        <div class="gp-ctl-row">
+          <span class="gp-ctl-lbl">小节标记</span>
+          <span class="gp-ctl-lbl">每</span>
+          <input type="number" id="sl-bar-tick-step" min="1" max="64" value="4" class="gp-num-sm">
+          <span class="gp-ctl-lbl">小节</span>
+        </div>
+        <div class="gp-ctl-sub">波形图上小节号刻度的间隔（默认 4，对应多数歌曲的 4 小节一句）</div>
       </div>
 
       <div class="gp-sep"></div>
@@ -363,28 +421,61 @@
 
       <div class="gp-offset-panel" id="sl-offset-panel">
         <span class="gp-ctl-lbl">偏移</span>
-        <button class="gp-offset-btn" id="sl-offset-minus-bar" title="第 1 小节起点向前移一小节">-1 小节</button>
-        <button class="gp-offset-btn" id="sl-offset-minus-beat" title="第 1 小节起点向前移一拍">-1 拍</button>
+        <button class="gp-offset-btn" id="sl-offset-minus-bar" title="第 1 小节起点提前一小节（更早开始）">-1 小节</button>
+        <button class="gp-offset-btn" id="sl-offset-minus-beat" title="第 1 小节起点提前一拍（更早开始）">-1 拍</button>
         <button class="gp-offset-btn gp-offset-accent" id="sl-offset-set-here" title="把当前播放位置设为第 1 小节起点">当前点=1</button>
-        <button class="gp-offset-btn" id="sl-offset-plus-beat" title="第 1 小节起点向后移一拍">+1 拍</button>
-        <button class="gp-offset-btn" id="sl-offset-plus-bar" title="第 1 小节起点向后移一小节">+1 小节</button>
+        <button class="gp-offset-btn" id="sl-offset-plus-beat" title="第 1 小节起点推迟一拍（更晚开始）">+1 拍</button>
+        <button class="gp-offset-btn" id="sl-offset-plus-bar" title="第 1 小节起点推迟一小节（更晚开始）">+1 小节</button>
         <span class="gp-offset-readout" id="sl-offset-readout">0 拍</span>
+        <label class="gp-offset-mini" title="第一个显示的小节该标几号——不同歌曲习惯不同，随便选">起始号
+          <input type="number" id="sl-start-bar-num" class="gp-offset-mini-input" value="1" step="1">
+        </label>
+        <label class="gp-offset-mini" title="弱起小节的拍数，0 表示没有弱起小节">弱起拍数
+          <input type="number" id="sl-pickup-beats" class="gp-offset-mini-input" value="0" min="0" step="1">
+        </label>
+        <label class="gp-offset-mini" title="播放前用鼓棒声补齐开头：有弱起小节就只数出缺的那几拍，没有就数一整个预备小节">
+          <input type="checkbox" id="sl-count-in-toggle"> 预备拍
+        </label>
       </div>
 
       <div class="gp-phrase-panel" id="sl-phrase-panel">
-        <span class="gp-ctl-lbl">句首</span>
-        <button class="gp-phrase-btn gp-phrase-accent" id="sl-phrase-set-here" title="把当前播放位置所在的小节设为句首">当前点=句首</button>
-        <button class="gp-phrase-btn" id="sl-phrase-prev" title="句首向前挪一小节">-1 小节</button>
-        <button class="gp-phrase-btn" id="sl-phrase-next" title="句首向后挪一小节">+1 小节</button>
-        <button class="gp-phrase-btn" id="sl-phrase-clear" title="删除当前选中的句首">删除句首</button>
-        <span class="gp-phrase-readout" id="sl-phrase-readout">尚未选择句首</span>
+        <span class="gp-ctl-lbl">段落</span>
+        <button class="gp-phrase-btn gp-phrase-accent" id="sl-phrase-set-here" title="把当前播放位置所在的小节设为段落起点">当前点=段落</button>
+        <button class="gp-phrase-btn" id="sl-phrase-prev" title="段落起点向前挪一小节">-1 小节</button>
+        <button class="gp-phrase-btn" id="sl-phrase-next" title="段落起点向后挪一小节">+1 小节</button>
+        <button class="gp-phrase-btn" id="sl-phrase-clear" title="删除当前选中的段落">删除段落</button>
+        <span class="gp-phrase-readout" id="sl-phrase-readout">尚未选择段落</span>
+        <div class="gp-toc-panel" id="sl-toc-panel">
+          <button class="gp-toc-toggle" id="sl-toc-toggle" type="button" title="查看并跳转到整首歌的段落目录">目录 ▾</button>
+          <div class="gp-toc-list" id="sl-toc-list" hidden></div>
+        </div>
+      </div>
+
+      <div class="gp-chordref-panel" id="sl-chordref-panel">
+        <span class="gp-ctl-lbl">批量引用和弦</span>
+        <span class="gp-ctl-lbl">第</span>
+        <input type="number" id="sl-chordref-target-from" class="gp-num-sm" title="目标区间起始小节">
+        <span class="gp-ctl-lbl">-</span>
+        <input type="number" id="sl-chordref-target-to" class="gp-num-sm" title="目标区间结束小节">
+        <span class="gp-ctl-lbl">小节 = 第</span>
+        <input type="number" id="sl-chordref-source-from" class="gp-num-sm" title="从这个小节开始，逐格对应引用">
+        <span class="gp-ctl-lbl">小节开始</span>
+        <button class="gp-tap-btn" id="sl-chordref-apply">应用</button>
       </div>
 
       <div class="gp-sidecar-panel" id="sl-sidecar-panel">
         <span class="gp-ctl-lbl">Sidecar</span>
         <button class="gp-sidecar-btn gp-sidecar-accent" id="sl-sidecar-save">保存 sidecar</button>
         <button class="gp-sidecar-btn" id="sl-sidecar-load">载入 sidecar</button>
-        <span class="gp-sidecar-hint" id="sl-sidecar-hint">保存句首 / 歌词 / 简谱 / 偏移到单独的 .json 文件</span>
+        <span class="gp-sidecar-hint" id="sl-sidecar-hint">保存段落 / 歌词 / 简谱 / 偏移到单独的 .json 文件</span>
+      </div>
+
+      <div class="gp-lyric-import-panel" id="sl-lyric-import-panel">
+        <span class="gp-ctl-lbl">网易云歌词</span>
+        <input type="text" id="sl-lyric-song-id" class="gp-num-sm" style="width:9ch" placeholder="歌曲ID" inputmode="numeric">
+        <button class="gp-sidecar-btn" id="sl-lyric-import-btn">拉取并导入</button>
+        <a href="#" target="_blank" rel="noopener" id="sl-lyric-netease-link" class="gp-sidecar-btn" style="display:none">在网易云打开 ↗</a>
+        <span class="gp-sidecar-hint" id="sl-lyric-import-hint">歌曲ID 是网易云网页/APP 分享链接里 id= 后面那串数字 · 按时间戳分配到最近的小节，会覆盖已有歌词</span>
       </div>
     </div>
 
@@ -394,12 +485,17 @@
       <div class="gp-wave-loop" id="sl-wave-loop"></div>
       <div class="gp-wave-viewport" id="sl-wave-viewport"></div>
       <div class="gp-wave-bars" id="sl-wave-bars"></div>
+      <div class="gp-wave-labels" id="sl-wave-labels"></div>
       <div class="gp-wave-playhead" id="sl-wave-playhead"></div>
+      <div class="gp-wave-playhead-time" id="sl-wave-playhead-time"></div>
+      <div class="gp-wave-bar-ticks" id="sl-wave-bar-ticks"></div>
+      <div class="gp-wave-ruler" id="sl-wave-ruler"></div>
     </div>
 
     <!-- score header -->
     <div class="gp-score-header">
-      <select id="sl-key-select" class="gp-key-select"></select>
+      <input type="text" id="sl-key-select" class="gp-key-select" list="sl-key-list" autocomplete="off" placeholder="如 G 大调 / F# 大调 / Gm 小调">
+      <datalist id="sl-key-list"></datalist>
       <span class="gp-tag" id="sl-key-tag">默认</span>
       <div class="gp-sep gp-sep-sm"></div>
       <div class="gp-timesig">4/4</div>
@@ -414,6 +510,13 @@
       <div class="gp-score-hint">点击可改调 / BPM 手动输入</div>
     </div>
 
+    <div class="gp-chord-diagram-panel" id="sl-chord-diagram-panel">
+      <label class="gp-ctl-lbl">
+        <input type="checkbox" id="sl-chord-diagram-toggle"> 显示全曲和弦指型图
+      </label>
+      <div class="gp-chord-diagram-box" id="sl-chord-diagram-box" style="display:none"></div>
+    </div>
+
     <!-- bar grid -->
     <div class="gp-bar-grid" id="sl-bar-grid">
       <div class="gp-bar-grid-empty" id="sl-bar-grid-empty">还没有加载音频。</div>
@@ -425,10 +528,67 @@
   <audio id="sl-player" preload="auto"></audio>
 </div>
 
+<!-- PROGRESSIONS PAGE -->
+<div class="page" id="page-progressions">
+  <div class="page-header"><h2 class="page-title">Progressions</h2></div>
+
+  <div class="pl-toolbar">
+    <select id="pl-key-select" onchange="plOnKeyChange()"></select>
+    <label>BPM <input type="number" id="pl-bpm-input" min="20" max="300" step="1" style="width:72px;" onchange="plOnBpmChange()"></label>
+    <label>每小节拍数 <input type="number" id="pl-beats-per-bar-input" min="1" max="12" step="1" style="width:56px;" onchange="plOnBeatsPerBarChange()"></label>
+    <input type="text" id="pl-roman-input" placeholder="输入级数序列，例如 ii7 V7 | Imaj7 |"
+           onkeydown="if(event.key==='Enter') plAddFromInput()">
+    <button class="btn btn-primary btn-sm" onclick="plAddFromInput()">＋ 生成示例</button>
+    <button class="btn btn-ghost btn-sm" onclick="plToggleHelp()">语法说明</button>
+  </div>
+
+  <div class="pl-help-panel" id="pl-help-panel">
+    <table>
+      <tr><th>写法</th><th>含义</th><th>示例</th></tr>
+      <tr><td>大写级数</td><td>默认大三和弦</td><td><code>IV</code> → F</td></tr>
+      <tr><td>小写级数</td><td>默认小三和弦（vii 例外，默认减三）</td><td><code>ii</code> → Dm</td></tr>
+      <tr><td>b / #</td><td>级数前加变化音记号</td><td><code>bVI</code> → Ab</td></tr>
+      <tr><td>7 / maj7 / m7 / m7b5 / dim7 / 6 / m6 / 9 / sus4 / 9sus4 …</td><td>和弦性质后缀</td><td><code>V7</code> → G7</td></tr>
+      <tr><td>° / ø / +</td><td>减 / 半减 / 增三和弦简写</td><td><code>iiø7</code> → Dm7♭5</td></tr>
+      <tr><td>X/Y</td><td>附属和弦："Y 的临时 X"</td><td><code>V7/ii</code> → A7</td></tr>
+      <tr><td>subV</td><td>三全音代理简写（等价于 bII）</td><td><code>subV7</code> → Db7</td></tr>
+      <tr><td>|</td><td>小节线——一小节内没标拍数的和弦，平分这一小节剩下的拍子</td><td><code>ii7 V7 | Imaj7 |</code></td></tr>
+      <tr><td>*N</td><td>手动指定这个和弦占几拍</td><td><code>I*2 iv V |</code> → I 占 2 拍，iv、V 各占 1 拍</td></tr>
+    </table>
+  </div>
+
+  <div class="pl-body">
+    <div class="pl-sidebar">
+      <div class="pl-lookup">
+        <div class="pl-lookup-tabs">
+          <button class="pl-lookup-tab active" data-mode="major" onclick="plSetLookupMode('major')">大调</button>
+          <button class="pl-lookup-tab" data-mode="naturalMinor" onclick="plSetLookupMode('naturalMinor')">自然小调</button>
+        </div>
+        <div id="pl-lookup-table"></div>
+      </div>
+      <div class="pl-lib-title">资料库 · 点击直接生成示例</div>
+      <div id="pl-preset-area"></div>
+    </div>
+
+    <div class="pl-main">
+      <div class="pl-compare-bar">
+        <span>已勾选 <span class="pl-count" id="pl-sel-count">0</span> 个</span>
+        <button class="btn btn-sm" id="pl-play-selected-btn" onclick="plPlaySelected()" disabled>▶ 连播对比</button>
+        <button class="btn btn-ghost btn-sm" onclick="plClearAll()">清空全部</button>
+      </div>
+      <div class="pl-list-meta" id="pl-list-meta"></div>
+      <div class="pl-cards-area" id="pl-cards-area"></div>
+      <div class="pl-empty-msg" id="pl-empty-msg">还没有示例——在上面输入级数回车，或者从左侧资料库点一条。</div>
+    </div>
+  </div>
+</div>
+
 <!-- PREFERENCES PAGE -->
 <div class="page" id="page-prefs">
   <div class="page-header"><h2 class="page-title">Preferences</h2></div>
   <div id="prefs-form"></div>
+  <div id="fb-sound-volume-prefs"></div>
+  <div id="materials-prefs"></div>
 </div>
 
   <div class="statusbar">
@@ -468,6 +628,7 @@
           <li>图片：<code>![说明](链接)</code></li>
           <li>视频（YouTube/Bilibili）自动预览，改宽度：<code>[说明](链接 "w=300")</code></li>
           <li>PDF 自动预览，跳到第几页：<code>[说明](链接 "page=2")</code>，更精确到页内位置（仅 Chrome 生效）：<code>[说明](链接 "page=2,y=0.4")</code></li>
+          <li>PDF 默认预览框较窄，改宽度/高度：<code>[说明](链接 "page=2,w=900,h=700")</code>（w/h 单位是像素，不加就用默认的 640×600）</li>
           <li>音频链接自动变成"🎧 Practice with Song Loop"按钮，不用加参数</li>
           <li>用"📎 Attach material"选已有材料时，这段链接会自动帮你插好，只需要照着改数字</li>
         </ul>
@@ -543,6 +704,9 @@
 <script src="speed-trainer.js"></script>
 <script src="song-loop.js"></script>
 <script src="licks.js"></script>
+<script src="progression-lab.js"></script>
+<script src="key-drill.js"></script>
+<script src="materials.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

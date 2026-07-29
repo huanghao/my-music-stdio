@@ -149,6 +149,7 @@ function ptCancel() {
   ptStopTicking();
   ptSaveState();
   ptRender();
+  ptStopLinkedMetronome(); // "end together" — see its own comment below
 }
 
 function ptDismissDone() {
@@ -183,10 +184,28 @@ function ptToggleLinked() {
   if (typeof licksNotifyLinkedChange === 'function') licksNotifyLinkedChange(ptState.linked);
 }
 function ptOnMetronomeStart() {
-  if (ptState.linked && ptState.paused) ptResume();
+  if (!ptState.linked) return;
+  if (ptState.paused) { ptResume(); return; }
+  // Idle (never started, or previously ✕-cancelled) is the common case for
+  // "link then press Play" — without this the link looked like it did
+  // nothing at all, since resume-from-pause is only reachable once a
+  // countdown already exists. Reuse the last countdown's length (ptCancel
+  // clears running/paused but deliberately leaves totalSec alone) so a
+  // re-link picks up your usual practice-block length; fall back to the
+  // shortest preset the one time there's no prior length yet.
+  if (!ptState.running) ptStart(ptState.totalSec > 0 ? ptState.totalSec / 60 : PT_PRESET_MIN[0]);
 }
 function ptOnMetronomeStop() {
   if (ptState.linked && ptState.running) ptPause();
+}
+// The other half of the link: metronome Stop pauses the timer (above), but
+// the timer can also end on its own (countdown reaches 0, or the user hits
+// ✕) without anyone touching the metronome — "start together, end together"
+// means those need to stop the metronome too, not just the timer. Guarded
+// like every other cross-file call to Speed Trainer, and safe to call
+// unconditionally: stStop() itself no-ops if the metronome isn't running.
+function ptStopLinkedMetronome() {
+  if (ptState.linked && typeof stStop === 'function') stStop();
 }
 
 function ptComplete() {
@@ -200,6 +219,7 @@ function ptComplete() {
   ptSaveState();
   ptRender();
   ptBeep();
+  ptStopLinkedMetronome(); // "end together" — the countdown reaching 0 on its own is as much an "end" as ✕/metronome-Stop
 }
 
 function ptEnsureTicking() {
@@ -219,7 +239,8 @@ function ptTick() {
 
 // Three ascending short beeps through a dedicated AudioContext, routed
 // through the shared master-volume gain (fbMasterGain, fretboard.js) like
-// every other sound this app generates.
+// every other sound this app generates, plus its own 'timerAlert' category
+// gain (Preferences → 声音音量) for adjusting just this sound's default.
 function ptBeep() {
   try {
     if (!ptState.audioCtx) {
@@ -228,19 +249,28 @@ function ptBeep() {
     }
     const ctx = ptState.audioCtx;
     if (ctx.state === 'suspended') ctx.resume();
-    const gainScale = typeof fbMasterGain === 'function' ? fbMasterGain() : 1;
+    const masterGain = typeof fbMasterGain === 'function' ? fbMasterGain() : 1;
+    const soundGain = typeof fbSoundGain === 'function' ? fbSoundGain('timerAlert') : 1;
+    const gainScale = masterGain * soundGain;
+    // Was a pure sine at peak 0.85 — at default gains (masterGain=1,
+    // soundGain=1) that's already close to digital full scale (1.0), so the
+    // "声音音量" slider had almost no real headroom before clipping (see the
+    // matching note on stScheduleClick in speed-trainer.js — same root
+    // cause, same fix: triangle for real perceived loudness at equal peak
+    // amplitude, peak pulled down to leave the now-raised slider max
+    // (FB_SOUND_VOLUME_MAX, fretboard.js) room to actually do something).
     [880, 1108, 1318].forEach((freq, i) => {
       const t = ctx.currentTime + i * 0.16;
       const osc = ctx.createOscillator();
-      osc.type = 'sine';
+      osc.type = 'triangle';
       osc.frequency.value = freq;
       const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.5 * gainScale, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+      gain.gain.setValueAtTime(0.65 * gainScale, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
       osc.connect(gain);
       gain.connect(ctx.destination);
       osc.start(t);
-      osc.stop(t + 0.15);
+      osc.stop(t + 0.23);
     });
   } catch (_) { /* audio unavailable — the visual pill state still shows completion */ }
 }
@@ -323,5 +353,6 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     ptState, ptFmtTime, ptRemainingSec, ptTodayTotalSec, ptSecondsForContextSince, PT_PRESET_MIN,
     ptStart, ptPause, ptResume, ptCancel, ptSetLinked, ptToggleLinked, ptOnMetronomeStart, ptOnMetronomeStop,
+    ptComplete,
   };
 }

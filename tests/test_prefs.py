@@ -8,7 +8,7 @@ def test_load_defaults(tmp_path, monkeypatch):
     p = prefs.load()
     assert p["bars_per_row"] == 4
     assert "soundfont_path" in p
-    assert "songs_dir" in p
+    assert "accompaniments_dir" in p
 
 
 def test_save_and_reload(tmp_path, monkeypatch):
@@ -16,7 +16,7 @@ def test_save_and_reload(tmp_path, monkeypatch):
     from importlib import reload
     import src.prefs as prefs
     reload(prefs)
-    prefs.save({"bars_per_row": 8, "soundfont_path": "/tmp/test.sf2", "songs_dir": "/tmp/songs"})
+    prefs.save({"bars_per_row": 8, "soundfont_path": "/tmp/test.sf2", "accompaniments_dir": "/tmp/accompaniments"})
     p = prefs.load()
     assert p["bars_per_row"] == 8
     assert p["soundfont_path"] == "/tmp/test.sf2"

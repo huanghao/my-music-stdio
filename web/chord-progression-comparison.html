@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>和弦进行 A/B 对比试听（独立页面，未接入系统）</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f0efe8; color: #2a2a2a; margin: 0; padding: 24px 32px 60px;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { font-size: 12px; color: #888; margin-bottom: 24px; line-height: 1.6; }
+  .card {
+    background: #fff; border: 1px solid #ddd; border-radius: 8px;
+    padding: 20px 24px; margin-bottom: 20px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 8px; font-family: Georgia, serif; }
+  .note { font-size: 12.5px; color: #666; line-height: 1.7; margin: 0 0 14px; }
+  .note b { color: #2a2a2a; }
+  .variants { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  button {
+    font-size: 13px; padding: 8px 14px; border-radius: 6px; border: 1px solid #ccc;
+    background: #fafaf7; cursor: pointer; font-family: inherit;
+  }
+  button:hover { background: #eee; }
+  button.variant-btn { border-color: #4a7c9c; color: #2a5a78; }
+  button.cmp-btn { border-color: #b8843a; color: #8a5f22; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .sep { flex-basis: 100%; height: 0; }
+  code { background: #f3f2ec; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>🎵 和弦进行 A/B 对比试听</h1>
+<div class="sub">
+  独立页面，仅用于理解概念，没有接入 MyMusicStdio 系统 · 配合
+  <code>docs/chromatic-harmony-and-substitutions.md</code> 阅读，每张卡片对应文档里的一处"小变化对比"。<br>
+  每个变体单独播放，或者点"A 接 B 连续对比"背靠背听差异——建议戴耳机、循环点几次，差异往往第二三遍才抓得住。
+</div>
+
+<div class="card">
+  <h2>1. 属和弦的"想解决"感从哪来——把 3 音去掉会怎样</h2>
+  <p class="note">
+    对应文档 §6 的批注讨论：G7 的 3 音（B）是唯一贴着主音半音的音，也是三全音（B-F）的一半。
+    去掉它，和弦只剩根音+5+♭7（G-D-F）。<b>这里特意把 3 音摆在和弦最高音的位置</b>——
+    去掉它之后，最高音会从"贴着 C 只差半音的 B"直接掉到"离 C 还有一个大二度的 F"，
+    听最高的那条旋律线往哪走，比试图分辨和弦"整体音色"容易得多。
+    （这里把 3 音挪到最高音是<b>排列法（voicing）</b>调整，不是转位——根音仍在最低音；
+    两者的区别、以及为什么三全音移八度后关系不散，见
+    <a href="chord-inversion-vs-voicing.html">和弦转位 vs 排列法</a>。）
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="soloNote('B',4)">▶ 先单独听这个音：B（唯一被去掉的音）</button>
+    <div class="sep"></div>
+    <button class="variant-btn" onclick="play('t1a')">▶ A：Dm7 – G7 – Cmaj7（完整属和弦，3 音在最高声部）</button>
+    <button class="variant-btn" onclick="play('t1b')">▶ B：Dm7 – G(无3音) – Cmaj7（最高音变成 F）</button>
+    <button class="cmp-btn" onclick="playSeq(['t1a','t1b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>2. 三全音代理：ii-V-I vs ii-subV-I</h2>
+  <p class="note">
+    对应文档 §2。同一个 ii-I 框架，中间的属和弦换成三全音外的替身（G7 → Db7），
+    听贝斯线从"跳进"变成"半音爬行"，但两边"想解决到 C"的推力应该很接近。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t2a')">▶ A：Dm7 – G7 – Cmaj7</button>
+    <button class="variant-btn" onclick="play('t2b')">▶ B：Dm7 – Db7 – Cmaj7</button>
+    <button class="cmp-btn" onclick="playSeq(['t2a','t2b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3. 三种收回 I 的方式：正格终止 vs 后门进行（两种版本）</h2>
+  <p class="note">
+    对应文档 §6。A 是标准正格终止（V-I，导音半音上行）；B 是 ivm6 后门进行（♭6 音半音下行，
+    方向相反但同样是半音解决）；C 是"更完整"的借来 ii-V 形状（ivm7-♭VII7-I）。
+    重点听 B、C 是不是比 A 更"柔和、不宣告"。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t3a')">▶ A：Cmaj7 – G7 – Cmaj7（正格终止）</button>
+    <button class="variant-btn" onclick="play('t3b')">▶ B：Cmaj7 – Fm6 – Cmaj7（ivm6 后门）</button>
+    <button class="variant-btn" onclick="play('t3c')">▶ C：Cmaj7 – Fm7 – Bb7 – Cmaj7（完整后门）</button>
+    <div class="sep"></div>
+    <button class="cmp-btn" onclick="playSeq(['t3a','t3b'])">▶ A 接 B</button>
+    <button class="cmp-btn" onclick="playSeq(['t3b','t3c'])">▶ B 接 C</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>4. 借用和弦：调内 IV vs 借来的 iv</h2>
+  <p class="note">
+    对应文档 §3。同一个位置，F 大三和弦换成 Fm，听那种"忧郁转折"的色彩变化——
+    和声功能位置完全一样，只是从大调借还是从平行小调借。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t4a')">▶ A：Cmaj7 – F – Cmaj7（调内 IV）</button>
+    <button class="variant-btn" onclick="play('t4b')">▶ B：Cmaj7 – Fm – Cmaj7（借用 iv）</button>
+    <button class="cmp-btn" onclick="playSeq(['t4a','t4b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>5. 假终止 vs "刹车和弦"</h2>
+  <p class="note">
+    对应文档 §6"刹车和弦"。都是 V 之后不落到预期的 I，A 是标准假终止（V→vi，调内音），
+    B 是"刹车和弦"（V→♭VI，调外借用音）。听 B 是不是比 A 的"意外感"更强烈、更戏剧化。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t5a')">▶ A：Cmaj7 – G7 – Am7（假终止 V-vi）</button>
+    <button class="variant-btn" onclick="play('t5b')">▶ B：Cmaj7 – G7 – Ab（刹车和弦 V-♭VI）</button>
+    <button class="cmp-btn" onclick="playSeq(['t5a','t5b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>6. 属和弦 vs 属 9sus4</h2>
+  <p class="note">
+    对应文档 §6 V9sus4。3 音换成 4 音（挂留）再加 9 音，听那股"必须解决"的紧张感
+    是不是被削弱成了更"悬空、柔和"的感觉。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t6a')">▶ A：G7 – Cmaj7</button>
+    <button class="variant-btn" onclick="play('t6b')">▶ B：G9sus4 – Cmaj7</button>
+    <button class="cmp-btn" onclick="playSeq(['t6a','t6b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>7. 单个附属和弦 vs 套娃式属和弦链</h2>
+  <p class="note">
+    对应文档 §1。A 只用一个 A7（V/ii）推向 Dm；B 在前面加一个临时 ii（Em7♭5），
+    变成一整个临时 ii-V 再推向 Dm，听推力是不是更绵长、更"层层递进"。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t7a')">▶ A：Cmaj7 – A7 – Dm7 – G7 – Cmaj7</button>
+    <button class="variant-btn" onclick="play('t7b')">▶ B：Cmaj7 – Em7♭5 – A7 – Dm7 – G7 – Cmaj7</button>
+    <button class="cmp-btn" onclick="playSeq(['t7a','t7b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<div class="card">
+  <h2>8. 小调收尾：m7 vs m6</h2>
+  <p class="note">
+    对应之前批注的 m6/m7 区别。同一个属和弦解决到小调主和弦，7 音换成 6 音，
+    听 B 是不是比 A 更有"到站了"的松弛感，A 听起来是不是还像"没走完"。
+  </p>
+  <div class="variants">
+    <button class="variant-btn" onclick="play('t8a')">▶ A：B7 – Em7</button>
+    <button class="variant-btn" onclick="play('t8b')">▶ B：B7 – Em6</button>
+    <button class="cmp-btn" onclick="playSeq(['t8a','t8b'])">▶ A 接 B 连续对比</button>
+  </div>
+</div>
+
+<script>
+// ── 极简 Web Audio 合成，独立于系统主页面 (fretboard.js) 之外，专用于本页 ──
+const NOTE_INDEX = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,
+  G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
+
+// interval sets in semitones from the root; '7no3' / '9sus4' are ad-hoc for
+// this page's comparisons and not shared with fretboard.js's chord library
+const QUALITIES = {
+  '':      [0, 4, 7],
+  'm':     [0, 3, 7],
+  '7':     [0, 4, 7, 10],
+  'maj7':  [0, 4, 7, 11],
+  'm7':    [0, 3, 7, 10],
+  'm7b5':  [0, 3, 6, 10],
+  'm6':    [0, 3, 7, 9],
+  '7no3':  [0, 7, 10],
+  '9sus4': [0, 5, 7, 10, 14],
+};
+
+function noteMidi(name, octave) {
+  return NOTE_INDEX[name] + (octave + 1) * 12;
+}
+function freqFromMidi(m) {
+  return 440 * Math.pow(2, (m - 69) / 12);
+}
+
+let audioCtx = null;
+function getCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playNote(ctx, midi, atTime, dur) {
+  const osc = ctx.createOscillator();
+  osc.type = 'triangle';
+  osc.frequency.value = freqFromMidi(midi);
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2800;
+  filter.Q.value = 0.7;
+  const peak = 0.16;
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0, atTime);
+  gain.gain.linearRampToValueAtTime(peak, atTime + 0.02);
+  gain.gain.setValueAtTime(peak, atTime + dur - 0.08);
+  gain.gain.linearRampToValueAtTime(0, atTime + dur);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + dur + 0.02);
+}
+
+// Quarter-note length. Chords are given in `beats` (1 = quick passing chord,
+// 3-4 = held/landing chord) so playback has real harmonic rhythm instead of
+// every chord getting the same flat duration — but kept brisk (fast tempo,
+// short beat counts) so a 4-6 chord progression still reads as one forward
+// motion, not a string of held pads.
+const BEAT_SEC = 0.4;
+
+// Schedules a progression starting at `startAt` (ctx.currentTime-relative);
+// returns the ctx.currentTime at which the progression finishes.
+function scheduleProgression(chords, startAt) {
+  const ctx = getCtx();
+  let t = startAt;
+  chords.forEach(ch => {
+    const octave = ch.octave || 3;
+    const rootMidi = noteMidi(ch.root, octave);
+    // `tones` is an explicit voicing (semitone offsets from the root, can
+    // exceed 12 to place a tone in a higher octave) that overrides the
+    // default close-position voicing from QUALITIES — used when *where* a
+    // tone sits (e.g. on top, as the audible "melody" note) matters more
+    // than just which tones are present.
+    const offsets = ch.tones || QUALITIES[ch.quality];
+    const notes = [rootMidi - 12, ...offsets.map(iv => rootMidi + iv)];
+    const dur = (ch.beats || 2) * BEAT_SEC;
+    notes.forEach(n => playNote(ctx, n, t, dur));
+    t += dur;
+  });
+  return t;
+}
+
+// Plays a single note in isolation so a specific tone (e.g. "the note that's
+// about to disappear") can be anchored by ear before comparing full chords.
+function soloNote(root, octave) {
+  const ctx = getCtx();
+  playNote(ctx, noteMidi(root, octave), ctx.currentTime + 0.05, 1.2);
+}
+
+const PROGRESSIONS = {
+  // ii and V are quick passing chords (1 beat each), I lands and holds
+  // (3 beats) — enough contrast to feel like a cadence without dragging.
+  // The G chord uses an explicit voicing (`tones`) that puts the 3rd (B) on
+  // top — removing it in t1b then changes the actual top note (B -> F),
+  // which is far easier to hear than an inner voice quietly disappearing.
+  t1a: [{root:'D',quality:'m7',beats:1}, {root:'G',quality:'7',beats:1,tones:[0,7,10,16]}, {root:'C',quality:'maj7',beats:3}],
+  t1b: [{root:'D',quality:'m7',beats:1}, {root:'G',quality:'7no3',beats:1,tones:[0,7,10]}, {root:'C',quality:'maj7',beats:3}],
+
+  t2a: [{root:'D',quality:'m7',beats:1}, {root:'G',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:3}],
+  t2b: [{root:'D',quality:'m7',beats:1}, {root:'Db',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:3}],
+
+  // I (brief, just to establish "home") - [substitute for V] - I (held, the landing)
+  t3a: [{root:'C',quality:'maj7',beats:2}, {root:'G',quality:'7',beats:2}, {root:'C',quality:'maj7',beats:4}],
+  t3b: [{root:'C',quality:'maj7',beats:2}, {root:'F',quality:'m6',beats:2}, {root:'C',quality:'maj7',beats:4}],
+  // ivm7 and bVII7 share the middle bar (1+1), same rhythm as a real ii-V
+  t3c: [{root:'C',quality:'maj7',beats:2}, {root:'F',quality:'m7',beats:1}, {root:'Bb',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:4}],
+
+  t4a: [{root:'C',quality:'maj7',beats:2}, {root:'F',quality:'',beats:2}, {root:'C',quality:'maj7',beats:4}],
+  t4b: [{root:'C',quality:'maj7',beats:2}, {root:'F',quality:'m',beats:2}, {root:'C',quality:'maj7',beats:4}],
+
+  t5a: [{root:'C',quality:'maj7',beats:2}, {root:'G',quality:'7',beats:2}, {root:'A',quality:'m7',beats:4}],
+  t5b: [{root:'C',quality:'maj7',beats:2}, {root:'G',quality:'7',beats:2}, {root:'Ab',quality:'',beats:4}],
+
+  // V7 resolves quickly (1 beat); V9sus4 is deliberately made to hang
+  // noticeably longer (4 beats) — this is the whole point of the doc's
+  // "很多歌干脆让 V9sus4 悬停很久" line, so the two must NOT match durations
+  t6a: [{root:'G',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:3}],
+  t6b: [{root:'G',quality:'9sus4',beats:4}, {root:'C',quality:'maj7',beats:3}],
+
+  // 4-bar turnback compressed to a brisk pace: | C | A7 | Dm7 G7 | C |
+  t7a: [{root:'C',quality:'maj7',beats:2}, {root:'A',quality:'7',beats:2}, {root:'D',quality:'m7',beats:1}, {root:'G',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:3}],
+  // same shape, but bar 2 splits into Em7b5+A7 (1+1) — the chain gets
+  // busier/denser without changing overall length, which is exactly the
+  // "越走越紧、层层递进" effect the doc describes
+  t7b: [{root:'C',quality:'maj7',beats:2}, {root:'E',quality:'m7b5',beats:1}, {root:'A',quality:'7',beats:1}, {root:'D',quality:'m7',beats:1}, {root:'G',quality:'7',beats:1}, {root:'C',quality:'maj7',beats:3}],
+
+  t8a: [{root:'B',quality:'7',beats:1}, {root:'E',quality:'m7',beats:3}],
+  t8b: [{root:'B',quality:'7',beats:1}, {root:'E',quality:'m6',beats:3}],
+};
+
+// Leading-edge debounce so a fast double-click can't overlap two copies of
+// the same progression (same convention as fretboard.js's guarded()).
+function guarded(fn, ms) {
+  let blocked = false;
+  return function (...args) {
+    if (blocked) return;
+    blocked = true;
+    setTimeout(() => { blocked = false; }, ms);
+    return fn.apply(this, args);
+  };
+}
+
+function play(key) {
+  const ctx = getCtx();
+  const end = scheduleProgression(PROGRESSIONS[key], ctx.currentTime + 0.05);
+  return Math.ceil((end - ctx.currentTime) * 1000);
+}
+
+function playSeq(keys) {
+  const ctx = getCtx();
+  let t = ctx.currentTime + 0.05;
+  keys.forEach((key, idx) => {
+    t = scheduleProgression(PROGRESSIONS[key], t);
+    if (idx < keys.length - 1) t += 0.5; // pause between A and B
+  });
+}
+
+// Debounce every duration a click could overlap: single progressions get
+// their own natural length, A-then-B pairs run longer, so each button is
+// wrapped with a generous fixed window rather than trying to compute exact ms.
+play = guarded(play, 4000);
+playSeq = guarded(playSeq, 8500);
+soloNote = guarded(soloNote, 1500);
+</script>
+
+</body>
+</html>

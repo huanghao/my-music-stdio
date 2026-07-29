@@ -135,23 +135,58 @@ test('ptToggleLinked flips ptState.linked', () => {
   }
 });
 
-test('ptOnMetronomeStart/Stop only affect the timer when linked, and only resume/pause (never start/cancel)', () => {
+test('ptOnMetronomeStart/Stop are no-ops entirely when not linked', () => {
   const original = { ...pt.ptState };
   try {
     pt.ptCancel();
     pt.ptState.linked = false;
-
-    // Not linked: metronome events are ignored entirely
     pt.ptOnMetronomeStart();
     assert.equal(pt.ptState.running, false);
     assert.equal(pt.ptState.paused, false);
+  } finally {
+    pt.ptCancel();
+    Object.assign(pt.ptState, original);
+  }
+});
 
-    // Linked, but timer was never started: starting the metronome must not
-    // auto-pick a duration and start a countdown out of nowhere
+test('ptOnMetronomeStart cold-starts an idle linked timer using the last countdown length', () => {
+  const original = { ...pt.ptState };
+  try {
+    pt.ptCancel();
     pt.ptState.linked = true;
-    pt.ptOnMetronomeStart();
-    assert.equal(pt.ptState.running, false);
+    pt.ptState.totalSec = 7 * 60; // "last used" length, left over from a prior countdown (ptCancel doesn't clear it)
+
+    pt.ptOnMetronomeStart(); // idle + linked: must start a countdown, not no-op
+    assert.equal(pt.ptState.running, true);
     assert.equal(pt.ptState.paused, false);
+    assert.equal(pt.ptState.totalSec, 7 * 60); // reused the prior length rather than a hardcoded default
+  } finally {
+    pt.ptCancel(); // ptOnMetronomeStart() above started a real setInterval — stop it or the test process hangs
+    Object.assign(pt.ptState, original);
+  }
+});
+
+test('ptOnMetronomeStart falls back to the shortest preset when there is no prior countdown length', () => {
+  const original = { ...pt.ptState };
+  try {
+    pt.ptCancel();
+    pt.ptState.linked = true;
+    pt.ptState.totalSec = 0; // never run a countdown before
+
+    pt.ptOnMetronomeStart();
+    assert.equal(pt.ptState.running, true);
+    assert.equal(pt.ptState.totalSec, pt.PT_PRESET_MIN[0] * 60);
+  } finally {
+    pt.ptCancel();
+    Object.assign(pt.ptState, original);
+  }
+});
+
+test('ptOnMetronomeStart/Stop resume/pause an already-started linked timer', () => {
+  const original = { ...pt.ptState };
+  try {
+    pt.ptCancel();
+    pt.ptState.linked = true;
 
     // Linked and paused: metronome starting resumes the timer
     pt.ptStart(10);
@@ -165,6 +200,51 @@ test('ptOnMetronomeStart/Stop only affect the timer when linked, and only resume
     assert.equal(pt.ptState.running, false);
     assert.equal(pt.ptState.paused, true);
   } finally {
+    pt.ptCancel();
+    Object.assign(pt.ptState, original);
+  }
+});
+
+test('ptComplete stops a linked metronome (the countdown finishing on its own is an "end", not just a pause)', () => {
+  const original = { ...pt.ptState };
+  const prevStStop = global.stStop;
+  let stStopCalls = 0;
+  global.stStop = () => { stStopCalls++; };
+  try {
+    pt.ptState.linked = true;
+    pt.ptComplete();
+    assert.equal(stStopCalls, 1);
+
+    stStopCalls = 0;
+    pt.ptState.linked = false;
+    pt.ptComplete();
+    assert.equal(stStopCalls, 0); // not linked: must not touch the metronome
+  } finally {
+    global.stStop = prevStStop;
+    pt.ptCancel();
+    Object.assign(pt.ptState, original);
+  }
+});
+
+test('ptCancel (✕) also stops a linked metronome — "end together" applies to a manual cancel too', () => {
+  const original = { ...pt.ptState };
+  const prevStStop = global.stStop;
+  let stStopCalls = 0;
+  global.stStop = () => { stStopCalls++; };
+  try {
+    pt.ptState.linked = true;
+    pt.ptStart(5);
+    pt.ptCancel();
+    assert.equal(stStopCalls, 1);
+
+    stStopCalls = 0;
+    pt.ptState.linked = false;
+    pt.ptStart(5);
+    pt.ptCancel();
+    assert.equal(stStopCalls, 0);
+  } finally {
+    global.stStop = prevStStop;
+    pt.ptCancel();
     Object.assign(pt.ptState, original);
   }
 });

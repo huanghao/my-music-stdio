@@ -11,6 +11,7 @@
 - [和弦进行入门：是什么、为什么好听、怎么用](chord-progressions-guide.md)：和弦进行为什么这样排列背后的理论基础，也是 Chord Match 的 Progression 模式为什么选了这些和弦的解释。
 - [和声进阶：附属和弦、三全音代理、借用和弦，以及几种"替代 V"的手法](chromatic-harmony-and-substitutions.md)：附属和弦/三全音代理/借用和弦三者的区别，`4536251` 进行和五度圈的关系及为什么流行，V9sus4、ivm6 后门进行、"刹车和弦"分别是什么。
 - [CAGED 同把位级数进行练习 + 任意调级数快查方法](caged-positional-progression-practice.md)：用 G 大调 1-6-4-5 具体走一遍"同把位换形状"的横按品位，以及"看到一个小调秒答级数进行"的关系大小调快查法和拆解练习方法。
+- [流行音乐常用调分布：数据、方法论局限、和对练习的启示](song-key-frequency-research.md)：Spotify 3000 万首歌调性统计的数据来源和自动检测算法准确率局限、一个被广泛误传的"最常用调排名"案例澄清、级数出现频率（I 后接 V/IV/vi 的比例）、以及这些结论如何指导 Key Drill 工具的权重设计。
 - [MIDI 协议介绍](midi-format-research.md)：MIDI 消息、通道、字节结构、Standard MIDI File、General MIDI、MIDI 2.0、优缺点和相关标准。
 - [General MIDI 介绍](general-midi-research.md)：GM 的音色映射、鼓通道、复音能力和播放兼容意义。
 - [MusicXML 格式调研](musicxml-format-research.md)：MusicXML 的定位、适合表达的内容、导入策略、风险和验证点。
@@ -38,6 +39,9 @@
 - [音乐专业英语词汇表](music-professional-english-glossary.md)：音乐、吉他、钢琴、谱面、演奏表达和数字音乐制作相关的专业英语词汇。
 - [吉他和弦指法学习资料推荐](guitar-chord-shapes-resources.md)：配合 Fretboard 页面练习内容整理的外部资料——和弦图读法惯例、CAGED 系统、减七/半减七和弦指法来源、Standard/Jazz 记谱法对比。
 - [吉他延伸和弦（6/add9/9/11/13）常用程度调研](guitar-extended-chords-research.md)：这几类和弦在流行/摇滚/民谣/爵士里的实际使用频率对比，以及哪些值得加进指型参考表的结论。
+- [独奏爵士吉他（Chord Melody）全景：门类背景、谱系必知乐手，以及 Joe Pass、Ted Greene 深度介绍](joe-pass-ted-greene-intro.md)：Chord Melody 是什么、为什么存在，从 Django Reinhardt、George Van Eps、Wes Montgomery 到 Martin Taylor 的完整谱系，以及 Joe Pass、Ted Greene 两人的生平、风格、代表作品和教材深度介绍。
+- [Shell Chord（壳和弦）完全指南：从基础到精通](shell-chords-guide.md)：根音+3音+7音三音和弦的理论、指板上的两组基础指型家族、ii-V-I 与全 12 调练习法、进阶到 drop voicing 和 chord melody 的路径，以及推荐练习材料。
+- [《Take the A Train》的历史，以及《猫和老鼠》为什么听起来是这个味儿](take-the-a-train-and-cartoon-jazz.md)：Billy Strayhorn 怎么写出这首曲子、ASCAP/BMI 版权纠纷意外让它成为 Ellington 乐团团歌的经过，以及黄金时代动画配乐（Mickey Mousing、Scott Bradley）为什么天生该用摇摆爵士的语汇。
 
 ## 建议阅读顺序
 

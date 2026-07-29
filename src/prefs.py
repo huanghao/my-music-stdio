@@ -11,7 +11,7 @@ DEFAULTS = {
     # future Mac App Store build can comply with App Sandbox requirements without
     # a migration step.  Existing installs keep their saved paths from prefs.json
     # and are not affected.
-    "songs_dir": "~/Library/Application Support/MyMusicStdio/songs/",
+    "accompaniments_dir": "~/Library/Application Support/MyMusicStdio/accompaniments/",
     "licks_dir": "~/Library/Application Support/MyMusicStdio/licks/",
     "materials_dir": "~/Library/Application Support/MyMusicStdio/materials/",
 }
@@ -21,9 +21,9 @@ def _migrate_app_support_folder() -> None:
     """One-time rename of the whole per-app data folder: an earlier version
     used "MyMusic" as the folder name (inconsistent with the project's actual
     name, my-music-stdio) — renaming the whole folder in one move means a
-    prior install's prefs.json/songs/licks/materials all come along together,
-    instead of silently going dark under the old name once DEFAULTS above
-    points somewhere else."""
+    prior install's prefs.json/accompaniments/licks/materials all come along
+    together, instead of silently going dark under the old name once DEFAULTS
+    above points somewhere else."""
     base = Path.home() / "Library" / "Application Support"
     old = base / "MyMusic"
     new = base / "MyMusicStdio"

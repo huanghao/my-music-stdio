@@ -245,6 +245,37 @@
   <div id="lick-detail-content"></div>
 </div>
 
+<!-- LICK EDITOR PAGE — full-page 编辑/预览 (replaced the old 440px modal: the
+     notes textarea was too cramped for real writing, and the resource-embed
+     syntax was buried in a collapsed help block. The cheat-sheet aside inserts
+     ready-made snippets at the cursor so the syntax never has to be memorized;
+     licks.js's LICKS_EDITOR_SNIPPETS is its single source of truth). -->
+<div class="page" id="page-lick-edit">
+  <div class="lick-editor-topbar">
+    <button class="btn btn-ghost btn-sm" onclick="cancelLickEdit()">← 取消</button>
+    <input type="text" id="lick-edit-title" autocomplete="off" placeholder="Lick 标题" style="flex:1">
+    <label class="lick-editor-bpm-label">Target BPM <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" style="width:72px"></label>
+    <div class="lick-editor-mode-toggle">
+      <button id="lick-editor-mode-edit" class="btn btn-ghost btn-sm" onclick="licksEditorSetMode('edit')">编辑</button>
+      <button id="lick-editor-mode-preview" class="btn btn-ghost btn-sm" onclick="licksEditorSetMode('preview')">预览</button>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="saveLickEdit()">Save</button>
+  </div>
+  <div class="lick-edit-attach-row">
+    <input type="file" id="lick-edit-image-input" accept="image/*" style="display:none" onchange="lickUploadImage(this)">
+    <button type="button" class="btn btn-ghost btn-sm" title="仅这个 Lick 私有，不能被别的 Lick 复用" onclick="document.getElementById('lick-edit-image-input').click()">📷 Attach image</button>
+    <button type="button" class="btn btn-ghost btn-sm" title="共享材料库，多个 Lick 可以引用同一份文件" onclick="openMaterialPicker()">📎 Attach material (PDF/Audio)</button>
+    <span id="lick-edit-image-status" class="lick-edit-image-status"></span>
+  </div>
+  <div class="lick-editor-body">
+    <div id="lick-editor-edit-pane" class="lick-editor-edit-pane">
+      <textarea id="lick-edit-notes" placeholder="Markdown 笔记 —— 右侧点一下即插入资源写法，不用背语法"></textarea>
+      <aside class="lick-editor-cheatsheet" id="lick-editor-cheatsheet"></aside>
+    </div>
+    <div id="lick-editor-preview" class="lick-notes-md lick-editor-preview" style="display:none"></div>
+  </div>
+</div>
+
 <div class="page" id="page-speed">
   <div class="page-header"><h2 class="page-title">Speed Trainer</h2></div>
 
@@ -607,45 +638,6 @@
     <div class="modal-actions">
       <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary btn-sm" onclick="confirmChord()">OK</button>
-    </div>
-  </div>
-</div>
-
-<!-- Lick edit modal (title + notes + target BPM) -->
-<div id="lick-edit-modal" class="modal-overlay" onclick="if(event.target===this)closeLickEditModal()">
-  <div class="modal" style="width:440px">
-    <h3 class="modal-subtitle">Edit Lick</h3>
-    <div class="lick-edit-form">
-      <label>Title
-        <input type="text" id="lick-edit-title" autocomplete="off" style="flex:1">
-      </label>
-      <label>Notes <span class="lick-edit-notes-hint">Markdown — **bold**, ![alt](image-url), links (YouTube/Bilibili/PDF/audio preview inline)</span>
-        <textarea id="lick-edit-notes" rows="8" style="flex:1"></textarea>
-      </label>
-      <details class="lick-notes-syntax-help">
-        <summary>写法参考</summary>
-        <ul>
-          <li>图片：<code>![说明](链接)</code></li>
-          <li>视频（YouTube/Bilibili）自动预览，改宽度：<code>[说明](链接 "w=300")</code></li>
-          <li>PDF 自动预览，跳到第几页：<code>[说明](链接 "page=2")</code>，更精确到页内位置（仅 Chrome 生效）：<code>[说明](链接 "page=2,y=0.4")</code></li>
-          <li>PDF 默认预览框较窄，改宽度/高度：<code>[说明](链接 "page=2,w=900,h=700")</code>（w/h 单位是像素，不加就用默认的 640×600）</li>
-          <li>音频链接自动变成"🎧 Practice with Song Loop"按钮，不用加参数</li>
-          <li>用"📎 Attach material"选已有材料时，这段链接会自动帮你插好，只需要照着改数字</li>
-        </ul>
-      </details>
-      <div class="lick-edit-attach-row">
-        <input type="file" id="lick-edit-image-input" accept="image/*" style="display:none" onchange="lickUploadImage(this)">
-        <button type="button" class="btn btn-ghost btn-sm" title="仅这个 Lick 私有，不能被别的 Lick 复用" onclick="document.getElementById('lick-edit-image-input').click()">📷 Attach image</button>
-        <button type="button" class="btn btn-ghost btn-sm" title="共享材料库，多个 Lick 可以引用同一份文件" onclick="openMaterialPicker()">📎 Attach material (PDF/Audio)</button>
-        <span id="lick-edit-image-status" class="lick-edit-image-status"></span>
-      </div>
-      <label>Target BPM (optional)
-        <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" style="width:80px">
-      </label>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost btn-sm" onclick="closeLickEditModal()">Cancel</button>
-      <button class="btn btn-primary btn-sm" onclick="submitLickEdit()">Save</button>
     </div>
   </div>
 </div>

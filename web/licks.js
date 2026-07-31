@@ -13,6 +13,8 @@ const licksState = {
   activeLick: null,   // { id, title, lastBpm } — set when practicing a lick
   currentLick: null,  // full lick object currently in detail view
   licksById: {},      // id → { title, last_bpm, last_practiced_bpm } cache from list response
+  editor: null,       // { id } while the full-page editor is open
+  editorMode: 'edit', // 'edit' | 'preview' — persisted (see lick_editor_prefs)
 };
 
 // ── Notes rendering (Markdown, with video/PDF/audio links previewed inline) ──
@@ -152,13 +154,43 @@ function licksPlayVideoEmbed(thumbEl) {
 }
 
 // PDF preview: click-to-expand inline, using the browser's own built-in PDF
-// viewer via an iframe fragment (#page=N) — no PDF-rendering library needed.
-// `y` (0-1, fraction down the page) is a best-effort addition on top of
-// that: it maps to the #zoom=scale,left,top open-parameter convention,
-// which only Chrome/PDFium's built-in viewer reliably honors — Firefox/
-// Safari's viewers are expected to just land on the top of the page. That's
-// a limitation of the browsers' own PDF viewers, not something fixable
-// here without vendoring a full PDF-rendering library.
+// viewer via an iframe fragment — no PDF-rendering library needed.
+//
+// The fragment always carries view=FitH (fit page width): Chrome/Edge's
+// PDFium viewer honors it, so the score fills the embed instead of opening
+// fit-page with dead margins on both sides. Firefox/Safari's viewers ignore
+// it and fall back to their own default — same scoped degradation the `y`
+// parameter always had (see below), not something fixable here without
+// vendoring a full PDF-rendering library.
+//
+// `y` (0-1, fraction down the page) rides on FitH's optional top argument,
+// mapped from page-height points with a bottom-left origin, which only
+// Chrome/PDFium's built-in viewer reliably honors — Firefox/Safari are
+// expected to just land on the top of the page.
+//
+// Expanded/collapsed state persists per PDF URL (localStorage, last toggle
+// wins) so a score you opened stays open across refreshes/previews instead
+// of needing a click every render — the original all-collapsed default only
+// survives for PDFs never touched, where eager-loading every iframe on every
+// render is still not worth it.
+const LICK_PDF_OPEN_KEY = 'lick_pdf_open';
+
+function licksPdfOpenMap() {
+  try {
+    const m = JSON.parse(localStorage.getItem(LICK_PDF_OPEN_KEY));
+    return m && typeof m === 'object' ? m : {};
+  } catch (_) { return {}; }
+}
+
+function licksPdfSetOpen(href, open) {
+  const m = licksPdfOpenMap();
+  m[href] = open;
+  localStorage.setItem(LICK_PDF_OPEN_KEY, JSON.stringify(m));
+}
+
+// The wrapper carries everything needed to rebuild either state (data-href/
+// data-src/data-page/data-h) so expanding and collapsing are just innerHTML
+// swaps — no re-parsing of the Markdown source required.
 function licksPdfEmbedHtml(href, dir) {
   const page = Number.isFinite(dir.page) ? Math.max(1, Math.round(dir.page)) : 1;
   // `w` overrides the default max-width (see .lick-pdf-embed in style.css —
@@ -166,27 +198,44 @@ function licksPdfEmbedHtml(href, dir) {
   // for wider, e.g. for a two-page spread that needs real width to be
   // legible). `h` overrides the fixed 600px iframe height for the same
   // reason — a much wider embed with the old fixed height would letterbox.
-  // Height is carried via data-h and applied directly to the <iframe>
-  // itself in licksPlayPdfEmbed (not a CSS custom property inherited down
-  // to it) — one less layer of indirection to go wrong.
   const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : '';
-  const heightAttr = Number.isFinite(dir.h) ? ` data-h="${Math.max(100, Math.round(dir.h))}"` : '';
+  const h = Number.isFinite(dir.h) ? Math.max(100, Math.round(dir.h)) : null;
   const PAGE_HEIGHT_PT = 792; // US Letter height in PDF points — approximate for A4/other sizes
   const frag = Number.isFinite(dir.y)
-    ? `page=${page}&zoom=100,0,${Math.round((1 - Math.min(1, Math.max(0, dir.y))) * PAGE_HEIGHT_PT)}`
-    : `page=${page}`;
+    ? `page=${page}&view=FitH,${Math.round((1 - Math.min(1, Math.max(0, dir.y))) * PAGE_HEIGHT_PT)}`
+    : `page=${page}&view=FitH`;
   const src = `${href}#${frag}`;
-  return `<div class="lick-pdf-embed"${styleAttr}>` +
-    `<div class="lick-pdf-thumb" onclick="licksPlayPdfEmbed(this)" data-src="${htmlEsc(src)}"${heightAttr}>` +
+  const dataAttrs = ` data-href="${htmlEsc(href)}" data-src="${htmlEsc(src)}" data-page="${page}"` +
+    (h ? ` data-h="${h}"` : '');
+  const body = licksPdfOpenMap()[href]
+    ? licksPdfExpandedHtml(src, page, h)
+    : licksPdfThumbHtml(src, page);
+  return `<div class="lick-pdf-embed"${styleAttr}${dataAttrs}>${body}</div>`;
+}
+
+function licksPdfThumbHtml(src, page) {
+  return `<div class="lick-pdf-thumb" onclick="licksPlayPdfEmbed(this)">` +
     `<span class="lick-pdf-thumb-icon">📄</span><span class="lick-pdf-thumb-label">点击查看谱例（第 ${page} 页）</span>` +
-    `</div></div>`;
+    `</div>`;
+}
+
+function licksPdfExpandedHtml(src, page, h) {
+  const styleAttr = h ? ` style="height:${h}px"` : '';
+  return `<button class="btn btn-ghost btn-sm lick-pdf-collapse" onclick="licksCollapsePdfEmbed(this)">▾ 收起谱例（第 ${page} 页）</button>` +
+    `<iframe src="${htmlEsc(src)}" title="PDF preview"${styleAttr}></iframe>`;
 }
 
 function licksPlayPdfEmbed(thumbEl) {
-  const src = thumbEl.dataset.src;
-  const h = thumbEl.dataset.h;
-  const styleAttr = h ? ` style="height:${h}px"` : '';
-  thumbEl.parentElement.innerHTML = `<iframe src="${src}" title="PDF preview"${styleAttr}></iframe>`;
+  const wrapper = thumbEl.closest('.lick-pdf-embed');
+  licksPdfSetOpen(wrapper.dataset.href, true);
+  wrapper.innerHTML = licksPdfExpandedHtml(
+    wrapper.dataset.src, +(wrapper.dataset.page || 1), +(wrapper.dataset.h || 0) || null);
+}
+
+function licksCollapsePdfEmbed(btnEl) {
+  const wrapper = btnEl.closest('.lick-pdf-embed');
+  licksPdfSetOpen(wrapper.dataset.href, false);
+  wrapper.innerHTML = licksPdfThumbHtml(wrapper.dataset.src, +(wrapper.dataset.page || 1));
 }
 
 // Audio preview: not a plain <audio> tag — a button that hands the file off
@@ -425,13 +474,11 @@ async function newLick() {
   // misleading (they look like a "key" picker but just overwrite the title).
   openModal('New Lick', 'My practice lick', async title => {
     const r = await api('/api/licks', 'POST', { title, notes: '', target_bpm: null });
-    // navOpenLick (not plain openLick/practiceLick) so this also lands in
-    // history — Back from the freshly created lick's detail page returns to
-    // wherever "New Lick" was clicked from, instead of nowhere. It resolves
-    // to practiceLick under the hood, so the practice panel is still already
-    // embedded when the edit modal closes below.
+    // navOpenLick then navOpenLickEdit (not direct calls) so both land in
+    // history — Back from the editor returns to the new lick's detail page,
+    // and Back from there returns to wherever "New Lick" was clicked from.
     await navOpenLick(r.id);
-    editLick(r.id); // then open edit modal to fill notes + target BPM
+    navOpenLickEdit(r.id); // then the full-page editor to fill notes + target BPM
   }, false);
 }
 
@@ -477,7 +524,7 @@ function renderLickDetail(lick) {
         ${targetLine}
       </div>
       <div class="row-actions">
-        <button class="btn btn-ghost btn-sm" onclick="editLick('${lick.id}')">Edit</button>
+        <button class="btn btn-ghost btn-sm" onclick="navOpenLickEdit('${lick.id}')">Edit</button>
         <button class="btn btn-ghost btn-sm danger"
           onclick="deleteLick('${lick.id}')">Delete</button>
       </div>
@@ -590,19 +637,87 @@ function renderLickChart(sessions, targetBpm) {
 
 // ── CRUD actions ──
 
-async function editLick(id) {
+// ── Full-page editor (edit / preview modes) ──
+// Replaced the old 440px edit modal: the notes textarea was too cramped for
+// real writing, and the resource-embed syntax ([label](url "page=2,w=900"))
+// lived in a collapsed help block nobody could remember. Editing now gets its
+// own routed page (#/licks/<id>/edit — Back/Forward work via navApplyRoute)
+// with a tall textarea, a preview mode, and a click-to-insert cheat sheet so
+// the syntax never has to be memorized.
+
+const LICK_EDITOR_PREFS_KEY = 'lick_editor_prefs';
+
+function lickEditorPrefsLoad() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LICK_EDITOR_PREFS_KEY)) || {}; } catch (_) {}
+  if (saved.mode === 'edit' || saved.mode === 'preview') licksState.editorMode = saved.mode;
+}
+
+function lickEditorPrefsSave() {
+  localStorage.setItem(LICK_EDITOR_PREFS_KEY, JSON.stringify({ mode: licksState.editorMode }));
+}
+
+async function openLickEditor(id) {
   const lick = await api(`/api/licks/${id}`);
+  licksState.editor = { id };
   document.getElementById('lick-edit-title').value = lick.title || '';
   document.getElementById('lick-edit-notes').value = lick.notes || '';
   document.getElementById('lick-edit-target-bpm').value = lick.target_bpm ?? '';
   document.getElementById('lick-edit-image-status').textContent = '';
-  // Store the id so submitLickEdit() / lickUploadImage() know which lick to save
-  document.getElementById('lick-edit-modal').dataset.lickId = id;
-  document.getElementById('lick-edit-modal').classList.add('show');
+  lickEditorPrefsLoad();
+  licksRenderCheatsheet();
+  // Entering the editor does NOT end practice on this lick — the editor is a
+  // side-trip from the detail page (see the leaving-Speed-Trainer exemption
+  // in showPage), so the metronome/timer keep running while you edit.
+  showPage('lick-edit');
+  licksEditorSetMode(licksState.editorMode);
 }
 
-function closeLickEditModal() {
-  document.getElementById('lick-edit-modal').classList.remove('show');
+function licksEditorSetMode(mode) {
+  licksState.editorMode = mode;
+  lickEditorPrefsSave();
+  const isPreview = mode === 'preview';
+  document.getElementById('lick-editor-edit-pane').style.display = isPreview ? 'none' : '';
+  const prev = document.getElementById('lick-editor-preview');
+  prev.style.display = isPreview ? '' : 'none';
+  document.getElementById('lick-editor-mode-edit').classList.toggle('active', !isPreview);
+  document.getElementById('lick-editor-mode-preview').classList.toggle('active', isPreview);
+  if (isPreview) {
+    const md = document.getElementById('lick-edit-notes').value;
+    prev.innerHTML = md.trim()
+      ? licksRenderNotes(md)
+      : '<p class="empty-state">还没有内容 —— 切回「编辑」写点什么。</p>';
+  }
+}
+
+// Click-to-insert cheat sheet — the fix for "记不住资源插入语法". Every embed
+// form the notes renderer understands (see the marked renderer at the top of
+// this file) is one button here; clicking splices a ready-made snippet in at
+// the cursor, leaving only the URL and the numbers to fill in.
+const LICKS_EDITOR_SNIPPETS = [
+  { label: '图片', code: '![说明](图片链接)', snippet: '![说明](图片链接)\n' },
+  { label: '视频 — YouTube/Bilibili 自动预览', code: '[说明](视频链接)', snippet: '[说明](视频链接)\n' },
+  { label: '视频改宽度（px）', code: '[说明](链接 "w=300")', snippet: '[说明](视频链接 "w=300")\n' },
+  { label: 'PDF 翻到第 N 页', code: '[谱例](链接 "page=2")', snippet: '[谱例](PDF链接 "page=2")\n' },
+  { label: 'PDF 页内位置（仅 Chrome）', code: '"page=2,y=0.4"', snippet: '[谱例](PDF链接 "page=2,y=0.4")\n' },
+  { label: 'PDF 预览框宽×高（px，默认 640×600）', code: '"page=2,w=900,h=700"', snippet: '[谱例](PDF链接 "page=2,w=900,h=700")\n' },
+  { label: '音频 → Song Loop 练习按钮', code: '[伴奏](音频链接)', snippet: '[伴奏](音频链接)\n' },
+];
+
+function licksRenderCheatsheet() {
+  const el = document.getElementById('lick-editor-cheatsheet');
+  if (!el || el.childNodes.length) return; // static content — build once
+  el.innerHTML = '<div class="lick-editor-cheatsheet-title">点一下插入写法</div>' +
+    LICKS_EDITOR_SNIPPETS.map((s, i) => `
+      <button type="button" class="lick-snippet-btn" data-snippet-idx="${i}">
+        <span class="lick-snippet-label">${htmlEsc(s.label)}</span>
+        <code>${htmlEsc(s.code)}</code>
+      </button>`).join('') +
+    '<div class="lick-editor-cheatsheet-foot">📷/📎 按钮插入的链接已带好语法，只需改数字</div>';
+  el.addEventListener('click', e => {
+    const btn = e.target.closest('.lick-snippet-btn');
+    if (btn) licksInsertAtNotesCursor(LICKS_EDITOR_SNIPPETS[+btn.dataset.snippetIdx].snippet);
+  });
 }
 
 // Inserts text at the cursor position in the notes textarea (or appends it
@@ -620,7 +735,7 @@ function licksInsertAtNotesCursor(text) {
 // Markdown image syntax at the cursor position in the notes textarea.
 async function lickUploadImage(inputEl) {
   const file = inputEl.files[0];
-  const id = document.getElementById('lick-edit-modal').dataset.lickId;
+  const id = licksState.editor?.id;
   const statusEl = document.getElementById('lick-edit-image-status');
   if (!file || !id) return;
   statusEl.textContent = 'Uploading…';
@@ -726,8 +841,8 @@ async function materialUploadAndInsert(inputEl) {
   }
 }
 
-async function submitLickEdit() {
-  const id = document.getElementById('lick-edit-modal').dataset.lickId;
+async function saveLickEdit() {
+  const id = licksState.editor?.id;
   if (!id) return;
   const title = document.getElementById('lick-edit-title').value.trim() || 'Untitled';
   const notes = document.getElementById('lick-edit-notes').value.trim();
@@ -735,13 +850,20 @@ async function submitLickEdit() {
   const target_bpm = rawBpm !== '' ? parseFloat(rawBpm) : null;
   try {
     await api(`/api/licks/${id}`, 'PUT', { title, notes, target_bpm });
-    closeLickEditModal();
-    const updated = await api(`/api/licks/${id}`);
-    licksState.licksById[id] = updated;
-    renderLickDetail(updated);
+    licksState.editor = null;
+    // Back to the detail page — navOpenLick re-fetches and re-renders it (so
+    // the just-saved notes show up), and practice picks up where it was: the
+    // editor never ended it (see openLickEditor), so startedAt is preserved.
+    navOpenLick(id);
   } catch (e) {
     setStatus('Error saving: ' + e.message);
   }
+}
+
+function cancelLickEdit() {
+  const id = licksState.editor?.id;
+  licksState.editor = null;
+  if (id) navOpenLick(id); else navGoToPage('licks');
 }
 
 async function deleteLick(id) {
@@ -807,7 +929,13 @@ async function practiceLick(id) {
   // since some licks are inherently metronome-paired practice and some aren't.
   if (typeof ptSetLinked === 'function') ptSetLinked(!!cached.metronome_linked);
   renderActiveLickBanner();
-  if (!licksState.currentLick || licksState.currentLick.id !== id) {
+  // "Already viewing it" must mean the detail page is actually on screen —
+  // currentLick alone is stale the moment you navigate away (back to the
+  // list, or into the editor): re-rendering a hidden page used to leave the
+  // URL changed but the view stuck on the list (refresh "fixed" it because a
+  // reload resets currentLick to null).
+  const onDetailPage = document.getElementById('page-lick-detail')?.classList.contains('active');
+  if (!onDetailPage || !licksState.currentLick || licksState.currentLick.id !== id) {
     await openLick(id); // navigate to + render the detail page (also syncs panel placement)
   } else {
     renderLickDetail(licksState.currentLick); // already viewing it — re-render to swap in the panel
@@ -829,6 +957,21 @@ function licksSyncPracticePanelHome() {
   const a = licksState.activeLick;
   const onLickDetailPage = document.getElementById('page-lick-detail')?.classList.contains('active');
   const onActiveLickDetail = !!(a && licksState.currentLick && licksState.currentLick.id === a.id && onLickDetailPage);
+  // The full-page editor is a side-trip from the detail page, not the end of
+  // practice: while editing the lick being practiced, leave the panel exactly
+  // where it is (it hides with the detail page and keeps running if it was)
+  // and keep the bottom transport bar pointed at it, so the metronome can
+  // still be stopped from the editor. showPage's leaving-Speed-Trainer logic
+  // has the matching destination exemption.
+  const onActiveLickEditor = !!(a && licksState.editor && licksState.editor.id === a.id
+    && document.getElementById('page-lick-edit')?.classList.contains('active'));
+  if (onActiveLickEditor) {
+    if (typeof registerTransport === 'function') {
+      registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart, stop: stStop });
+      setTransportState(stState.running ? 'playing' : 'stopped');
+    }
+    return;
+  }
   const target = document.getElementById(onActiveLickDetail ? 'lick-practice-slot' : 'st-panel-home');
   if (target && panel.parentElement !== target) target.appendChild(panel);
 
@@ -988,21 +1131,20 @@ function timeAgo(iso) {
   return fmtDate(iso);
 }
 
-// ── Keyboard shortcuts for lick modals ──
-
-document.addEventListener('DOMContentLoaded', () => {
-  // lick-edit-modal: Escape closes, Enter in title submits
-  const editTitle = document.getElementById('lick-edit-title');
-  if (editTitle) {
-    editTitle.addEventListener('keydown', e => {
-      if (e.key === 'Enter') submitLickEdit();
-      if (e.key === 'Escape') closeLickEditModal();
-    });
+// ── Keyboard shortcuts for the lick editor ──
+// ⌘/Ctrl+S saves; Enter in the title input saves; Escape cancels back to the
+// detail page. Scoped to the editor page so these keys stay free elsewhere.
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('page-lick-edit')?.classList.contains('active')) return;
+  // The material picker overlays the editor — while it's open, Escape closes
+  // just the picker, not the whole editor.
+  if (document.getElementById('material-picker-modal')?.classList.contains('show')) {
+    if (e.key === 'Escape') closeMaterialPicker();
+    return;
   }
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Escape') return;
-    if (document.getElementById('lick-edit-modal')?.classList.contains('show')) closeLickEditModal();
-  });
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); saveLickEdit(); return; }
+  if (e.key === 'Enter' && e.target.id === 'lick-edit-title') { saveLickEdit(); return; }
+  if (e.key === 'Escape') cancelLickEdit();
 });
 
 // Guard against rapid double-clicks — same convention as fretboard.js's

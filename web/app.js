@@ -188,10 +188,13 @@ document.addEventListener('visibilitychange', function() {
 // existing single-page index.html):
 //   #/<page>                                  top-level page, e.g. #/fretboard
 //   #/licks/<lickId>                          a Lick's detail/practice view
+//   #/licks/<lickId>/edit                     that Lick's full-page notes editor
 //   #/songloop?url=<enc>&label=<enc>          a loaded Song Loop track
 
 function navHashFor(route) {
-  if (route.lickId) return `#/licks/${encodeURIComponent(route.lickId)}`;
+  if (route.lickId) {
+    return `#/licks/${encodeURIComponent(route.lickId)}${route.lickEdit ? '/edit' : ''}`;
+  }
   if (route.page === 'songloop' && route.songUrl) {
     const params = new URLSearchParams({ url: route.songUrl });
     if (route.songLabel) params.set('label', route.songLabel);
@@ -206,6 +209,7 @@ function navParseHash(hash) {
   const segments = pathPart.split('/').filter(Boolean);
   const route = { page: segments[0] || 'vamp' };
   if (route.page === 'licks' && segments[1]) route.lickId = decodeURIComponent(segments[1]);
+  if (route.lickId && segments[2] === 'edit') route.lickEdit = true;
   if (route.page === 'songloop' && queryPart) {
     const params = new URLSearchParams(queryPart);
     if (params.has('url')) route.songUrl = params.get('url');
@@ -222,6 +226,9 @@ function navParseHash(hash) {
 // can await it.
 function navApplyRoute(route) {
   if (route.lickId) {
+    if (route.lickEdit) {
+      return typeof openLickEditor === 'function' ? openLickEditor(route.lickId) : undefined;
+    }
     return typeof practiceLick === 'function' ? practiceLick(route.lickId) : undefined;
   }
   showPage(route.page);
@@ -242,6 +249,7 @@ function navigateTo(route) {
 // calls they replace.
 function navGoToPage(page) { return navigateTo({ page }); }
 function navOpenLick(lickId) { return navigateTo({ page: 'licks', lickId }); }
+function navOpenLickEdit(lickId) { return navigateTo({ page: 'licks', lickId, lickEdit: true }); }
 
 window.addEventListener('popstate', (e) => {
   navApplyRoute(e.state || navParseHash(location.hash));
@@ -258,11 +266,17 @@ function showPage(name) {
   // The metronome panel (#st-panel) can currently be hosted on either the
   // standalone Speed Trainer page or embedded in an actively-practiced
   // Lick's detail page (see licksSyncPracticePanelHome) — stop it when
-  // leaving whichever one is currently hosting it.
+  // leaving whichever one is currently hosting it. The lick editor page
+  // counts as a host too: it's a side-trip from the detail page, not the end
+  // of practice (editing notes must not stop the metronome or auto-log the
+  // session), so it's exempt as a *destination* alongside 'speed' — but
+  // leaving the editor for anywhere else still ends practice here.
   const leavingSpeedPanel = document.getElementById('page-speed')?.classList.contains('active')
     || (document.getElementById('page-lick-detail')?.classList.contains('active')
+        && typeof licksState !== 'undefined' && licksState.activeLick)
+    || (document.getElementById('page-lick-edit')?.classList.contains('active')
         && typeof licksState !== 'undefined' && licksState.activeLick);
-  if (name !== 'speed' && leavingSpeedPanel) {
+  if (name !== 'speed' && name !== 'lick-edit' && leavingSpeedPanel) {
     stStop();
     // Navigating away (to anywhere but the standalone Speed Trainer page,
     // which keeps hosting the same practice — see licksSyncPracticePanelHome)
@@ -923,6 +937,18 @@ function updateTransportForPage(name) {
     case 'songloop':  registerTransport({ kind: 'playback', label: 'Song Loop',     play: slPlay,        stop: slStop,        pause: slPause,        resume: slPlay }); break;
     case 'fretboard':   fbRenderControlAction(); break; // fretboard registers per active sub-mode
     case 'chordmatch':  fbRenderControlAction(); break;
+    case 'lick-edit':
+      // Editing the lick currently being practiced keeps the Speed Trainer
+      // transport (the metronome may still be running — side-trip exemption,
+      // see licksSyncPracticePanelHome); editing anything else clears it.
+      if (typeof licksState !== 'undefined' && licksState.activeLick && licksState.editor
+          && licksState.activeLick.id === licksState.editor.id) {
+        registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart, stop: stStop });
+        setTransportState(stState.running ? 'playing' : 'stopped');
+      } else {
+        clearTransport();
+      }
+      break;
     default:            clearTransport();
   }
 }

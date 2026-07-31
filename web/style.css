@@ -960,6 +960,7 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-pdf-thumb:hover { background: var(--bg-faint); }
 .lick-pdf-thumb-icon { font-size: 22px; }
 .lick-pdf-thumb-label { font-size: 13px; color: var(--text-dim); }
+.lick-pdf-collapse { margin-bottom: 4px; }
 
 /* Audio: not a player, a hand-off button into Song Loop's speed/A-B-loop tooling */
 .lick-audio-embed { margin: 8px 0; }
@@ -993,20 +994,26 @@ input[type="number"] { width: 64px; text-align: center; }
    fine on the standalone Speed Trainer page but not here. */
 #lick-practice-slot { margin-top: 20px; max-width: 720px; }
 
-/* Lick edit modal form (title + notes + target BPM — full-width inputs) */
-.lick-edit-form { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
-.lick-edit-form label { font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
-.lick-edit-notes-hint { font-weight: 400; color: var(--text-faint); font-size: 11px; }
-.lick-edit-attach-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* Lick full-page editor (title + notes + target BPM — edit / preview modes) */
+.lick-editor-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.lick-editor-bpm-label { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.lick-editor-mode-toggle { display: flex; }
+.lick-editor-mode-toggle .btn.active { color: var(--primary); border-color: var(--primary); }
+.lick-edit-attach-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .lick-edit-image-status { font-size: 12px; color: var(--text-muted); }
 .modal-subtitle { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+.lick-editor-edit-pane { display: flex; gap: 12px; align-items: stretch; }
+#lick-edit-notes { flex: 1; min-height: 62vh; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; }
+.lick-editor-preview { max-width: 860px; min-height: 40vh; }
 
-/* Notes syntax reference — collapsed by default (native <details>, no JS) */
-.lick-notes-syntax-help { font-size: 12px; color: var(--text-muted); margin-top: -6px; }
-.lick-notes-syntax-help summary { cursor: pointer; color: var(--primary); user-select: none; }
-.lick-notes-syntax-help ul { margin: 6px 0 0; padding-left: 18px; }
-.lick-notes-syntax-help li { margin-bottom: 3px; }
-.lick-notes-syntax-help code { background: var(--bg-faint); padding: 1px 4px; border-radius: 3px; }
+/* Click-to-insert cheat sheet (right-hand aside in the editor's edit mode) */
+.lick-editor-cheatsheet { width: 250px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow-y: auto; max-height: 72vh; }
+.lick-editor-cheatsheet-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+.lick-snippet-btn { display: block; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 6px; cursor: pointer; margin-bottom: 2px; font-family: inherit; }
+.lick-snippet-btn:hover { background: var(--bg-faint); border-color: var(--border); }
+.lick-snippet-label { display: block; font-size: 12px; color: var(--text); }
+.lick-snippet-btn code { display: block; font-size: 11px; color: var(--text-faint); margin-top: 2px; word-break: break-all; }
+.lick-editor-cheatsheet-foot { font-size: 11px; color: var(--text-faint); margin-top: 8px; line-height: 1.4; }
 
 /* Material picker modal (attach a PDF/audio: upload new or reuse a shared one) */
 .material-picker-upload-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }

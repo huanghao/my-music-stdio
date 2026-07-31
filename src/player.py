@@ -1,5 +1,6 @@
 import ctypes
 import logging
+import os
 import threading
 import time as _time
 from pathlib import Path
@@ -17,8 +18,15 @@ DEFAULT_SOUNDFONT = str(Path("~/music-practice/soundfonts/Timbres of Heaven (XGM
 _LIB_PATH = "/opt/homebrew/lib/libfluidsynth.dylib"
 try:
     ctypes.cdll.LoadLibrary(_LIB_PATH)
-except OSError:
-    pass  # already loaded or not at this path — fall through
+except OSError as e:
+    logger.warning("preload libfluidsynth failed (%s): %s", _LIB_PATH, e)
+
+# pyfluidsynth locates the dylib via ctypes.util.find_library, which does not
+# search /opt/homebrew/lib on macOS; its fallback is $HOMEBREW_PREFIX, which is
+# only set by interactive shells (brew shellenv). Service managers (LaunchAgent,
+# nanny daemon) run without it, so set it here when unset and the lib exists.
+if not os.environ.get("HOMEBREW_PREFIX") and Path(_LIB_PATH).exists():
+    os.environ["HOMEBREW_PREFIX"] = str(Path(_LIB_PATH).parent.parent)
 
 import fluidsynth  # noqa: E402  (must come after ctypes preload)
 

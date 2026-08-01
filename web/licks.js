@@ -238,16 +238,156 @@ function licksCollapsePdfEmbed(btnEl) {
   wrapper.innerHTML = licksPdfThumbHtml(wrapper.dataset.src, +(wrapper.dataset.page || 1));
 }
 
-// Audio preview: not a plain <audio> tag — a button that hands the file off
-// to Song Loop, so speed/pitch-preserve/A-B-loop practice tooling is one
-// click away instead of reimplementing a second, weaker player here.
+// Audio preview: an inline mini-player (play/pause, seek, speed) right next
+// to the score — the "一边放 mp3 一边看谱" case, which shouldn't require
+// leaving for the Song Loop page. Song Loop stays one click away as a
+// secondary button for when A-B-loop/waveform/bar-grid tooling is needed.
+//
+// The <audio> element is created lazily on first play/seek interaction with
+// preload="none", so a note full of audio links costs no loads until one is
+// actually used (same click-to-load philosophy as the video/PDF embeds).
+// Playing one player pauses every sibling — overlapping backing tracks is
+// never what you want while reading a score.
+//
 // data-url/data-label (not inline onclick(...) args) for the same reason as
 // the material picker: a label derived from a filename can contain quotes
 // that would otherwise break out of a JS string literal.
+const LICK_AUDIO_SPEED_KEY = 'lick_audio_speed';
+const LICK_AUDIO_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5];
+
+// Live <audio> elements, one per embed that has been interacted with.
+// Backs one-track-at-a-time enforcement and licksAudioStopAll — the players'
+// DOM gets rebuilt whenever the hosting page re-renders, and an <audio>
+// keeps playing while referenced even after its controls are gone from the
+// page (an orphan you can't stop).
+const lickAudioPlayers = new Set();
+
+// Speed preference per audio URL (localStorage, last change wins — same
+// pattern as lick_pdf_open): which tempo you practice this track at is a
+// property of the track, not of the viewing session.
+function licksAudioSpeedMap() {
+  try {
+    const m = JSON.parse(localStorage.getItem(LICK_AUDIO_SPEED_KEY));
+    return m && typeof m === 'object' ? m : {};
+  } catch (_) { return {}; }
+}
+
+function licksAudioSpeedSet(href, speed) {
+  const m = licksAudioSpeedMap();
+  m[href] = speed;
+  localStorage.setItem(LICK_AUDIO_SPEED_KEY, JSON.stringify(m));
+}
+
+function licksFmtAudioTime(sec) {
+  if (!Number.isFinite(sec) || sec < 0) return '–:––';
+  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 function licksAudioEmbedHtml(href, label) {
+  const saved = licksAudioSpeedMap()[href];
+  const speed = LICK_AUDIO_SPEEDS.includes(saved) ? saved : 1;
   return `<div class="lick-audio-embed">` +
-    `<button class="btn btn-ghost btn-sm" onclick="licksPracticeWithSongLoop(this)" data-url="${htmlEsc(href)}" data-label="${htmlEsc(label || '')}">🎧 Practice with Song Loop →</button>` +
+    `<div class="lick-audio-player" data-url="${htmlEsc(href)}">` +
+      `<button type="button" class="btn btn-ghost btn-sm lick-audio-toggle" onclick="licksAudioToggle(this)">▶</button>` +
+      `<input type="range" class="lick-audio-seek" min="0" max="1000" value="0" step="1" oninput="licksAudioSeek(this)">` +
+      `<span class="lick-audio-time">0:00 / –:––</span>` +
+      `<select class="lick-audio-speed" title="变速（保调）" onchange="licksAudioSetSpeed(this)">` +
+        LICK_AUDIO_SPEEDS.map(s => `<option value="${s}"${s === speed ? ' selected' : ''}>${s}x</option>`).join('') +
+      `</select>` +
+    `</div>` +
+    `<button type="button" class="btn btn-ghost btn-sm" onclick="licksPracticeWithSongLoop(this)" data-url="${htmlEsc(href)}" data-label="${htmlEsc(label || '')}">🎧 Song Loop →</button>` +
     `</div>`;
+}
+
+// Lazily creates (or returns) the embed's <audio> element. Kept off-DOM;
+// all UI sync goes through its event listeners. Re-registers into
+// lickAudioPlayers on every call, since licksAudioStopAll clears the
+// registry without removing the (paused, still in-DOM) players.
+function licksAudioEl(playerEl) {
+  if (playerEl._audio) {
+    lickAudioPlayers.add(playerEl._audio);
+    return playerEl._audio;
+  }
+  const a = new Audio();
+  a.preload = 'none';
+  a.src = playerEl.dataset.url;
+  a.preservesPitch = true; // default in modern browsers, stated for clarity
+  a.playbackRate = parseFloat(playerEl.querySelector('.lick-audio-speed').value) || 1;
+  a.addEventListener('play', () => {
+    for (const other of lickAudioPlayers) { if (other !== a) other.pause(); }
+    playerEl.querySelector('.lick-audio-toggle').textContent = '⏸';
+  });
+  // 'pause' also fires on natural end (spec: pause then ended), so the
+  // button resets itself with no separate ended-handling for the icon.
+  a.addEventListener('pause', () => {
+    playerEl.querySelector('.lick-audio-toggle').textContent = '▶';
+  });
+  a.addEventListener('loadedmetadata', () => {
+    // A seek dragged before the first play (duration still unknown then)
+    // lands here once the real duration arrives.
+    if (playerEl._pendingSeek != null && Number.isFinite(a.duration) && a.duration > 0) {
+      a.currentTime = playerEl._pendingSeek * a.duration;
+      playerEl._pendingSeek = null;
+    }
+    licksAudioSyncUI(playerEl);
+  });
+  a.addEventListener('timeupdate', () => licksAudioSyncUI(playerEl));
+  a.addEventListener('ended', () => { a.currentTime = 0; });
+  playerEl._audio = a;
+  lickAudioPlayers.add(a);
+  return a;
+}
+
+function licksAudioToggle(btnEl) {
+  const playerEl = btnEl.closest('.lick-audio-player');
+  if (!playerEl) return;
+  const a = licksAudioEl(playerEl);
+  if (!a.paused) { a.pause(); return; }
+  a.play().catch(e => setStatus('音频播放失败: ' + (e?.message || e)));
+}
+
+function licksAudioSeek(rangeEl) {
+  const playerEl = rangeEl.closest('.lick-audio-player');
+  if (!playerEl) return;
+  const frac = (+rangeEl.value) / 1000;
+  if (!playerEl._audio) { playerEl._pendingSeek = frac; return; }
+  playerEl._pendingSeek = null;
+  const a = playerEl._audio;
+  if (Number.isFinite(a.duration) && a.duration > 0) a.currentTime = frac * a.duration;
+}
+
+function licksAudioSetSpeed(selectEl) {
+  const playerEl = selectEl.closest('.lick-audio-player');
+  const v = parseFloat(selectEl.value);
+  if (!playerEl || !LICK_AUDIO_SPEEDS.includes(v)) return;
+  if (playerEl._audio) playerEl._audio.playbackRate = v;
+  licksAudioSpeedSet(playerEl.dataset.url, v);
+}
+
+function licksAudioSyncUI(playerEl) {
+  const a = playerEl._audio;
+  if (!a) return;
+  const range = playerEl.querySelector('.lick-audio-seek');
+  const time = playerEl.querySelector('.lick-audio-time');
+  const dur = a.duration;
+  if (Number.isFinite(dur) && dur > 0) {
+    // Don't fight an in-progress drag — the user's thumb wins over the
+    // timeupdate echo of the position they're dragging away from.
+    if (document.activeElement !== range) range.value = Math.round((a.currentTime / dur) * 1000);
+    time.textContent = `${licksFmtAudioTime(a.currentTime)} / ${licksFmtAudioTime(dur)}`;
+  } else {
+    time.textContent = `${licksFmtAudioTime(a.currentTime)} / –:––`;
+  }
+}
+
+// Pauses every live mini-player and clears the registry. Called when the
+// hosting page (lick detail / editor preview) is left or about to be
+// re-rendered — otherwise audio would keep playing with its controls gone
+// from the DOM.
+function licksAudioStopAll() {
+  for (const a of lickAudioPlayers) a.pause();
+  lickAudioPlayers.clear();
 }
 
 // navigateTo (not plain showPage+slLoadFromUrl) so this jump lands in
@@ -505,6 +645,10 @@ function renderLickDetail(lick) {
   // including a fresh, empty #lick-practice-slot — is in place.
   const rescuedPanel = document.getElementById('st-panel');
   if (rescuedPanel) document.body.appendChild(rescuedPanel);
+  // Same rescue for the notes' inline audio players: the innerHTML reset
+  // below deletes their controls, and an off-DOM <audio> would keep playing
+  // with no way to stop it.
+  licksAudioStopAll();
   const sessions = lick.sessions || [];
   const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
   const targetLine = lick.target_bpm
@@ -683,6 +827,9 @@ function licksEditorSetMode(mode) {
   document.getElementById('lick-editor-mode-edit').classList.toggle('active', !isPreview);
   document.getElementById('lick-editor-mode-preview').classList.toggle('active', isPreview);
   if (isPreview) {
+    // Rebuilding the preview wipes any inline audio players' controls —
+    // stop them first, same orphan-audio reasoning as renderLickDetail.
+    licksAudioStopAll();
     const md = document.getElementById('lick-edit-notes').value;
     prev.innerHTML = md.trim()
       ? licksRenderNotes(md)
@@ -701,7 +848,7 @@ const LICKS_EDITOR_SNIPPETS = [
   { label: 'PDF 翻到第 N 页', code: '[谱例](链接 "page=2")', snippet: '[谱例](PDF链接 "page=2")\n' },
   { label: 'PDF 页内位置（仅 Chrome）', code: '"page=2,y=0.4"', snippet: '[谱例](PDF链接 "page=2,y=0.4")\n' },
   { label: 'PDF 预览框宽×高（px，默认 640×600）', code: '"page=2,w=900,h=700"', snippet: '[谱例](PDF链接 "page=2,w=900,h=700")\n' },
-  { label: '音频 → Song Loop 练习按钮', code: '[伴奏](音频链接)', snippet: '[伴奏](音频链接)\n' },
+  { label: '音频 → 内嵌播放器（+ Song Loop 入口）', code: '[伴奏](音频链接)', snippet: '[伴奏](音频链接)\n' },
 ];
 
 function licksRenderCheatsheet() {
@@ -1163,5 +1310,6 @@ if (typeof module !== 'undefined' && module.exports) {
     licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
     licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
+    licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet,
   };
 }

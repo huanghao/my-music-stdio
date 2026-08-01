@@ -160,3 +160,26 @@ test('timeAgo returns em dash for a missing timestamp', () => {
   assert.equal(licks.timeAgo(null), '—');
   assert.equal(licks.timeAgo(undefined), '—');
 });
+
+test('licksAudioEmbedHtml renders an inline mini-player plus the Song Loop hand-off, defaulting to 1x', () => {
+  global.htmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const html = licks.licksAudioEmbedHtml('/materials/backing.mp3', 'Backing');
+  assert.match(html, /class="lick-audio-player" data-url="\/materials\/backing\.mp3"/);
+  assert.match(html, /<option value="1" selected>1x<\/option>/);
+  assert.match(html, /onclick="licksPracticeWithSongLoop\(this\)"/);
+});
+
+test('licksAudioEmbedHtml restores the per-URL saved speed (and ignores values outside the offered set)', () => {
+  global.htmlEsc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  licks.licksAudioSpeedSet('/materials/slow.mp3', 0.75);
+  assert.match(licks.licksAudioEmbedHtml('/materials/slow.mp3', ''), /<option value="0.75" selected>0.75x<\/option>/);
+  licks.licksAudioSpeedSet('/materials/weird.mp3', 3);
+  assert.match(licks.licksAudioEmbedHtml('/materials/weird.mp3', ''), /<option value="1" selected>1x<\/option>/);
+});
+
+test('licksAudioSpeedMap tolerates corrupted localStorage data', () => {
+  _fakeStore['lick_audio_speed'] = '{not json';
+  assert.deepEqual(licks.licksAudioSpeedMap(), {});
+  _fakeStore['lick_audio_speed'] = '"a string, not an object"';
+  assert.deepEqual(licks.licksAudioSpeedMap(), {});
+});

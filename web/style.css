@@ -962,8 +962,21 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-pdf-thumb-label { font-size: 13px; color: var(--text-dim); }
 .lick-pdf-collapse { margin-bottom: 4px; }
 
-/* Audio: not a player, a hand-off button into Song Loop's speed/A-B-loop tooling */
-.lick-audio-embed { margin: 8px 0; }
+/* Audio embeds: an inline mini-player (play/seek/speed) for listen-while-
+   reading-the-score, plus a secondary hand-off button into Song Loop's
+   A-B-loop tooling. The <audio> element itself is created lazily off-DOM —
+   see licksAudioEmbedHtml in licks.js. */
+.lick-audio-embed { margin: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lick-audio-player {
+  display: flex; align-items: center; gap: 8px;
+  flex: 1; min-width: 260px; max-width: 480px;
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 10px;
+}
+.lick-audio-toggle { flex: none; min-width: 34px; }
+.lick-audio-seek { flex: 1; min-width: 80px; accent-color: var(--primary); }
+.lick-audio-time { flex: none; font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: pre; }
+.lick-audio-speed { flex: none; font-size: 12px; padding: 3px 4px; }
 
 /* Progress chart */
 .lick-chart-wrap   { margin: 12px 0 20px; }

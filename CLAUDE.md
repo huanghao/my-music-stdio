@@ -15,6 +15,7 @@
 | Speed Trainer | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
+| Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
 
 ### 实现模式
 

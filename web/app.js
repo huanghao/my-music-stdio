@@ -286,6 +286,13 @@ function showPage(name) {
       licksEndPractice();
     }
   }
+  // The lick notes' inline audio players live inside the lick detail /
+  // editor pages; leaving either one without stopping them would leave
+  // audio playing with no visible controls (page re-renders stop them
+  // separately, at the point their DOM is rebuilt — see licksAudioStopAll).
+  const leavingLickAudioPage = (name !== 'lick-detail' && document.getElementById('page-lick-detail')?.classList.contains('active'))
+    || (name !== 'lick-edit' && document.getElementById('page-lick-edit')?.classList.contains('active'));
+  if (leavingLickAudioPage && typeof licksAudioStopAll === 'function') licksAudioStopAll();
   localStorage.setItem(CURRENT_PAGE_KEY, name);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');

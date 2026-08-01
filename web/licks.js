@@ -1137,6 +1137,9 @@ function licksSyncPracticePanelHome() {
   }
   const target = document.getElementById(onActiveLickDetail ? 'lick-practice-slot' : 'st-panel-home');
   if (target && panel.parentElement !== target) target.appendChild(panel);
+  // Banner visibility depends on where the panel just landed (hidden when
+  // embedded in the detail page) — re-evaluate after every move.
+  renderActiveLickBanner();
 
   if (typeof registerTransport !== 'function') return;
   // The panel has no inline Start/Stop of its own — like the standalone
@@ -1190,7 +1193,12 @@ function renderActiveLickBanner() {
   const el = document.getElementById('st-active-lick-banner');
   if (!el) return;
   const a = licksState.activeLick;
-  if (!a) { el.style.display = 'none'; return; }
+  // When the panel is embedded in a Lick's detail page, the banner's text is
+  // dead weight: the panel's presence already says "practicing", and the
+  // title it would name is the page's own <h2> right above. Only the
+  // standalone Speed Trainer page lacks that context, so only there is the
+  // banner shown.
+  if (!a || el.closest('#lick-practice-slot')) { el.style.display = 'none'; return; }
   el.style.display = '';
   el.innerHTML = `
     <span class="st-lick-banner-text">🎯 Practicing: <strong>${htmlEsc(a.title)}</strong></span>

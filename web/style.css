@@ -1003,12 +1003,17 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-session-dur  { color: var(--text-muted); min-width: 50px; }
 .lick-session-date { color: var(--text-faint); }
 
-/* Practice panel, embedded below the sessions list (see
-   licksSyncPracticePanelHome) — capped to match the rest of the detail
-   page's content width instead of stretching the #st-panel cards
-   (.st-options/.st-display/.st-active-lick-banner) edge to edge, which is
-   fine on the standalone Speed Trainer page but not here. */
-#lick-practice-slot { margin-top: 20px; max-width: 720px; }
+/* Practice panel, embedded directly under the notes (see
+   licksSyncPracticePanelHome) — the practicing flow is score + metronome on
+   one screen, with chart/sessions history below. Capped to match the rest
+   of the detail page's content width instead of stretching the #st-panel
+   cards (.st-options/.st-display/.st-active-lick-banner) edge to edge,
+   which is fine on the standalone Speed Trainer page but not here. Margins
+   only apply when the panel is actually embedded: the slot is an empty div
+   when not practicing, and a bare margin would leave a permanent gap
+   between notes and chart. */
+#lick-practice-slot { max-width: 720px; }
+#lick-practice-slot:not(:empty) { margin: 20px 0; }
 
 /* Lick full-page editor (title + notes + target BPM — edit / preview modes) */
 .lick-editor-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }

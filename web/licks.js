@@ -677,6 +677,11 @@ function renderLickDetail(lick) {
     ${liveNote}
     ${lick.notes ? `<div class="lick-notes-md">${licksRenderNotes(lick.notes)}</div>` : ''}
 
+    <!-- Practice slot lives directly under the notes: while practicing, the
+         flow is score + metronome together, with the chart/sessions history
+         below as reference. Empty when not practicing — no visual change. -->
+    <div id="lick-practice-slot"></div>
+
     <div class="lick-chart-wrap" id="lick-chart-wrap">
       ${renderLickChart(sessions, lick.target_bpm)}
     </div>
@@ -702,8 +707,6 @@ function renderLickDetail(lick) {
             return rows + more;
           })()}
     </div>
-
-    <div id="lick-practice-slot"></div>
   `;
   licksSyncPracticePanelHome();
 }

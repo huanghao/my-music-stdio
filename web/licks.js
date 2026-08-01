@@ -739,13 +739,25 @@ function renderLickChart(sessions, targetBpm) {
       <line x1="${PAD.l}" y1="${y}" x2="${PAD.l + cW}" y2="${y}" class="lick-chart-grid"/>`;
   }).join('');
 
-  // X-axis: show up to 6 date labels
+  // X-axis: show up to ~6 date labels. Candidates come from an index stride,
+  // but the axis is time-scaled — sessions clustered on the same day land on
+  // nearly the same x and overprint (two "Jul 29" labels 0px apart render as
+  // garbled overlap), so additionally drop any label closer than MIN_GAP px
+  // to the previously kept one. The final session's label is always kept: on
+  // collision the previously kept label is the one that gets dropped.
   const step = Math.max(1, Math.ceil(sessions.length / 6));
-  const xLabels = sessions.filter((_, i) => i % step === 0 || i === sessions.length - 1).map(s => {
+  const MIN_X_LABEL_GAP = 56;
+  const xKept = [];
+  sessions.forEach((s, i) => {
+    if (i % step !== 0 && i !== sessions.length - 1) return;
     const x = toX(new Date(s.date).getTime());
-    const label = fmtDateShort(s.date);
-    return `<text x="${x}" y="${H - 6}" class="lick-chart-label" text-anchor="middle">${label}</text>`;
-  }).join('');
+    if (xKept.length && x - xKept[xKept.length - 1].x < MIN_X_LABEL_GAP) {
+      if (i === sessions.length - 1) xKept.pop(); else return;
+    }
+    xKept.push({ x, label: fmtDateShort(s.date) });
+  });
+  const xLabels = xKept.map(({ x, label }) =>
+    `<text x="${x}" y="${H - 6}" class="lick-chart-label" text-anchor="middle">${label}</text>`).join('');
 
   // Target BPM line
   const targetLine = targetBpm
@@ -758,11 +770,12 @@ function renderLickChart(sessions, targetBpm) {
   const polyline = sessions.length > 1
     ? `<polyline points="${pts}" class="lick-chart-line"/>` : '';
 
-  // Dots + tooltips
-  const dots = sessions.map((s, i) => {
+  // Dots + tooltips (native <title> hover — a blocking alert() on a 4px dot
+  // used to fire on what was usually a mis-tap trying to read the tooltip)
+  const dots = sessions.map((s) => {
     const x = toX(new Date(s.date).getTime()), y = toY(s.bpm);
     const tip = `${fmtDate(s.date)}: ${s.bpm} BPM, ${s.duration_min} min`;
-    return `<circle cx="${x}" cy="${y}" r="4" class="lick-chart-dot" onclick="alert('${tip}')">
+    return `<circle cx="${x}" cy="${y}" r="4" class="lick-chart-dot">
       <title>${tip}</title>
     </circle>`;
   }).join('');
@@ -1310,6 +1323,6 @@ if (typeof module !== 'undefined' && module.exports) {
     licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
     licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
-    licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet,
+    licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,
   };
 }

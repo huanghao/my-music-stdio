@@ -980,7 +980,10 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* Progress chart */
 .lick-chart-wrap   { margin: 12px 0 20px; }
-.lick-chart-svg    { width: 100%; max-width: 520px; height: auto; display: block; overflow: visible; }
+/* 720, not the SVG's native 520 — aligns the chart's right edge with the
+   detail header and #lick-practice-slot column on wide windows. viewBox
+   scales the whole chart proportionally, labels included. */
+.lick-chart-svg    { width: 100%; max-width: 720px; height: auto; display: block; overflow: visible; }
 .lick-chart-label  { font-size: 10px; fill: var(--text-muted); }
 .lick-chart-grid   { stroke: var(--bg-faint); stroke-width: 1; }
 .lick-chart-line   { fill: none; stroke: var(--primary); stroke-width: 2; }

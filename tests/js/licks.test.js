@@ -183,3 +183,41 @@ test('licksAudioSpeedMap tolerates corrupted localStorage data', () => {
   _fakeStore['lick_audio_speed'] = '"a string, not an object"';
   assert.deepEqual(licks.licksAudioSpeedMap(), {});
 });
+
+// renderLickChart calls app.js's date formatters — stub them (and count the
+// x-axis <text> labels via the y= attribute that only axis labels use).
+function stubDateFmt() {
+  global.fmtDateShort = iso => {
+    const d = new Date(iso);
+    return `${d.toLocaleString('en', { month: 'short' })} ${d.getDate()}`;
+  };
+  global.fmtDate = iso => iso.slice(0, 10);
+}
+const xAxisLabels = svg => [...svg.matchAll(new RegExp(`<text x="([\\d.]+)" y="154"`, 'g'))]
+  .map(m => parseFloat(m[1]));
+
+test('renderLickChart does not overprint x-axis labels for same-day session clusters', () => {
+  stubDateFmt();
+  const sessions = [
+    { date: '2026-07-29T10:00:00', bpm: 60, duration_min: 3 },
+    { date: '2026-07-29T18:00:00', bpm: 60, duration_min: 1 },
+    { date: '2026-08-01T10:00:00', bpm: 60, duration_min: 3.5 },
+  ];
+  const xs = xAxisLabels(licks.renderLickChart(sessions, null));
+  assert.equal(xs.length, 2); // one label for the Jul 29 cluster, one for Aug 1
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= 56);
+});
+
+test('renderLickChart always keeps the final session label, dropping the previous one on collision', () => {
+  stubDateFmt();
+  const sessions = [
+    { date: '2026-07-29T10:00:00', bpm: 60, duration_min: 3 },
+    { date: '2026-08-01T10:00:00', bpm: 62, duration_min: 2 },
+    { date: '2026-08-01T18:00:00', bpm: 64, duration_min: 2 },
+  ];
+  const xs = xAxisLabels(licks.renderLickChart(sessions, null));
+  assert.equal(xs.length, 2);
+  // the surviving right-side label is the LAST session's (rightmost x)
+  const maxX = Math.max(...xs);
+  assert.ok(xs[xs.length - 1] === maxX);
+});

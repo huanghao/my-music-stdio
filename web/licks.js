@@ -91,6 +91,72 @@ function licksParseLinkDirectives(title) {
   return out;
 }
 
+// Rewrites the w=/h= preview-size directives of the idx-th resizable media
+// link (video/PDF, in document order — the ordinal the link renderer stamps
+// as data-ml-idx) in the raw notes Markdown, returning the updated notes.
+// This is how a drag-resize on the detail page persists: the new pixel size
+// is written back into the link's title directives and saved to the server.
+// Returns null when the link can't be rewritten safely (unexpected syntax —
+// single-quote/paren title forms, angle-bracket hrefs — or idx out of
+// range); the caller then keeps the resize as a view-only tweak.
+function licksRewriteLinkSize(notes, idx, sizes) {
+  if (typeof marked === 'undefined' || !notes) return null;
+  const w = Number.isFinite(sizes.w) ? Math.round(sizes.w) : null;
+  const h = Number.isFinite(sizes.h) ? Math.round(sizes.h) : null;
+  if (w === null && h === null) return null;
+
+  const links = [];
+  try {
+    marked.walkTokens(marked.lexer(notes), (t) => {
+      if (t.type !== 'link' || !t.raw) return;
+      if (licksYoutubeId(t.href) || licksBilibiliId(t.href) || licksIsPdfUrl(t.href)) links.push(t);
+    });
+  } catch (e) {
+    console.warn('licksRewriteLinkSize: failed to lex notes:', e);
+    return null;
+  }
+  if (idx < 0 || idx >= links.length) return null;
+
+  // Find this occurrence in the source: links were collected in document
+  // order, so walking indexOf past each preceding raw keeps identical
+  // duplicate links from colliding on the first match.
+  let offset = 0, pos = -1;
+  for (let i = 0; i <= idx; i++) {
+    pos = notes.indexOf(links[i].raw, offset);
+    if (pos === -1) return null;
+    offset = pos + links[i].raw.length;
+  }
+  const raw = links[idx].raw;
+
+  // Only `[text](href)` and `[text](href "title")` are rewritten.
+  const m = raw.match(/^\[([^\]]*)\]\((\S+?)(?:\s+"([^"]*)")?\)$/);
+  if (!m) {
+    console.warn('licksRewriteLinkSize: unsupported link syntax, leaving notes unchanged:', raw);
+    return null;
+  }
+  // Split the title into its comma-separated parts and replace (or append)
+  // the size keys, preserving everything else (page=, y=, plain captions).
+  const parts = m[3] ? m[3].split(',').map(p => p.trim()).filter(Boolean) : [];
+  const setKey = (keyRe, key, val) => {
+    const i = parts.findIndex(p => keyRe.test(p));
+    if (i >= 0) parts[i] = parts[i].replace(keyRe, `${key}=${val}`);
+    else parts.push(`${key}=${val}`);
+  };
+  if (w !== null) setKey(/^(?:w|width)[:=]\s*[\d.]+$/i, 'w', w);
+  if (h !== null) setKey(/^(?:h|height)[:=]\s*[\d.]+$/i, 'h', h);
+
+  const newRaw = `[${m[1]}](${m[2]} "${parts.join(',')}")`;
+  return notes.slice(0, pos) + newRaw + notes.slice(pos + raw.length);
+}
+
+// Ordinal of the next resizable media embed (video/PDF — audio players are
+// fixed-size and don't participate) within the notes currently being
+// rendered. Reset per licksRenderNotes call; stamped as data-ml-idx so a
+// rendered embed maps back to the Nth resizable link in the Markdown source
+// (see licksRewriteLinkSize — renderers run in document order, so the counts
+// stay in sync).
+let licksMediaEmbedIdx = 0;
+
 if (typeof marked !== 'undefined') {
   // Any link whose href is a video/PDF/audio URL renders as the normal link
   // (so it still opens in a new tab) plus a click-to-open preview right
@@ -113,7 +179,7 @@ if (typeof marked !== 'undefined') {
         const titleAttr = title && !hasDirectives ? ` title="${htmlEsc(title)}"` : '';
         const link = `<a href="${htmlEsc(href)}" target="_blank" rel="noopener"${titleAttr}>${text}</a>`;
 
-        if (isPdf) return link + licksPdfEmbedHtml(href, dir);
+        if (isPdf) return link + licksPdfEmbedHtml(href, dir, licksMediaEmbedIdx++);
         // Link label as a plain-text display name for Song Loop (strip any
         // inline Markdown formatting) — without this, Song Loop derives a
         // name from the URL itself, which for a materials-library URL is
@@ -131,7 +197,7 @@ if (typeof marked !== 'undefined') {
           : `<span class="lick-video-thumb-fallback">📺 Bilibili</span>`;
 
         return link +
-          `<div class="lick-video-embed"${styleAttr}>` +
+          `<div class="lick-video-embed" data-ml-idx="${licksMediaEmbedIdx++}"${styleAttr}>` +
           `<div class="lick-video-thumb" onclick="licksPlayVideoEmbed(this)" data-src="${htmlEsc(embedSrc)}">` +
           thumbHtml +
           `<span class="lick-video-play">▶</span>` +
@@ -191,7 +257,7 @@ function licksPdfSetOpen(href, open) {
 // The wrapper carries everything needed to rebuild either state (data-href/
 // data-src/data-page/data-h) so expanding and collapsing are just innerHTML
 // swaps — no re-parsing of the Markdown source required.
-function licksPdfEmbedHtml(href, dir) {
+function licksPdfEmbedHtml(href, dir, mlIdx) {
   const page = Number.isFinite(dir.page) ? Math.max(1, Math.round(dir.page)) : 1;
   // `w` overrides the default max-width (see .lick-pdf-embed in style.css —
   // raised from a cramped 480px default, but still capped unless you ask
@@ -210,7 +276,7 @@ function licksPdfEmbedHtml(href, dir) {
   const body = licksPdfOpenMap()[href]
     ? licksPdfExpandedHtml(src, page, h)
     : licksPdfThumbHtml(src, page);
-  return `<div class="lick-pdf-embed"${styleAttr}${dataAttrs}>${body}</div>`;
+  return `<div class="lick-pdf-embed" data-ml-idx="${mlIdx}"${styleAttr}${dataAttrs}>${body}</div>`;
 }
 
 function licksPdfThumbHtml(src, page) {
@@ -220,9 +286,12 @@ function licksPdfThumbHtml(src, page) {
 }
 
 function licksPdfExpandedHtml(src, page, h) {
+  // The frame (not the iframe) carries the size: it's the CSS-resizable box
+  // (resize: both — iframes are replaced elements and can't be resized
+  // directly), with the iframe filling it absolutely.
   const styleAttr = h ? ` style="height:${h}px"` : '';
   return `<button class="btn btn-ghost btn-sm lick-pdf-collapse" onclick="licksCollapsePdfEmbed(this)">▾ 收起谱例（第 ${page} 页）</button>` +
-    `<iframe src="${htmlEsc(src)}" title="PDF preview"${styleAttr}></iframe>`;
+    `<div class="lick-pdf-frame"${styleAttr}><iframe src="${htmlEsc(src)}" title="PDF preview"></iframe></div>`;
 }
 
 function licksPlayPdfEmbed(thumbEl) {
@@ -230,6 +299,9 @@ function licksPlayPdfEmbed(thumbEl) {
   licksPdfSetOpen(wrapper.dataset.href, true);
   wrapper.innerHTML = licksPdfExpandedHtml(
     wrapper.dataset.src, +(wrapper.dataset.page || 1), +(wrapper.dataset.h || 0) || null);
+  // A collapsed PDF had no frame to observe at render time — watch the fresh
+  // one so its resizes write back too (no-op outside the detail page).
+  licksWatchEmbedResizes(wrapper);
 }
 
 function licksCollapsePdfEmbed(btnEl) {
@@ -404,7 +476,100 @@ function licksPracticeWithSongLoop(btnEl) {
 
 function licksRenderNotes(notes) {
   if (typeof marked === 'undefined') return `<p>${htmlEsc(notes)}</p>`; // vendor script missing — plain-text fallback
+  licksMediaEmbedIdx = 0; // data-ml-idx ordinals are per-render (see its declaration)
   return marked.parse(notes);
+}
+
+// ── Embed drag-resize → write back into the notes ──
+// On the detail page, resizing a video/PDF embed via its bottom-right handle
+// persists the new size into the notes' w=/h= link directives and saves the
+// lick to the server, so the size survives reloads and shows in the editor.
+// The editor's preview render is deliberately NOT wired up: there the
+// textarea is the source of truth and a write-back would trample in-progress
+// edits.
+
+const licksEmbedResizeObservers = [];
+// Guards against double-observing an element (e.g. a PDF re-expanded after a
+// collapse) — duplicate observers would stack redundant debounce timers.
+const licksEmbedResizeWatched = new WeakSet();
+
+function licksDisconnectEmbedResizes() {
+  while (licksEmbedResizeObservers.length) licksEmbedResizeObservers.pop().disconnect();
+}
+
+// Finds not-yet-observed resizable embeds under `container` and watches them.
+// Called after every render that can introduce one: the detail-page render
+// and PDF expand-by-click (a collapsed PDF has no frame to observe).
+function licksWatchEmbedResizes(container) {
+  const lick = licksState.currentLick;
+  if (!lick || licksState.editor || typeof ResizeObserver === 'undefined' || !container) return;
+  // One debounce for the whole page, not per embed: saves PUT the full notes
+  // text, so two embeds' saves racing from a stale copy would silently
+  // clobber each other (last writer wins). Batching applies every pending
+  // size to the latest notes in a single save; the promise chain serializes
+  // a flush against one still awaiting its PUT.
+  const pending = licksWatchEmbedResizes._pending || (licksWatchEmbedResizes._pending = new Map());
+  const schedule = (idx, sizes) => {
+    pending.set(idx, { ...pending.get(idx), ...sizes });
+    const st = licksWatchEmbedResizes;
+    if (st._timer) clearTimeout(st._timer);
+    st._timer = setTimeout(() => {
+      st._timer = null;
+      const batch = [...pending.entries()];
+      pending.clear();
+      st._chain = (st._chain || Promise.resolve()).then(() => licksSaveEmbedSizes(lick, batch));
+    }, 500);
+  };
+  const watch = (el, idxEl, getSizes) => {
+    if (licksEmbedResizeWatched.has(el)) return;
+    licksEmbedResizeWatched.add(el);
+    let first = true; // observe() fires once immediately with the current size — not a user resize
+    const ro = new ResizeObserver(() => {
+      if (first) { first = false; return; }
+      const idx = parseInt(idxEl.dataset.mlIdx, 10);
+      if (!Number.isInteger(idx)) return;
+      schedule(idx, getSizes());
+    });
+    ro.observe(el);
+    licksEmbedResizeObservers.push(ro);
+  };
+  container.querySelectorAll('.lick-video-embed[data-ml-idx]').forEach(el => {
+    watch(el, el, () => ({ w: el.offsetWidth }));
+  });
+  container.querySelectorAll('.lick-pdf-embed[data-ml-idx] .lick-pdf-frame').forEach(el => {
+    const embed = el.closest('.lick-pdf-embed');
+    watch(el, embed, () => {
+      // Uncap mid-drag: the embed's default 640px max-width would otherwise
+      // clamp the frame before the debounced save can write a wider w= back.
+      embed.style.maxWidth = el.offsetWidth + 'px';
+      return { w: el.offsetWidth, h: el.offsetHeight };
+    });
+  });
+}
+
+async function licksSaveEmbedSizes(lick, batch) {
+  if (licksState.currentLick !== lick || !batch.length) return; // navigated away mid-debounce
+  // Apply each resize to the result of the previous one — every rewrite
+  // re-lexes, so ordinals stay valid (rewrites only touch link titles).
+  let notes = lick.notes;
+  for (const [idx, sizes] of batch) {
+    const next = licksRewriteLinkSize(notes, idx, sizes);
+    if (next !== null) notes = next;
+  }
+  if (notes === lick.notes) return;
+  try {
+    await api(`/api/licks/${lick.id}`, 'PUT', { title: lick.title, notes, target_bpm: lick.target_bpm ?? null });
+    // No re-render: the DOM already shows the new size (the user dragged it
+    // there), and rebuilding mid-drag would clobber the resize. Just keep
+    // the cached copies in sync so a later render/edit sees the new text.
+    lick.notes = notes;
+    const cached = licksState.licksById[lick.id];
+    if (cached) cached.notes = notes;
+  } catch (e) {
+    // View-only degradation: the resize stays on screen but won't survive a
+    // reload — warn rather than silently drop it.
+    console.warn('failed to save resized embed back to notes:', e);
+  }
 }
 
 // ── List page ──
@@ -649,6 +814,9 @@ function renderLickDetail(lick) {
   // below deletes their controls, and an off-DOM <audio> would keep playing
   // with no way to stop it.
   licksAudioStopAll();
+  // Drop resize observers on the outgoing embeds before the rebuild removes
+  // them (see licksWatchEmbedResizes — fresh ones attach below).
+  licksDisconnectEmbedResizes();
   const sessions = lick.sessions || [];
   const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
   const targetLine = lick.target_bpm
@@ -709,6 +877,7 @@ function renderLickDetail(lick) {
     </div>
   `;
   licksSyncPracticePanelHome();
+  licksWatchEmbedResizes(el);
 }
 
 // ── SVG progress chart ──
@@ -876,7 +1045,7 @@ function licksRenderCheatsheet() {
         <span class="lick-snippet-label">${htmlEsc(s.label)}</span>
         <code>${htmlEsc(s.code)}</code>
       </button>`).join('') +
-    '<div class="lick-editor-cheatsheet-foot">📷/📎 按钮插入的链接已带好语法，只需改数字</div>';
+    '<div class="lick-editor-cheatsheet-foot">📷/📎 按钮插入的链接已带好语法，只需改数字<br>详情页拖视频/PDF 右下角调整大小，会自动写回 w=/h=</div>';
   el.addEventListener('click', e => {
     const btn = e.target.closest('.lick-snippet-btn');
     if (btn) licksInsertAtNotesCursor(LICKS_EDITOR_SNIPPETS[+btn.dataset.snippetIdx].snippet);
@@ -1332,7 +1501,7 @@ if (typeof guarded === 'function') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
-    licksMaterialLinkMarkdown, licksSafeLinkLabel,
+    licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,
   };

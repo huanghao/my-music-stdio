@@ -10,6 +10,9 @@ global.localStorage = {
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+// The vendored marked is UMD/CommonJS-compatible — load it as the global so
+// licks.js registers its link renderer (and so licksRewriteLinkSize can lex).
+global.marked = require('../../web/vendor/marked.umd.js');
 const licks = require('../../web/licks.js');
 
 test('licksYoutubeId extracts the video id from watch/short/embed/youtu.be URLs', () => {
@@ -220,4 +223,68 @@ test('renderLickChart always keeps the final session label, dropping the previou
   // the surviving right-side label is the LAST session's (rightmost x)
   const maxX = Math.max(...xs);
   assert.ok(xs[xs.length - 1] === maxX);
+});
+
+// ── licksRewriteLinkSize: drag-resize write-back into the notes Markdown ──
+
+test('licksRewriteLinkSize inserts w= into a title-less video link', () => {
+  const notes = 'watch [demo](https://youtu.be/keQUk4VQCi4) slowly';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 0, { w: 480 }),
+    'watch [demo](https://youtu.be/keQUk4VQCi4 "w=480") slowly'
+  );
+});
+
+test('licksRewriteLinkSize updates an existing w= value', () => {
+  const notes = '[demo](https://youtu.be/keQUk4VQCi4 "w=300")';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 0, { w: 480 }),
+    '[demo](https://youtu.be/keQUk4VQCi4 "w=480")'
+  );
+});
+
+test('licksRewriteLinkSize writes w and h for a PDF link, preserving page=/y= directives', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,y=0.4")';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 0, { w: 900.4, h: 700 }),
+    '[score](https://x.com/a.pdf "page=2,y=0.4,w=900,h=700")' // w rounded
+  );
+});
+
+test('licksRewriteLinkSize preserves a plain caption in the title when appending w=', () => {
+  const notes = '[score](https://x.com/a.pdf "my caption")';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 0, { w: 700, h: 500 }),
+    '[score](https://x.com/a.pdf "my caption,w=700,h=500")'
+  );
+});
+
+test('licksRewriteLinkSize counts only video/PDF links — plain and audio links do not consume an ordinal', () => {
+  const notes = '[plain](https://example.com) [audio](https://x.com/t.mp3) [v](https://youtu.be/keQUk4VQCi4) [s](https://x.com/b.pdf)';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 1, { w: 800 }),
+    '[plain](https://example.com) [audio](https://x.com/t.mp3) [v](https://youtu.be/keQUk4VQCi4) [s](https://x.com/b.pdf "w=800")'
+  );
+});
+
+test('licksRewriteLinkSize disambiguates identical duplicate links by ordinal', () => {
+  const link = '[demo](https://youtu.be/keQUk4VQCi4)';
+  const notes = `${link} and ${link}`;
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 1, { w: 500 }),
+    `${link} and [demo](https://youtu.be/keQUk4VQCi4 "w=500")`
+  );
+});
+
+test('licksRewriteLinkSize returns null for an out-of-range ordinal', () => {
+  assert.equal(licks.licksRewriteLinkSize('[demo](https://youtu.be/keQUk4VQCi4)', 3, { w: 500 }), null);
+});
+
+test('licksRewriteLinkSize returns null for a single-quote title instead of mangling it', () => {
+  const notes = "[demo](https://youtu.be/keQUk4VQCi4 'w=300')";
+  assert.equal(licks.licksRewriteLinkSize(notes, 0, { w: 500 }), null);
+});
+
+test('licksRewriteLinkSize returns null when no size is given', () => {
+  assert.equal(licks.licksRewriteLinkSize('[demo](https://youtu.be/keQUk4VQCi4)', 0, {}), null);
 });

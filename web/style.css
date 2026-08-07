@@ -926,9 +926,9 @@ input[type="number"] { width: 64px; text-align: center; }
   aspect-ratio: 16 / 9; margin: 8px 0; border-radius: 6px 6px 6px 0;
   overflow: hidden; background: #111;
   /* Drag the bottom-right corner to resize — height follows via aspect-ratio,
-     so it can't be distorted into a non-16:9 box. This is a per-view sizing
-     tweak, not a saved preference (see the `w=` markdown link directive
-     above for the way to set a lasting width in the note text itself). */
+     so it can't be distorted into a non-16:9 box. On the detail page the new
+     width is written back into the note's `w=` link directive and saved (see
+     licksObserveEmbedResizes); elsewhere it's a per-view tweak. */
   resize: horizontal;
 }
 .lick-video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
@@ -948,10 +948,16 @@ input[type="number"] { width: 64px; text-align: center; }
    width to be legible. Still overridable per-link with "w=" (see the syntax
    help in the Lick edit modal), e.g. wider for a two-page spread. */
 .lick-pdf-embed { width: 100%; max-width: 640px; margin: 8px 0; }
-.lick-pdf-embed iframe {
-  display: block; width: 100%; height: 600px;
-  border: 1px solid var(--border); border-radius: 6px;
+/* The expanded viewer resizes from the bottom-right corner, both directions
+   (width feeds w=, height h= when the resize is written back into the note's
+   link directives on the detail page — see licksObserveEmbedResizes). The
+   frame div carries the size because CSS resize doesn't apply to iframes. */
+.lick-pdf-frame {
+  position: relative; width: 100%; height: 600px; min-width: 240px; min-height: 200px;
+  overflow: hidden; resize: both;
+  border: 1px solid var(--border); border-radius: 6px 6px 6px 0;
 }
+.lick-pdf-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .lick-pdf-thumb {
   display: flex; align-items: center; gap: 10px; cursor: pointer;
   background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;

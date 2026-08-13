@@ -512,26 +512,53 @@ function fbCidRenderGrid() {
   el.innerHTML = html;
 }
 
-// Small read-only version of the same grid, used to redraw the exact shape
-// you clicked next to each chord in the progression (not just its resolved
-// name) — no onclick handlers, no mute toggle.
-function fbCidRenderMiniGrid(input) {
-  if (!input) return '';
-  const rowOrder = [5, 4, 3, 2, 1, 0];
-  let html = '<div class="cid-mini-grid"><div class="cid-mini-grid-row cid-mini-grid-header"><span class="cid-mini-string-label"></span>';
-  for (let f = 0; f <= 12; f++) html += `<span class="cid-mini-fret-head">${f === 0 ? '○' : f}</span>`;
-  html += '</div>';
-  rowOrder.forEach(i => {
-    const muted = input[i] === 'x';
-    html += `<div class="cid-mini-grid-row"><span class="cid-mini-string-label${muted ? ' muted' : ''}">${FB_STRING_NAMES[i]}</span>`;
-    for (let f = 0; f <= 12; f++) {
-      const sel = !muted && input[i] === f;
-      html += `<span class="cid-mini-fret-cell${sel ? ' sel' : ''}"></span>`;
-    }
-    html += '</div>';
-  });
-  html += '</div>';
-  return html;
+// Converts an absolute fret-per-string input (this file's own format:
+// 'x'/0-24 per string, low E first) into svguitar's finger list — a normal
+// vertical chord-box diagram (strings vertical, frets horizontal, nut at
+// top), the same convention fretboard.js's fbShapeToSvguitarChord draws for
+// CAGED shapes. That function is keyed to *movable-shape* offsets though
+// (relative to a barre position); this one is simpler because the input
+// here is always already absolute frets — always shown from the nut
+// (position 1), which is exactly what you want for the open-position
+// voicings this feature is built around.
+function fbCidShapeToSvguitarChord(input) {
+  const fingers = [];
+  let maxFret = 1;
+  for (let i = 0; i < 6; i++) {
+    const svString = 6 - i; // low E (index 0) -> string 6, high e (index 5) -> string 1
+    const v = input[i];
+    if (v === 'x') { fingers.push([svString, svguitar.SILENT]); continue; }
+    if (v === 0) { fingers.push([svString, svguitar.OPEN]); continue; }
+    fingers.push([svString, v, { color: '#4a7c4a' }]);
+    if (v > maxFret) maxFret = v;
+  }
+  return { fingers, position: 1, fretsToShow: Math.max(2, maxFret) };
+}
+
+// Draws the standard chord-box diagram for the shape you actually clicked
+// into `containerEl` (a real DOM node — svguitar draws into it directly, so
+// this can't be part of an innerHTML string like the rest of this file's
+// rendering; callers insert a placeholder div first, see fbCidRenderProgression).
+function fbCidRenderChordDiagram(containerEl, input) {
+  if (!containerEl) return;
+  containerEl.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'fb-board fb-svguitar-box';
+  containerEl.appendChild(box);
+  const { fingers, position, fretsToShow } = fbCidShapeToSvguitarChord(input);
+  new svguitar.SVGuitarChord(box)
+    .configure({
+      strings: 6, frets: fretsToShow,
+      tuning: FB_STRING_NAMES,
+      color: '#8a8578',
+      fingerColor: '#4a7c4a',
+      fingerTextColor: '#fff',
+      barreChordStrokeWidth: 0,
+      fretLabelFontSize: 32,
+      tuningsFontSize: 24,
+    })
+    .chord({ fingers, barres: [], position })
+    .draw();
 }
 
 // Shared "what's missing from this candidate" label, used both by the
@@ -619,7 +646,7 @@ function fbCidRenderChordCard(slot, idx) {
         <span class="cid-prog-card-label" title="${slot.locked ? '你选定的读法' : '还不确定 — 已按当前调号自动判断，可在下方改选'}">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
         <button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${idx})" title="删除">✕</button>
       </div>
-      ${fbCidRenderMiniGrid(slot.input)}
+      <div class="cid-prog-card-diagram" id="cid-diagram-${idx}"></div>
       <div class="cid-candidate-list">${candidatesHtml}</div>
       ${unlockBtn}
     </div>`;
@@ -650,6 +677,10 @@ function fbCidRenderProgression() {
   });
   html += '</div>';
   el.innerHTML = html;
+
+  // svguitar draws into real DOM nodes, so the diagrams can't be part of the
+  // innerHTML string above — fill each placeholder now that it exists in the DOM.
+  s.chords.forEach((slot, i) => fbCidRenderChordDiagram(document.getElementById('cid-diagram-' + i), slot.input));
 }
 
 function fbCidRenderAnalysis() {

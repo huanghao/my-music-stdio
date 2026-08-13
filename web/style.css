@@ -714,16 +714,11 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-prog-chip-del { border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 11px; padding: 0; }
 .cid-prog-chip-del:hover { color: var(--danger-dark); }
 
-/* Read-only miniature of .cid-grid, redrawn per progression card */
-.cid-mini-grid { overflow-x: auto; }
-.cid-mini-grid-row { display: grid; grid-template-columns: 18px repeat(13, minmax(13px, 1fr)); align-items: center; gap: 1px; }
-.cid-mini-grid-row + .cid-mini-grid-row { margin-top: 1px; }
-.cid-mini-grid-header { font-size: 8px; color: var(--text-faint); }
-.cid-mini-fret-head { text-align: center; }
-.cid-mini-string-label { font-size: 9px; font-weight: 700; color: var(--text-dim); text-align: center; }
-.cid-mini-string-label.muted { color: var(--danger-dark); }
-.cid-mini-fret-cell { height: 13px; border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 2px; }
-.cid-mini-fret-cell.sel { background: var(--primary); border-color: var(--primary); }
+/* Standard chord-box diagram (svguitar, see fbCidRenderChordDiagram) —
+   reuses .fb-board/.fb-svguitar-box's own svg sizing, just narrower since
+   it sits in a stacked progression card rather than a wide options panel. */
+.cid-prog-card-diagram { width: 140px; }
+.cid-prog-card-diagram .fb-board { padding: 8px; margin-bottom: 0; }
 
 .cid-analysis { margin-top: 8px; }
 .cid-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 10px; }

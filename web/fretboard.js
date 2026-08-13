@@ -146,6 +146,7 @@ function initFretboardPage() {
   fbRenderSeqOptions();
   fbSeqBuild();
   fbSeqSetMode(fbState.seq.mode);
+  fbCidInit();
   fbShowMode(fbState.activeMode);
 }
 
@@ -285,7 +286,7 @@ function fbPrefsLoad() {
   // strip onto its own page, so a stale saved 'chord' (from before that
   // change) must fall through to the default 'pitch' rather than restore a
   // mode fbShowMode can no longer find a tab/panel for.
-  if (['pitch', 'tuner', 'ear', 'bend', 'seq'].includes(saved.activeMode)) {
+  if (['pitch', 'tuner', 'ear', 'bend', 'seq', 'chordid'].includes(saved.activeMode)) {
     fbState.activeMode = saved.activeMode;
   }
 }
@@ -3993,7 +3994,10 @@ fbSeqNewSequence          = guarded(fbSeqNewSequence);
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    guarded,
     fbState,
+    FB_NOTE_NAMES, FB_STRING_NAMES, FB_STRING_OPEN,
+    FB_CHORD_QUALITIES, FB_CHORD_QUALITY_LABELS, FB_CHORD_DEGREE_LABELS,
     fbNoteAt, fbFreqFromMidi, fbOctaveOf,
     fbBarreFretForShape, fbBarreFretFor,
     fbStringMidis, fbPitchAllowedMidis,

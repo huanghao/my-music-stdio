@@ -1,0 +1,623 @@
+// ── Chord ID: reverse-lookup a chord shape you clicked on the fretboard into
+// a chord name, then string several identified chords into a progression and
+// get roman-numeral / functional-harmony analysis. A Fretboard sub-tab (see
+// index.html's fb-tabs / fb-panel wiring) — shares fbState's global scope
+// like every other fb* module, prefixed `fbCid` to stay collision-free.
+//
+// Deliberately self-contained: reuses fretboard.js's FB_CHORD_QUALITIES /
+// FB_NOTE_NAMES / FB_STRING_OPEN / fbChordDisplaySymbol (loaded first, same
+// script-scope trick progression-lab.js already relies on), but defines its
+// own roman-numeral reference table (FB_CID_DEGREE_OFFSET) rather than
+// reusing progression-lab.js's PL_MAJOR_SCALE_OFFSETS — this feature doesn't
+// need the rest of that file (bar-weight parsing, playback), so pulling it
+// in as a dependency would just be extra coupling for one constant.
+
+// ── State ──
+fbState.chordId = {
+  input: ['x', 'x', 'x', 'x', 'x', 'x'],   // per string (low E..high e), 'x' or fret 0-24
+  forceRootPc: null,   // user-clarified root override (cleared whenever input changes)
+  forceQuality: null,  // user-clarified quality override
+  bassClarifyChoice: null, // null | 'yes' | 'no' — whether the lowest sounding note was confirmed as root
+  selected: null,      // { rootPc, quality } chosen from the candidate list, ready to add
+  chords: [],          // progression: [{ rootPc, quality }]
+  breaks: [],          // length chords.length-1; breaks[i] = true => bar break between chord i and i+1
+  keyMode: 'auto',      // 'auto' | 'manual'
+  manualTonicPc: 0,
+  manualIsMinor: false,
+};
+
+// ── Pitch-class extraction from the clicked grid ──
+
+function fbCidPitchClasses(input) {
+  const pcs = [];
+  let bassPc = null;
+  for (let i = 0; i < 6; i++) {
+    if (input[i] === 'x') continue;
+    const pc = (FB_STRING_OPEN[i] + input[i]) % 12;
+    pcs.push(pc);
+    if (bassPc === null) bassPc = pc; // string 0 = low E; first non-muted string is the sounding bass note
+  }
+  return { pcSet: new Set(pcs), bassPc };
+}
+
+// ── Candidate matching: for every possible root (0-11) and every known
+// quality, keep it if the played pitch classes are a SUBSET of that chord's
+// full tone set — i.e. "the notes you played could be this chord with some
+// tones omitted". Ranked so that: a candidate whose root you actually played
+// beats one where the root is only implied; among those, fewer omitted notes
+// beats more; among ties, fewer total chord tones (simpler chord) beats more;
+// remaining ties fall back to a fixed "common chords first" order. ──
+
+const FB_CID_QUALITY_PRIORITY = [
+  '', 'm', '7', 'maj7', 'm7', 'sus4', 'sus2', '6', 'm6', 'add9', 'madd9',
+  'dim', 'aug', 'dim7', 'm7b5', '9', 'm9', 'maj9', '7sus4', '6/9', 'mmaj7', '7b9', '7#9',
+];
+
+function fbCidCandidates(pcSet) {
+  const played = [...pcSet];
+  if (!played.length) return [];
+  const out = [];
+  for (let rootPc = 0; rootPc < 12; rootPc++) {
+    Object.keys(FB_CHORD_QUALITIES).forEach(quality => {
+      const intervals = FB_CHORD_QUALITIES[quality];
+      const fullPcs = intervals.map(iv => (rootPc + iv) % 12);
+      const fullSet = new Set(fullPcs);
+      if (!played.every(pc => fullSet.has(pc))) return;
+      out.push({
+        rootPc, quality,
+        rootPresent: pcSet.has(rootPc),
+        coverage: played.length / fullPcs.length,
+        notesTotal: fullPcs.length,
+        missing: fullPcs.filter(pc => !pcSet.has(pc)),
+      });
+    });
+  }
+  out.sort((a, b) =>
+    (b.rootPresent - a.rootPresent) ||
+    (b.coverage - a.coverage) ||
+    (a.notesTotal - b.notesTotal) ||
+    (FB_CID_QUALITY_PRIORITY.indexOf(a.quality) - FB_CID_QUALITY_PRIORITY.indexOf(b.quality))
+  );
+  return out;
+}
+
+// Translates a candidate's omitted pitch classes back into degree labels
+// ("5th", "b7", ...) using the same formula tables fretboard.js's Chord
+// Match already uses to describe a chord's own tones.
+function fbCidMissingLabels(rootPc, quality, missingPcs) {
+  const intervals = FB_CHORD_QUALITIES[quality];
+  const labels = FB_CHORD_DEGREE_LABELS[quality];
+  return missingPcs.map(pc => {
+    const offset = ((pc - rootPc) % 12 + 12) % 12;
+    const idx = intervals.indexOf(offset);
+    return idx >= 0 ? labels[idx] : '?';
+  });
+}
+
+// Detects the two situations where the played notes genuinely don't
+// determine a unique answer, so the UI can ask instead of silently guessing:
+//  - `tooFew`: only one pitch class played (not even enough for a 3rd)
+//  - `qualityAmbiguous`: root + 5th only (a "power chord") — major, minor,
+//    sus2 and sus4 all match equally since none of them is contradicted
+//  - `bassAmbiguous`: the best-ranked candidate's root isn't the lowest
+//    note actually played (possible inversion / added bass note)
+function fbCidComputeAmbiguity(pcSet, bassPc, candidates, s) {
+  const played = [...pcSet];
+  const tooFew = played.length <= 1;
+  let qualityAmbiguous = null;
+  if (!tooFew && s.forceQuality == null) {
+    for (const rootPc of played) {
+      const rest = played.filter(pc => pc !== rootPc).map(pc => ((pc - rootPc) % 12 + 12) % 12);
+      if (rest.length === 1 && rest[0] === 7) { qualityAmbiguous = rootPc; break; }
+    }
+  }
+  let bassAmbiguous = null;
+  if (!tooFew && s.forceRootPc == null && s.bassClarifyChoice == null &&
+      candidates.length && candidates[0].rootPc !== bassPc) {
+    bassAmbiguous = bassPc;
+  }
+  return { tooFew, qualityAmbiguous, bassAmbiguous };
+}
+
+// ── Progression bar grouping (display only — see CLAUDE.md-adjacent design
+// notes: a bar is either one whole-bar chord, two half-bar chords, or three
+// chords split 2+1+1 beats. Harmonic analysis below works off the flat chord
+// order and never needs these bar weights.) ──
+
+function fbCidBarsFromChords(chords, breaks) {
+  const bars = [];
+  let cur = [];
+  chords.forEach((ch, i) => {
+    cur.push(ch);
+    if (i === chords.length - 1 || breaks[i]) { bars.push(cur); cur = []; }
+  });
+  return bars;
+}
+
+function fbCidCanMergeAt(chords, breaks, i) {
+  const trial = breaks.slice();
+  trial[i] = false;
+  return fbCidBarsFromChords(chords, trial).every(b => b.length <= 3);
+}
+
+// ── Key inference: score every (tonic, major/minor) pair by how many played
+// chord roots land on that key's diatonic scale degrees (+1 more if the
+// chord's own major/minor/dim quality also matches what that degree expects
+// natively). Picking the best-scoring key this way needs no separate
+// "circle of fifths" table — it falls straight out of comparing 24
+// candidates. ──
+
+const FB_CID_MAJOR_DIATONIC = { 0: '', 2: 'm', 4: 'm', 5: '', 7: '', 9: 'm', 11: 'dim' };
+const FB_CID_MINOR_DIATONIC = { 0: 'm', 2: 'dim', 3: '', 5: 'm', 7: 'm', 8: '', 10: '' };
+
+function fbCidQualityFamily(quality) {
+  if (['m', 'm7', 'm6', 'madd9', 'm9', 'mmaj7'].includes(quality)) return 'm';
+  if (['dim', 'dim7', 'm7b5'].includes(quality)) return 'dim';
+  return '';
+}
+
+function fbCidScoreKey(chords, tonicPc, isMinor) {
+  const table = isMinor ? FB_CID_MINOR_DIATONIC : FB_CID_MAJOR_DIATONIC;
+  let score = 0;
+  chords.forEach(ch => {
+    const offset = ((ch.rootPc - tonicPc) % 12 + 12) % 12;
+    if (offset in table) {
+      score += 2;
+      if (fbCidQualityFamily(ch.quality) === table[offset]) score += 1;
+    }
+  });
+  // A relative-major/relative-minor pair (e.g. C major vs A minor) scores
+  // identically on pitch content alone — break that tie the way ears do:
+  // a progression usually starts and/or ends on its tonic.
+  if (chords[0].rootPc === tonicPc) score += 2;
+  if (chords[chords.length - 1].rootPc === tonicPc) score += 2;
+  return score;
+}
+
+function fbCidInferKey(chords) {
+  let best = { tonicPc: 0, isMinor: false, score: -1 };
+  for (let t = 0; t < 12; t++) {
+    [false, true].forEach(isMinor => {
+      const score = fbCidScoreKey(chords, t, isMinor);
+      // tie-break: prefer major over minor (more common), otherwise first found (lowest tonicPc) wins
+      if (score > best.score || (score === best.score && !isMinor && best.isMinor)) {
+        best = { tonicPc: t, isMinor, score };
+      }
+    });
+  }
+  return best;
+}
+
+// ── Roman-numeral labeling. Reference frame: degree 1-7 sit at semitone
+// offsets [0,2,4,5,7,9,11] from the tonic (the major scale), same convention
+// progression-lab.js uses — a minor key's chords are just expressed with
+// accidentals against that same frame (e.g. natural minor's III is "bIII"
+// here), so one table covers both modes. ──
+
+const FB_CID_ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+const FB_CID_DEGREE_OFFSET = [0, 2, 4, 5, 7, 9, 11];
+// native quality family of each degree in a plain major key — used to decide
+// upper/lower case for *diatonic* display, and for the same-function-group
+// suggestions ('' = major-ish, 'm' = minor, 'dim' = diminished)
+const FB_CID_DIATONIC_FAMILY = ['', 'm', 'm', '', '', 'm', 'dim'];
+const FB_CID_FUNCTION = ['T', 'S', 'T', 'S', 'D', 'T', 'D'];
+const FB_CID_MINOR_FAMILY_QUALITIES = new Set(['m', 'm7', 'm6', 'madd9', 'm9', 'mmaj7']);
+const FB_CID_DIM_FAMILY_QUALITIES = new Set(['dim', 'dim7', 'm7b5']);
+// extension suffix per quality for roman-numeral display (case already
+// carries major/minor, so unlike FB_CHORD_NOTATION_STYLES this omits the
+// leading "m"/"-")
+const FB_CID_ROMAN_SUFFIX = {
+  '': '', m: '', maj7: 'maj7', '7': '7', m7: '7', dim7: '°7', m7b5: 'ø7', sus2: 'sus2', sus4: 'sus4',
+  '6': '6', m6: '6', add9: 'add9', madd9: 'add9', '9': '9', m9: '9', maj9: 'maj9',
+  dim: '°', aug: '+', '7sus4': '7sus4', '6/9': '6/9', mmaj7: '(maj7)', '7b9': '7b9', '7#9': '7#9',
+};
+
+function fbCidDegreeAndAccidental(offset) {
+  for (const acc of [0, -1, 1]) { // prefer natural, then flat (bII/bIII/bVI/bVII borrowed-chord convention), then sharp
+    for (let d = 0; d < 7; d++) {
+      if (((FB_CID_DEGREE_OFFSET[d] + acc) % 12 + 12) % 12 === offset) return { degreeIdx: d, accidental: acc };
+    }
+  }
+  return { degreeIdx: 0, accidental: 0 }; // unreachable — every offset 0-11 is covered above
+}
+
+function fbCidDegreeLabel(d) {
+  const fam = FB_CID_DIATONIC_FAMILY[d];
+  return fam ? FB_CID_ROMAN[d].toLowerCase() + (fam === 'dim' ? '°' : '') : FB_CID_ROMAN[d];
+}
+
+function fbCidRomanForChord(rootPc, quality, tonicPc) {
+  const offset = ((rootPc - tonicPc) % 12 + 12) % 12;
+  const { degreeIdx, accidental } = fbCidDegreeAndAccidental(offset);
+  // "Diatonic" here means both the root's scale position AND the chord's
+  // own major/minor/dim family match what that degree naturally is —
+  // a root that sits on scale degree vi but is voiced as a major/dominant
+  // chord (e.g. A7 in the key of C) is not really "VI7", it's borrowed/
+  // functioning as a secondary dominant, even though its root is a
+  // in-scale note.
+  const isDiatonic = accidental === 0 && fbCidQualityFamily(quality) === FB_CID_DIATONIC_FAMILY[degreeIdx];
+
+  // Secondary dominant: a non-diatonic dominant-family chord a 5th above
+  // another scale degree resolves to (and is notated relative to) that
+  // degree — "A7" in C is "V7/ii" (resolves to Dm), not "VI7".
+  if (!isDiatonic && ['7', '9', '7b9', '7#9'].includes(quality)) {
+    const targetOffset = (offset + 5) % 12;
+    const td = FB_CID_DEGREE_OFFSET.indexOf(targetOffset);
+    if (td !== -1) {
+      const secondaryOf = fbCidDegreeLabel(td);
+      return { label: 'V' + (FB_CID_ROMAN_SUFFIX[quality] || '') + '/' + secondaryOf, degreeIdx, accidental, functionGroup: null, secondaryOf };
+    }
+  }
+
+  const isMinorFam = FB_CID_MINOR_FAMILY_QUALITIES.has(quality);
+  const isDimFam = FB_CID_DIM_FAMILY_QUALITIES.has(quality);
+  let numeral = FB_CID_ROMAN[degreeIdx];
+  if (isMinorFam || isDimFam) numeral = numeral.toLowerCase();
+  const prefix = accidental === -1 ? 'b' : accidental === 1 ? '#' : '';
+  const label = prefix + numeral + (FB_CID_ROMAN_SUFFIX[quality] || '');
+  return { label, degreeIdx, accidental, functionGroup: isDiatonic ? FB_CID_FUNCTION[degreeIdx] : null, secondaryOf: null };
+}
+
+// ── Cadence detection: scan the resolved roman numerals for the handful of
+// standard closing patterns — purely a pattern match on degree numbers,
+// only counts a pair/triple when every chord involved is diatonic. ──
+
+function fbCidDetectCadences(roman) {
+  const out = [];
+  for (let i = 0; i < roman.length - 1; i++) {
+    const a = roman[i], b = roman[i + 1];
+    if (a.accidental === 0 && b.accidental === 0) {
+      if (a.degreeIdx === 4 && b.degreeIdx === 0) out.push({ type: '正格终止 V→I', at: i, span: 2 });
+      else if (a.degreeIdx === 3 && b.degreeIdx === 0) out.push({ type: '变格终止 IV→I', at: i, span: 2 });
+    }
+    if (i < roman.length - 2) {
+      const c = roman[i + 2];
+      if (a.accidental === 0 && b.accidental === 0 && c.accidental === 0 &&
+          a.degreeIdx === 1 && b.degreeIdx === 4 && c.degreeIdx === 0) {
+        out.push({ type: 'ii-V-I', at: i, span: 3 });
+      }
+    }
+  }
+  return out;
+}
+
+// ── Same-function-group substitution suggestions (docs/chord-progressions-guide.md
+// §3): at most one line per function group actually present in the
+// progression, naming the group's other diatonic member(s). ──
+
+const FB_CID_FUNCTION_GROUPS = { T: [0, 5, 2], S: [3, 1], D: [4, 6] };
+const FB_CID_FUNCTION_LABEL = { T: '主 T', S: '下属 S', D: '属 D' };
+
+function fbCidSuggestAlts(roman) {
+  const present = new Set();
+  roman.forEach(r => { if (r.accidental === 0) present.add(r.degreeIdx); });
+  const out = [];
+  ['T', 'S', 'D'].forEach(fn => {
+    const group = FB_CID_FUNCTION_GROUPS[fn];
+    const inProg = group.filter(d => present.has(d));
+    if (!inProg.length) return;
+    const alts = group.filter(d => d !== inProg[0]);
+    if (alts.length) out.push({ fn, anchor: inProg[0], alts });
+  });
+  return out;
+}
+
+// ── Input mutation ──
+
+function fbCidResetClarify() {
+  const s = fbState.chordId;
+  s.forceRootPc = null;
+  s.forceQuality = null;
+  s.bassClarifyChoice = null;
+  s.selected = null;
+}
+
+function fbCidSetFret(stringIdx, fret) {
+  const s = fbState.chordId;
+  s.input[stringIdx] = (s.input[stringIdx] === fret) ? 'x' : fret;
+  fbCidResetClarify();
+  fbCidRenderAll();
+}
+
+function fbCidToggleMute(stringIdx) {
+  const s = fbState.chordId;
+  s.input[stringIdx] = (s.input[stringIdx] === 'x') ? 0 : 'x';
+  fbCidResetClarify();
+  fbCidRenderAll();
+}
+
+function fbCidClearInput() {
+  fbState.chordId.input = ['x', 'x', 'x', 'x', 'x', 'x'];
+  fbCidResetClarify();
+  fbCidRenderAll();
+}
+
+function fbCidClarifyQuality(rootPc, quality) {
+  const s = fbState.chordId;
+  s.forceRootPc = rootPc;
+  s.forceQuality = quality;
+  s.bassClarifyChoice = 'yes';
+  fbCidRenderAll();
+}
+
+function fbCidClarifyBass(isRoot) {
+  const s = fbState.chordId;
+  s.bassClarifyChoice = isRoot ? 'yes' : 'no';
+  if (isRoot) s.forceRootPc = s._lastBassPc;
+  fbCidRenderAll();
+}
+
+function fbCidSelectCandidate(rootPc, quality) {
+  fbState.chordId.selected = { rootPc, quality };
+  fbCidRenderCandidates();
+}
+
+// ── Progression mutation ──
+
+function fbCidAddToProgression() {
+  const s = fbState.chordId;
+  if (!s.selected) return;
+  s.chords.push({ rootPc: s.selected.rootPc, quality: s.selected.quality });
+  if (s.chords.length > 1) s.breaks.push(true);
+  s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
+  fbCidResetClarify();
+  fbCidRenderAll();
+}
+fbCidAddToProgression = guarded(fbCidAddToProgression);
+
+function fbCidRemoveChord(i) {
+  const s = fbState.chordId;
+  s.chords.splice(i, 1);
+  if (i === 0) s.breaks.shift();
+  else s.breaks.splice(i - 1, 1);
+  fbCidRenderAll();
+}
+
+function fbCidToggleBreak(i) {
+  const s = fbState.chordId;
+  if (s.breaks[i]) {
+    s.breaks[i] = false;
+  } else {
+    if (!fbCidCanMergeAt(s.chords, s.breaks, i)) {
+      const msg = document.getElementById('cid-bar-msg');
+      if (msg) { msg.textContent = '一小节最多 3 个和弦'; setTimeout(() => { if (msg.textContent === '一小节最多 3 个和弦') msg.textContent = ''; }, 2000); }
+      return;
+    }
+    s.breaks[i] = true;
+  }
+  fbCidRenderAll();
+}
+
+function fbCidClearProgression() {
+  fbState.chordId.chords = [];
+  fbState.chordId.breaks = [];
+  fbCidRenderAll();
+}
+
+function fbCidSetKeyMode(mode) {
+  fbState.chordId.keyMode = mode;
+  fbCidRenderAnalysis();
+  fbCidPrefsSave();
+}
+function fbCidSetManualTonic(v) {
+  fbState.chordId.manualTonicPc = +v;
+  fbCidRenderAnalysis();
+  fbCidPrefsSave();
+}
+function fbCidSetManualMode(v) {
+  fbState.chordId.manualIsMinor = (v === '1');
+  fbCidRenderAnalysis();
+  fbCidPrefsSave();
+}
+
+// ── Rendering ──
+
+function fbCidRenderGrid() {
+  const s = fbState.chordId;
+  const el = document.getElementById('cid-grid');
+  if (!el) return;
+  const rowOrder = [5, 4, 3, 2, 1, 0]; // high e at top, low E at bottom — matches standard tab layout
+  let html = '<div class="cid-grid-row cid-grid-header"><span class="cid-string-label"></span>';
+  for (let f = 0; f <= 12; f++) html += `<span class="cid-fret-head">${f === 0 ? '○' : f}</span>`;
+  html += '</div>';
+  rowOrder.forEach(i => {
+    const muted = s.input[i] === 'x';
+    html += `<div class="cid-grid-row"><span class="cid-string-label${muted ? ' muted' : ''}" onclick="fbCidToggleMute(${i})">${FB_STRING_NAMES[i]}${muted ? ' ✕' : ''}</span>`;
+    for (let f = 0; f <= 12; f++) {
+      const sel = !muted && s.input[i] === f;
+      html += `<button type="button" class="cid-fret-cell${sel ? ' sel' : ''}${f === 0 ? ' cid-fret-open' : ''}" onclick="fbCidSetFret(${i},${f})"></button>`;
+    }
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+function fbCidRenderCandidates() {
+  const s = fbState.chordId;
+  const notesEl = document.getElementById('cid-notes');
+  const clarifyEl = document.getElementById('cid-clarify');
+  const listEl = document.getElementById('cid-candidate-list');
+  const addBtn = document.getElementById('cid-add-btn');
+  if (!notesEl || !clarifyEl || !listEl || !addBtn) return;
+
+  const { pcSet, bassPc } = fbCidPitchClasses(s.input);
+  s._lastBassPc = bassPc;
+
+  if (!pcSet.size) {
+    notesEl.textContent = '点指板输入音符';
+  } else {
+    notesEl.textContent = `组成音：${[...pcSet].map(pc => FB_NOTE_NAMES[pc]).join('  ')}（最低音：${FB_NOTE_NAMES[bassPc]}）`;
+  }
+
+  const allCandidates = fbCidCandidates(pcSet);
+  const amb = fbCidComputeAmbiguity(pcSet, bassPc, allCandidates, s);
+
+  let candidates = allCandidates;
+  if (s.forceRootPc != null) candidates = candidates.filter(c => c.rootPc === s.forceRootPc);
+  if (s.forceQuality != null) candidates = candidates.filter(c => c.quality === s.forceQuality);
+  if (!candidates.length) candidates = allCandidates;
+
+  let clarifyHtml = '';
+  if (pcSet.size > 0 && amb.tooFew) {
+    clarifyHtml = '<div class="cid-clarify">音符太少，至少按出根音 + 三音才能判断和弦性质</div>';
+  } else if (amb.qualityAmbiguous != null) {
+    const r = amb.qualityAmbiguous;
+    clarifyHtml = `<div class="cid-clarify">⚠️ 只按出了根音和 5th，无法判断大三/小三/挂留，请确认：
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyQuality(${r},'')">大三</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyQuality(${r},'m')">小三</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyQuality(${r},'sus2')">sus2</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyQuality(${r},'sus4')">sus4</button></div>`;
+  } else if (amb.bassAmbiguous != null && candidates.length) {
+    clarifyHtml = `<div class="cid-clarify">最低音是 ${FB_NOTE_NAMES[bassPc]}，最像的候选根音是 ${FB_NOTE_NAMES[candidates[0].rootPc]}——最低音就是根音吗？
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyBass(true)">是根音</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbCidClarifyBass(false)">不是（转位/加了别的低音）</button></div>`;
+  }
+  clarifyEl.innerHTML = clarifyHtml;
+
+  if (!candidates.length) {
+    listEl.innerHTML = pcSet.size ? '<div class="cid-candidate-empty">没有匹配的和弦</div>' : '';
+  } else {
+    listEl.innerHTML = candidates.slice(0, 6).map(c => {
+      const note = !c.rootPresent ? '省略根音' : (c.missing.length ? '省略 ' + fbCidMissingLabels(c.rootPc, c.quality, c.missing).join('、') : '完整');
+      const sel = s.selected && s.selected.rootPc === c.rootPc && s.selected.quality === c.quality;
+      return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidSelectCandidate(${c.rootPc},'${c.quality}')">
+        <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
+        <span class="cid-candidate-note">${note}</span>
+      </button>`;
+    }).join('');
+  }
+
+  addBtn.disabled = !s.selected;
+}
+
+function fbCidRenderProgression() {
+  const s = fbState.chordId;
+  const el = document.getElementById('cid-progression');
+  if (!el) return;
+  if (!s.chords.length) { el.innerHTML = '<div class="cid-progression-empty">还没有加入和弦</div>'; return; }
+
+  const bars = fbCidBarsFromChords(s.chords, s.breaks);
+  let idx = 0;
+  let html = '<div class="cid-prog-row">';
+  bars.forEach((bar, bi) => {
+    const beatNote = bar.length === 2 ? '各半小节' : bar.length === 3 ? '2+1+1 拍' : '';
+    html += '<div class="cid-bar">';
+    bar.forEach((ch, ci) => {
+      const myIdx = idx;
+      html += `<span class="cid-prog-chip">${fbChordDisplaySymbol(ch.rootPc, ch.quality)}<button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${myIdx})" title="删除">✕</button></span>`;
+      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿</button>`;
+      idx++;
+    });
+    if (beatNote) html += `<div class="cid-bar-note">${beatNote}</div>`;
+    html += '</div>';
+    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">|</button>`;
+  });
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function fbCidRenderAnalysis() {
+  const s = fbState.chordId;
+  const el = document.getElementById('cid-analysis');
+  if (!el) return;
+  if (!s.chords.length) { el.innerHTML = ''; return; }
+
+  const inferred = fbCidInferKey(s.chords);
+  const key = s.keyMode === 'manual' ? { tonicPc: s.manualTonicPc, isMinor: s.manualIsMinor } : inferred;
+  const roman = s.chords.map(ch => fbCidRomanForChord(ch.rootPc, ch.quality, key.tonicPc));
+  const cadences = fbCidDetectCadences(roman);
+  const suggestions = fbCidSuggestAlts(roman);
+
+  const keyLabel = `${FB_NOTE_NAMES[inferred.tonicPc]} ${inferred.isMinor ? '小调' : '大调'}`;
+  const keyRow = `<div class="cid-key-row">
+    调号：
+    <label><input type="radio" name="cid-keymode" ${s.keyMode === 'auto' ? 'checked' : ''} onchange="fbCidSetKeyMode('auto')"> 自动（${keyLabel}）</label>
+    <label><input type="radio" name="cid-keymode" ${s.keyMode === 'manual' ? 'checked' : ''} onchange="fbCidSetKeyMode('manual')"> 手动</label>
+    ${s.keyMode === 'manual' ? `
+      <select onchange="fbCidSetManualTonic(this.value)">${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.manualTonicPc === i ? 'selected' : ''}>${n}</option>`).join('')}</select>
+      <select onchange="fbCidSetManualMode(this.value)">
+        <option value="0" ${!s.manualIsMinor ? 'selected' : ''}>大调</option>
+        <option value="1" ${s.manualIsMinor ? 'selected' : ''}>小调</option>
+      </select>` : ''}
+  </div>`;
+
+  const romanRow = `<div class="cid-roman-row">${roman.map(r =>
+    `<span class="cid-roman-chip fn-${r.functionGroup || 'chromatic'}">${r.label}</span>`
+  ).join('')}</div>`;
+
+  const fnLegend = `<div class="cid-fn-legend">
+    <span class="fn-T">■ 主 T</span><span class="fn-S">■ 下属 S</span><span class="fn-D">■ 属 D</span><span class="fn-chromatic">■ 半音/离调</span>
+  </div>`;
+
+  const cadenceHtml = cadences.length
+    ? `<ul class="cid-cadence-list">${cadences.map(c => `<li>第 ${c.at + 1}-${c.at + c.span} 个和弦：${c.type}</li>`).join('')}</ul>`
+    : '';
+
+  const sugHtml = suggestions.length
+    ? `<ul class="cid-sug-list">${suggestions.map(sg =>
+        `<li>${fbCidDegreeLabel(sg.anchor)}（${FB_CID_FUNCTION_LABEL[sg.fn]}）同组还有 ${sg.alts.map(fbCidDegreeLabel).join(' / ')}，可互换制造不同色彩</li>`
+      ).join('')}</ul>`
+    : '';
+
+  el.innerHTML = keyRow + romanRow + fnLegend + cadenceHtml + sugHtml;
+}
+
+function fbCidRenderAll() {
+  fbCidRenderGrid();
+  fbCidRenderCandidates();
+  fbCidRenderProgression();
+  fbCidRenderAnalysis();
+  fbCidPrefsSave();
+}
+
+// ── Persistence (see project CLAUDE.md: every user-facing option must
+// survive a refresh) ──
+
+const FB_CID_PREFS_KEY = 'fb_chordid_prefs';
+
+function fbCidPrefsLoad() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(FB_CID_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
+  const s = fbState.chordId;
+  if (Array.isArray(saved.input) && saved.input.length === 6 &&
+      saved.input.every(v => v === 'x' || (Number.isInteger(v) && v >= 0 && v <= 24))) {
+    s.input = saved.input;
+  }
+  if (Array.isArray(saved.chords)) {
+    s.chords = saved.chords
+      .filter(c => c && Number.isInteger(c.rootPc) && c.rootPc >= 0 && c.rootPc < 12 && FB_CHORD_QUALITIES[c.quality])
+      .map(c => ({ rootPc: c.rootPc, quality: c.quality }));
+  }
+  if (Array.isArray(saved.breaks) && saved.breaks.every(b => typeof b === 'boolean') &&
+      saved.breaks.length === Math.max(0, s.chords.length - 1)) {
+    s.breaks = saved.breaks;
+  } else {
+    s.breaks = s.chords.slice(1).map(() => true);
+  }
+  if (saved.keyMode === 'auto' || saved.keyMode === 'manual') s.keyMode = saved.keyMode;
+  if (Number.isInteger(saved.manualTonicPc) && saved.manualTonicPc >= 0 && saved.manualTonicPc < 12) s.manualTonicPc = saved.manualTonicPc;
+  if (typeof saved.manualIsMinor === 'boolean') s.manualIsMinor = saved.manualIsMinor;
+}
+
+function fbCidPrefsSave() {
+  const s = fbState.chordId;
+  localStorage.setItem(FB_CID_PREFS_KEY, JSON.stringify({
+    input: s.input, chords: s.chords, breaks: s.breaks,
+    keyMode: s.keyMode, manualTonicPc: s.manualTonicPc, manualIsMinor: s.manualIsMinor,
+  }));
+}
+
+function fbCidInit() {
+  fbCidPrefsLoad();
+  fbCidRenderAll();
+}
+
+// Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity,
+    fbCidBarsFromChords, fbCidCanMergeAt,
+    fbCidInferKey, fbCidScoreKey,
+    fbCidRomanForChord, fbCidDegreeLabel, fbCidDetectCadences, fbCidSuggestAlts,
+  };
+}

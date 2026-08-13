@@ -633,6 +633,85 @@ input[type="number"] { width: 64px; text-align: center; }
   letter-spacing: 4px; color: var(--warn); margin-top: -8px; margin-bottom: 12px; min-height: 18px;
 }
 
+/* Chord ID: clickable fretboard grid + candidate list + progression/analysis */
+.cid-grid {
+  background: var(--bg-subtle); border: 1px solid var(--border-warm); border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 8px; overflow-x: auto;
+}
+.cid-grid-row { display: grid; grid-template-columns: 32px repeat(13, minmax(22px, 1fr)); align-items: center; gap: 2px; }
+.cid-grid-row + .cid-grid-row { margin-top: 2px; }
+.cid-grid-header { color: var(--text-faint); font-size: 11px; text-align: center; margin-bottom: 4px; }
+.cid-fret-head { text-align: center; }
+.cid-string-label {
+  font-size: 12px; font-weight: 700; color: var(--text-dim); cursor: pointer; text-align: center; user-select: none;
+}
+.cid-string-label.muted { color: var(--danger-dark); }
+.cid-fret-cell {
+  height: 24px; border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px;
+  cursor: pointer; padding: 0;
+}
+.cid-fret-cell:hover { border-color: var(--primary-lt); }
+.cid-fret-cell.cid-fret-open { border-left: 2px solid var(--border); }
+.cid-fret-cell.sel { background: var(--primary); border-color: var(--primary); }
+
+.cid-input-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+.cid-notes { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; min-height: 18px; }
+.cid-clarify, .cid-clarify > div {
+  background: var(--primary-bg-lt); border: 1px solid var(--primary-lt); border-radius: 6px;
+  padding: 8px 12px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+}
+
+.cid-candidate-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
+.cid-candidate {
+  background: var(--bg-card); border: 1px solid var(--border-dim); border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 2px;
+}
+.cid-candidate:hover { border-color: var(--primary-lt); }
+.cid-candidate.sel { border-color: var(--primary); background: var(--primary-bg); }
+.cid-candidate-name { font-family: Georgia, serif; font-size: 15px; font-weight: 700; color: var(--text); }
+.cid-candidate-note { font-size: 11px; color: var(--text-faint); }
+.cid-candidate-empty { font-size: 12px; color: var(--text-faint); }
+
+.cid-section-title { font-size: 14px; margin: 18px 0 8px; color: var(--text-dim); }
+.cid-progression-empty { font-size: 12px; color: var(--text-faint); margin-bottom: 8px; }
+.cid-prog-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 6px; }
+.cid-bar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+  position: relative;
+}
+.cid-bar-note { flex-basis: 100%; font-size: 10px; color: var(--text-faint); }
+.cid-prog-chip {
+  display: inline-flex; align-items: center; gap: 4px; font-family: Georgia, serif; font-weight: 700;
+  background: var(--bg-subtle); border-radius: 4px; padding: 3px 6px 3px 8px; font-size: 14px;
+}
+.cid-prog-chip-del { border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 11px; padding: 0; }
+.cid-prog-chip-del:hover { color: var(--danger-dark); }
+.cid-bar-tie, .cid-bar-break {
+  border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 14px; padding: 0 2px;
+}
+.cid-bar-tie:hover, .cid-bar-break:hover { color: var(--primary); }
+.cid-bar-msg { font-size: 11px; color: var(--danger-dark); min-height: 14px; margin-bottom: 6px; }
+
+.cid-analysis { margin-top: 8px; }
+.cid-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 10px; }
+.cid-key-row label { display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.cid-roman-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.cid-roman-chip {
+  font-family: Georgia, serif; font-size: 16px; font-weight: 700; padding: 6px 10px; border-radius: 6px;
+  background: var(--bg-card); border: 1px solid var(--border);
+}
+.cid-roman-chip small { font-size: 10px; font-weight: 400; color: var(--text-faint); }
+.cid-roman-chip.fn-T { border-color: var(--primary); background: var(--primary-bg); }
+.cid-roman-chip.fn-S { border-color: var(--warn); background: var(--warn-bg); }
+.cid-roman-chip.fn-D { border-color: var(--danger-dark); background: var(--danger-bg); }
+.cid-fn-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-faint); margin-bottom: 12px; }
+.cid-fn-legend .fn-T { color: var(--primary); }
+.cid-fn-legend .fn-S { color: var(--warn); }
+.cid-fn-legend .fn-D { color: var(--danger-dark); }
+.cid-cadence-list, .cid-sug-list { font-size: 12.5px; color: var(--text-dim); margin: 6px 0; padding-left: 18px; }
+
 .statusbar {
   position: fixed; bottom: 0; left: 0; right: 0;
   background: var(--bg-raised); border-top: 1px solid var(--border-dim);

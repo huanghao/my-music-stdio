@@ -76,6 +76,7 @@
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
       <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
       <button class="fb-tab" data-fbmode="seq" onclick="fbShowMode('seq')">Scale Sequences</button>
+      <button class="fb-tab" data-fbmode="chordid" onclick="fbShowMode('chordid')">Chord ID</button>
     </div>
   </div>
 
@@ -197,6 +198,31 @@
       </div>
       <div class="fb-feedback" id="fb-seq-verify-feedback"></div>
     </div>
+  </div>
+
+  <!-- Chord ID: click a fretted shape -> get its likely chord name(s), then
+       string identified chords into a progression for roman-numeral /
+       functional-harmony analysis. See chord-id.js (fbCid* namespace). -->
+  <div class="fb-panel" id="fb-chordid">
+    <div id="cid-grid" class="cid-grid"></div>
+    <div class="cid-input-actions">
+      <button class="btn btn-ghost btn-sm" onclick="fbCidClearInput()">清空指位</button>
+    </div>
+    <div id="cid-notes" class="cid-notes"></div>
+    <div id="cid-clarify"></div>
+    <div id="cid-candidate-list" class="cid-candidate-list"></div>
+    <div class="cid-input-actions">
+      <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
+    </div>
+
+    <h3 class="cid-section-title">和声进行</h3>
+    <div id="cid-progression"></div>
+    <div id="cid-bar-msg" class="cid-bar-msg"></div>
+    <div class="cid-input-actions">
+      <button class="btn btn-ghost btn-sm" onclick="fbCidClearProgression()">清空进行</button>
+    </div>
+
+    <div id="cid-analysis" class="cid-analysis"></div>
   </div>
 </div>
 
@@ -692,6 +718,7 @@
 <script src="vendor/svguitar.umd.js"></script>
 <script src="vendor/marked.umd.js"></script>
 <script src="fretboard.js"></script>
+<script src="chord-id.js"></script>
 <script src="practice-timer.js"></script>
 <script src="speed-trainer.js"></script>
 <script src="song-loop.js"></script>

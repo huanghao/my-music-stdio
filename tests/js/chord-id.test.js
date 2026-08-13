@@ -111,3 +111,42 @@ test('fbCidSuggestAlts offers same-function alternates, capped at one line per g
   assert.equal(suggestions.length, 1);
   assert.equal(suggestions[0].fn, 'T');
 });
+
+test('fbCidRepresentativeChord: locked slot uses chosenIdx, unlocked slot falls back to the top-ranked candidate', () => {
+  const locked = { candidates: [{ rootPc: 0, quality: '' }, { rootPc: 0, quality: 'm' }], chosenIdx: 1, locked: true };
+  assert.deepEqual(cid.fbCidRepresentativeChord(locked), { rootPc: 0, quality: 'm' });
+
+  const unlocked = { candidates: [{ rootPc: 0, quality: '' }, { rootPc: 0, quality: 'm' }], chosenIdx: null, locked: false };
+  assert.deepEqual(cid.fbCidRepresentativeChord(unlocked), { rootPc: 0, quality: '' });
+
+  assert.equal(cid.fbCidRepresentativeChord({ candidates: [], chosenIdx: null, locked: false }), null);
+});
+
+test('fbCidResolveProgression: an unresolved power-chord slot is filled in from the key + the rest of the progression, and never overrides a locked slot', () => {
+  // C - [E power chord, undecided] - G, entered without picking a candidate
+  // for the middle slot. In the key of C, "Em" (diatonic iii) should win
+  // over "E major" (chromatic) purely from context.
+  const cCandidates = cid.fbCidCandidates(new Set([0, 4, 7]));
+  const ePowerCandidates = cid.fbCidCandidates(new Set([4, 11])).filter(c => c.rootPc === 4 && c.notesTotal === 3);
+  const gCandidates = cid.fbCidCandidates(new Set([7, 11, 2]));
+
+  const chords = [
+    { candidates: cCandidates, chosenIdx: 0, locked: true },
+    { candidates: ePowerCandidates, chosenIdx: null, locked: false },
+    { candidates: gCandidates, chosenIdx: 0, locked: true },
+  ];
+  const { key } = cid.fbCidResolveProgression(chords, 'auto', 0, false);
+  assert.equal(key.tonicPc, 0);
+  assert.equal(key.isMinor, false);
+
+  const middle = cid.fbCidRepresentativeChord(chords[1]);
+  assert.equal(middle.rootPc, 4);
+  assert.equal(middle.quality, 'm'); // Em, not E major/sus2/sus4
+  assert.equal(chords[1].locked, false); // still unresolved — just filled in, not pinned
+
+  // locking it to E major and re-resolving must not be overridden
+  chords[1].chosenIdx = ePowerCandidates.findIndex(c => c.quality === '');
+  chords[1].locked = true;
+  cid.fbCidResolveProgression(chords, 'auto', 0, false);
+  assert.equal(cid.fbCidRepresentativeChord(chords[1]).quality, '');
+});

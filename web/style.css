@@ -685,7 +685,14 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-prog-chip {
   display: inline-flex; align-items: center; gap: 4px; font-family: Georgia, serif; font-weight: 700;
   background: var(--bg-subtle); border-radius: 4px; padding: 3px 6px 3px 8px; font-size: 14px;
+  border: 1px solid transparent;
 }
+/* A slot you haven't (or the auto-resolver hasn't) pinned down yet — dashed
+   border + superscript "?" so it reads as a guess, not a confirmed chord. */
+.cid-prog-chip.unresolved { border: 1px dashed var(--border-dim); color: var(--text-dim); }
+.cid-prog-chip.unresolved .cid-prog-chip-label sup { color: var(--warn); font-size: 10px; }
+.cid-prog-chip-label { cursor: pointer; }
+.cid-prog-chip-label:hover { color: var(--primary); }
 .cid-prog-chip-del { border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 11px; padding: 0; }
 .cid-prog-chip-del:hover { color: var(--danger-dark); }
 .cid-bar-tie, .cid-bar-break {
@@ -693,6 +700,10 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .cid-bar-tie:hover, .cid-bar-break:hover { color: var(--primary); }
 .cid-bar-msg { font-size: 11px; color: var(--danger-dark); min-height: 14px; margin-bottom: 6px; }
+.cid-slot-picker {
+  background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px;
+}
 
 .cid-analysis { margin-top: 8px; }
 .cid-key-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-dim); margin-bottom: 10px; }
@@ -706,6 +717,8 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-roman-chip.fn-T { border-color: var(--primary); background: var(--primary-bg); }
 .cid-roman-chip.fn-S { border-color: var(--warn); background: var(--warn-bg); }
 .cid-roman-chip.fn-D { border-color: var(--danger-dark); background: var(--danger-bg); }
+.cid-roman-chip.unresolved { border-style: dashed; }
+.cid-roman-chip.unresolved sup { color: var(--warn); font-size: 10px; }
 .cid-fn-legend { display: flex; gap: 14px; font-size: 11px; color: var(--text-faint); margin-bottom: 12px; }
 .cid-fn-legend .fn-T { color: var(--primary); }
 .cid-fn-legend .fn-S { color: var(--warn); }

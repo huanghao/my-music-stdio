@@ -18,9 +18,14 @@ fbState.chordId = {
   forceRootPc: null,   // user-clarified root override (cleared whenever input changes)
   forceQuality: null,  // user-clarified quality override
   bassClarifyChoice: null, // null | 'yes' | 'no' — whether the lowest sounding note was confirmed as root
-  selected: null,      // { rootPc, quality } chosen from the candidate list, ready to add
-  chords: [],          // progression: [{ rootPc, quality }]
+  selected: null,      // { rootPc, quality } pre-picked from the candidate list before "+ 加入进行" (optional)
+  // progression: [{ candidates, chosenIdx, locked }]. A shape you're not sure
+  // about yet can still be added — `locked:false` means "figure this one out
+  // from the key + the rest of the progression" (see fbCidResolveProgression),
+  // `locked:true` means you (or an earlier clarify) already pinned it down.
+  chords: [],
   breaks: [],          // length chords.length-1; breaks[i] = true => bar break between chord i and i+1
+  expandedSlotIdx: null, // which progression chord's candidate list is open for re-picking (transient, not persisted)
   keyMode: 'auto',      // 'auto' | 'manual'
   manualTonicPc: 0,
   manualIsMinor: false,
@@ -186,6 +191,40 @@ function fbCidInferKey(chords) {
     });
   }
   return best;
+}
+
+// A progression slot's "best guess so far": your explicit pick if you made
+// one (locked), otherwise whatever the shape-matcher ranked first.
+function fbCidRepresentativeChord(slot) {
+  if (!slot || !slot.candidates || !slot.candidates.length) return null;
+  if (slot.chosenIdx != null && slot.candidates[slot.chosenIdx]) return slot.candidates[slot.chosenIdx];
+  return slot.candidates[0];
+}
+
+// Resolves every un-locked progression slot using the *rest of the
+// progression plus the key*: infers the key from each slot's current best
+// guess, then re-picks every un-locked slot's candidate to whichever one
+// fits that key best (falling back to the shape-matcher's own ranking as a
+// tie-break) — this is the "you tell me the chords and the key, I'll work
+// out the harmony" pass. Locked slots (either you picked one, or a clarify
+// question pinned it down) are never touched. Safe to call repeatedly —
+// idempotent given the same locked choices and key.
+function fbCidResolveProgression(chords, keyMode, manualTonicPc, manualIsMinor) {
+  if (!chords.length) return { key: { tonicPc: 0, isMinor: false }, inferred: { tonicPc: 0, isMinor: false } };
+  const repChords = chords.map(fbCidRepresentativeChord).filter(Boolean).map(c => ({ rootPc: c.rootPc, quality: c.quality }));
+  const inferred = fbCidInferKey(repChords.length ? repChords : [{ rootPc: 0, quality: '' }]);
+  const key = keyMode === 'manual' ? { tonicPc: manualTonicPc, isMinor: manualIsMinor } : inferred;
+  chords.forEach(slot => {
+    if (slot.locked || !slot.candidates || !slot.candidates.length) return;
+    let bestIdx = 0, bestScore = -Infinity;
+    slot.candidates.forEach((c, idx) => {
+      const fit = fbCidScoreKey([{ rootPc: c.rootPc, quality: c.quality }], key.tonicPc, key.isMinor);
+      const score = fit * 10 - idx; // key fit dominates; original rank breaks remaining ties
+      if (score > bestScore) { bestScore = score; bestIdx = idx; }
+    });
+    slot.chosenIdx = bestIdx;
+  });
+  return { key, inferred };
 }
 
 // ── Roman-numeral labeling. Reference frame: degree 1-7 sit at semitone
@@ -354,10 +393,29 @@ function fbCidSelectCandidate(rootPc, quality) {
 
 // ── Progression mutation ──
 
+// Adds whatever shape is currently on the grid as a new slot — even if you
+// have no idea which candidate is right. If you pre-picked one (via
+// fbCidSelectCandidate) that pick is locked in; otherwise the slot is left
+// unresolved for fbCidResolveProgression to work out later from the key +
+// the rest of the progression.
 function fbCidAddToProgression() {
   const s = fbState.chordId;
-  if (!s.selected) return;
-  s.chords.push({ rootPc: s.selected.rootPc, quality: s.selected.quality });
+  const { pcSet } = fbCidPitchClasses(s.input);
+  if (!pcSet.size) return;
+
+  let candidates = fbCidCandidates(pcSet);
+  if (s.forceRootPc != null) candidates = candidates.filter(c => c.rootPc === s.forceRootPc);
+  if (s.forceQuality != null) candidates = candidates.filter(c => c.quality === s.forceQuality);
+  if (!candidates.length) candidates = fbCidCandidates(pcSet);
+  candidates = candidates.slice(0, 6);
+
+  let chosenIdx = null, locked = false;
+  if (s.selected) {
+    const idx = candidates.findIndex(c => c.rootPc === s.selected.rootPc && c.quality === s.selected.quality);
+    if (idx !== -1) { chosenIdx = idx; locked = true; }
+  }
+
+  s.chords.push({ candidates, chosenIdx, locked });
   if (s.chords.length > 1) s.breaks.push(true);
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
@@ -370,7 +428,36 @@ function fbCidRemoveChord(i) {
   s.chords.splice(i, 1);
   if (i === 0) s.breaks.shift();
   else s.breaks.splice(i - 1, 1);
+  if (s.expandedSlotIdx === i) s.expandedSlotIdx = null;
   fbCidRenderAll();
+}
+
+// Re-picking a slot's candidate (from the "?" expand panel) pins it —
+// fbCidResolveProgression will never override it again until unlocked.
+function fbCidPickSlotCandidate(i, candidateIdx) {
+  const s = fbState.chordId;
+  const slot = s.chords[i];
+  if (!slot || !slot.candidates[candidateIdx]) return;
+  slot.chosenIdx = candidateIdx;
+  slot.locked = true;
+  s.expandedSlotIdx = null;
+  fbCidRenderAll();
+}
+
+// Hands a locked slot back to auto-resolution.
+function fbCidUnlockSlot(i) {
+  const s = fbState.chordId;
+  const slot = s.chords[i];
+  if (!slot) return;
+  slot.locked = false;
+  s.expandedSlotIdx = null;
+  fbCidRenderAll();
+}
+
+function fbCidToggleExpand(i) {
+  const s = fbState.chordId;
+  s.expandedSlotIdx = s.expandedSlotIdx === i ? null : i;
+  fbCidRenderProgression();
 }
 
 function fbCidToggleBreak(i) {
@@ -391,6 +478,7 @@ function fbCidToggleBreak(i) {
 function fbCidClearProgression() {
   fbState.chordId.chords = [];
   fbState.chordId.breaks = [];
+  fbState.chordId.expandedSlotIdx = null;
   fbCidRenderAll();
 }
 
@@ -487,7 +575,7 @@ function fbCidRenderCandidates() {
     }).join('');
   }
 
-  addBtn.disabled = !s.selected;
+  addBtn.disabled = !pcSet.size;
 }
 
 function fbCidRenderProgression() {
@@ -496,15 +584,22 @@ function fbCidRenderProgression() {
   if (!el) return;
   if (!s.chords.length) { el.innerHTML = '<div class="cid-progression-empty">还没有加入和弦</div>'; return; }
 
+  fbCidResolveProgression(s.chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
+
   const bars = fbCidBarsFromChords(s.chords, s.breaks);
   let idx = 0;
   let html = '<div class="cid-prog-row">';
   bars.forEach((bar, bi) => {
     const beatNote = bar.length === 2 ? '各半小节' : bar.length === 3 ? '2+1+1 拍' : '';
     html += '<div class="cid-bar">';
-    bar.forEach((ch, ci) => {
+    bar.forEach((slot, ci) => {
       const myIdx = idx;
-      html += `<span class="cid-prog-chip">${fbChordDisplaySymbol(ch.rootPc, ch.quality)}<button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${myIdx})" title="删除">✕</button></span>`;
+      const resolved = fbCidRepresentativeChord(slot);
+      const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
+      html += `<span class="cid-prog-chip${slot.locked ? '' : ' unresolved'}">
+          <span class="cid-prog-chip-label" onclick="fbCidToggleExpand(${myIdx})" title="${slot.locked ? '点击重新选择' : '还不确定 — 点击查看候选，或先按调号自动判断'}">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
+          <button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${myIdx})" title="删除">✕</button>
+        </span>`;
       if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿</button>`;
       idx++;
     });
@@ -513,6 +608,21 @@ function fbCidRenderProgression() {
     if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">|</button>`;
   });
   html += '</div>';
+
+  if (s.expandedSlotIdx != null && s.chords[s.expandedSlotIdx]) {
+    const slot = s.chords[s.expandedSlotIdx];
+    const candidatesHtml = slot.candidates.length ? slot.candidates.map((c, ci) => {
+      const note = !c.rootPresent ? '省略根音' : (c.missing.length ? '省略 ' + fbCidMissingLabels(c.rootPc, c.quality, c.missing).join('、') : '完整');
+      const sel = slot.chosenIdx === ci;
+      return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidPickSlotCandidate(${s.expandedSlotIdx},${ci})">
+          <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
+          <span class="cid-candidate-note">${note}</span>
+        </button>`;
+    }).join('') : '<div class="cid-candidate-empty">没有候选</div>';
+    const unlockBtn = slot.locked ? `<button type="button" class="btn btn-ghost btn-sm" onclick="fbCidUnlockSlot(${s.expandedSlotIdx})">🔄 交给自动判断</button>` : '';
+    html += `<div class="cid-slot-picker"><div class="cid-candidate-list">${candidatesHtml}</div>${unlockBtn}</div>`;
+  }
+
   el.innerHTML = html;
 }
 
@@ -522,9 +632,12 @@ function fbCidRenderAnalysis() {
   if (!el) return;
   if (!s.chords.length) { el.innerHTML = ''; return; }
 
-  const inferred = fbCidInferKey(s.chords);
-  const key = s.keyMode === 'manual' ? { tonicPc: s.manualTonicPc, isMinor: s.manualIsMinor } : inferred;
-  const roman = s.chords.map(ch => fbCidRomanForChord(ch.rootPc, ch.quality, key.tonicPc));
+  const { key, inferred } = fbCidResolveProgression(s.chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
+  const items = s.chords.map(slot => {
+    const chord = fbCidRepresentativeChord(slot);
+    return chord ? { slot, roman: fbCidRomanForChord(chord.rootPc, chord.quality, key.tonicPc) } : null;
+  }).filter(Boolean);
+  const roman = items.map(it => it.roman);
   const cadences = fbCidDetectCadences(roman);
   const suggestions = fbCidSuggestAlts(roman);
 
@@ -541,8 +654,8 @@ function fbCidRenderAnalysis() {
       </select>` : ''}
   </div>`;
 
-  const romanRow = `<div class="cid-roman-row">${roman.map(r =>
-    `<span class="cid-roman-chip fn-${r.functionGroup || 'chromatic'}">${r.label}</span>`
+  const romanRow = `<div class="cid-roman-row">${items.map(it =>
+    `<span class="cid-roman-chip fn-${it.roman.functionGroup || 'chromatic'}${it.slot.locked ? '' : ' unresolved'}">${it.roman.label}${it.slot.locked ? '' : '<sup>?</sup>'}</span>`
   ).join('')}</div>`;
 
   const fnLegend = `<div class="cid-fn-legend">
@@ -583,10 +696,20 @@ function fbCidPrefsLoad() {
       saved.input.every(v => v === 'x' || (Number.isInteger(v) && v >= 0 && v <= 24))) {
     s.input = saved.input;
   }
+  const validChordRef = c => c && Number.isInteger(c.rootPc) && c.rootPc >= 0 && c.rootPc < 12 && FB_CHORD_QUALITIES[c.quality];
   if (Array.isArray(saved.chords)) {
-    s.chords = saved.chords
-      .filter(c => c && Number.isInteger(c.rootPc) && c.rootPc >= 0 && c.rootPc < 12 && FB_CHORD_QUALITIES[c.quality])
-      .map(c => ({ rootPc: c.rootPc, quality: c.quality }));
+    s.chords = saved.chords.map(c => {
+      if (c && Array.isArray(c.candidates) && c.candidates.every(validChordRef)) {
+        // current format
+        const chosenIdx = Number.isInteger(c.chosenIdx) && c.candidates[c.chosenIdx] ? c.chosenIdx : null;
+        return { candidates: c.candidates, chosenIdx, locked: !!c.locked && chosenIdx != null };
+      }
+      if (validChordRef(c)) {
+        // migrate pre-"unresolved slot" format: a bare {rootPc,quality} was always locked
+        return { candidates: [c], chosenIdx: 0, locked: true };
+      }
+      return null;
+    }).filter(Boolean);
   }
   if (Array.isArray(saved.breaks) && saved.breaks.every(b => typeof b === 'boolean') &&
       saved.breaks.length === Math.max(0, s.chords.length - 1)) {
@@ -618,6 +741,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity,
     fbCidBarsFromChords, fbCidCanMergeAt,
     fbCidInferKey, fbCidScoreKey,
+    fbCidRepresentativeChord, fbCidResolveProgression,
     fbCidRomanForChord, fbCidDegreeLabel, fbCidDetectCadences, fbCidSuggestAlts,
   };
 }

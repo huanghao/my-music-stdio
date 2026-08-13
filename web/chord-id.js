@@ -19,13 +19,15 @@ fbState.chordId = {
   forceQuality: null,  // user-clarified quality override
   bassClarifyChoice: null, // null | 'yes' | 'no' — whether the lowest sounding note was confirmed as root
   selected: null,      // { rootPc, quality } pre-picked from the candidate list before "+ 加入进行" (optional)
-  // progression: [{ candidates, chosenIdx, locked }]. A shape you're not sure
-  // about yet can still be added — `locked:false` means "figure this one out
-  // from the key + the rest of the progression" (see fbCidResolveProgression),
-  // `locked:true` means you (or an earlier clarify) already pinned it down.
+  // progression: [{ candidates, chosenIdx, locked, input }]. A shape you're
+  // not sure about yet can still be added — `locked:false` means "figure
+  // this one out from the key + the rest of the progression" (see
+  // fbCidResolveProgression), `locked:true` means you (or an earlier
+  // clarify) already pinned it down. `input` is the fret shape you actually
+  // clicked, kept around so the progression can redraw the diagram you
+  // fretted rather than just the resolved chord's name.
   chords: [],
   breaks: [],          // length chords.length-1; breaks[i] = true => bar break between chord i and i+1
-  expandedSlotIdx: null, // which progression chord's candidate list is open for re-picking (transient, not persisted)
   keyMode: 'auto',      // 'auto' | 'manual'
   manualTonicPc: 0,
   manualIsMinor: false,
@@ -415,7 +417,7 @@ function fbCidAddToProgression() {
     if (idx !== -1) { chosenIdx = idx; locked = true; }
   }
 
-  s.chords.push({ candidates, chosenIdx, locked });
+  s.chords.push({ candidates, chosenIdx, locked, input: s.input.slice() });
   if (s.chords.length > 1) s.breaks.push(true);
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
@@ -428,19 +430,17 @@ function fbCidRemoveChord(i) {
   s.chords.splice(i, 1);
   if (i === 0) s.breaks.shift();
   else s.breaks.splice(i - 1, 1);
-  if (s.expandedSlotIdx === i) s.expandedSlotIdx = null;
   fbCidRenderAll();
 }
 
-// Re-picking a slot's candidate (from the "?" expand panel) pins it —
-// fbCidResolveProgression will never override it again until unlocked.
+// Re-picking a slot's candidate (from its always-visible candidate row) pins
+// it — fbCidResolveProgression will never override it again until unlocked.
 function fbCidPickSlotCandidate(i, candidateIdx) {
   const s = fbState.chordId;
   const slot = s.chords[i];
   if (!slot || !slot.candidates[candidateIdx]) return;
   slot.chosenIdx = candidateIdx;
   slot.locked = true;
-  s.expandedSlotIdx = null;
   fbCidRenderAll();
 }
 
@@ -450,14 +450,7 @@ function fbCidUnlockSlot(i) {
   const slot = s.chords[i];
   if (!slot) return;
   slot.locked = false;
-  s.expandedSlotIdx = null;
   fbCidRenderAll();
-}
-
-function fbCidToggleExpand(i) {
-  const s = fbState.chordId;
-  s.expandedSlotIdx = s.expandedSlotIdx === i ? null : i;
-  fbCidRenderProgression();
 }
 
 function fbCidToggleBreak(i) {
@@ -478,7 +471,6 @@ function fbCidToggleBreak(i) {
 function fbCidClearProgression() {
   fbState.chordId.chords = [];
   fbState.chordId.breaks = [];
-  fbState.chordId.expandedSlotIdx = null;
   fbCidRenderAll();
 }
 
@@ -518,6 +510,35 @@ function fbCidRenderGrid() {
     html += '</div>';
   });
   el.innerHTML = html;
+}
+
+// Small read-only version of the same grid, used to redraw the exact shape
+// you clicked next to each chord in the progression (not just its resolved
+// name) — no onclick handlers, no mute toggle.
+function fbCidRenderMiniGrid(input) {
+  if (!input) return '';
+  const rowOrder = [5, 4, 3, 2, 1, 0];
+  let html = '<div class="cid-mini-grid"><div class="cid-mini-grid-row cid-mini-grid-header"><span class="cid-mini-string-label"></span>';
+  for (let f = 0; f <= 12; f++) html += `<span class="cid-mini-fret-head">${f === 0 ? '○' : f}</span>`;
+  html += '</div>';
+  rowOrder.forEach(i => {
+    const muted = input[i] === 'x';
+    html += `<div class="cid-mini-grid-row"><span class="cid-mini-string-label${muted ? ' muted' : ''}">${FB_STRING_NAMES[i]}</span>`;
+    for (let f = 0; f <= 12; f++) {
+      const sel = !muted && input[i] === f;
+      html += `<span class="cid-mini-fret-cell${sel ? ' sel' : ''}"></span>`;
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+// Shared "what's missing from this candidate" label, used both by the
+// input-time candidate list and each progression card's re-pick row.
+function fbCidCandidateNote(c) {
+  if (!c.rootPresent) return '省略根音';
+  return c.missing.length ? '省略 ' + fbCidMissingLabels(c.rootPc, c.quality, c.missing).join('、') : '完整';
 }
 
 function fbCidRenderCandidates() {
@@ -566,16 +587,42 @@ function fbCidRenderCandidates() {
     listEl.innerHTML = pcSet.size ? '<div class="cid-candidate-empty">没有匹配的和弦</div>' : '';
   } else {
     listEl.innerHTML = candidates.slice(0, 6).map(c => {
-      const note = !c.rootPresent ? '省略根音' : (c.missing.length ? '省略 ' + fbCidMissingLabels(c.rootPc, c.quality, c.missing).join('、') : '完整');
       const sel = s.selected && s.selected.rootPc === c.rootPc && s.selected.quality === c.quality;
       return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidSelectCandidate(${c.rootPc},'${c.quality}')">
         <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
-        <span class="cid-candidate-note">${note}</span>
+        <span class="cid-candidate-note">${fbCidCandidateNote(c)}</span>
       </button>`;
     }).join('');
   }
 
   addBtn.disabled = !pcSet.size;
+}
+
+// One progression entry: the shape you clicked (mini diagram), its resolved
+// name, and its full candidate row so you can re-pick right there — always
+// visible, no expand/collapse step.
+function fbCidRenderChordCard(slot, idx) {
+  const resolved = fbCidRepresentativeChord(slot);
+  const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
+  const candidatesHtml = slot.candidates && slot.candidates.length
+    ? slot.candidates.map((c, ci) => {
+        const sel = slot.chosenIdx === ci;
+        return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidPickSlotCandidate(${idx},${ci})">
+            <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
+            <span class="cid-candidate-note">${fbCidCandidateNote(c)}</span>
+          </button>`;
+      }).join('')
+    : '<div class="cid-candidate-empty">没有候选</div>';
+  const unlockBtn = slot.locked ? `<button type="button" class="btn btn-ghost btn-sm" onclick="fbCidUnlockSlot(${idx})">🔄 交给自动判断</button>` : '';
+  return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}">
+      <div class="cid-prog-card-head">
+        <span class="cid-prog-card-label" title="${slot.locked ? '你选定的读法' : '还不确定 — 已按当前调号自动判断，可在下方改选'}">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
+        <button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${idx})" title="删除">✕</button>
+      </div>
+      ${fbCidRenderMiniGrid(slot.input)}
+      <div class="cid-candidate-list">${candidatesHtml}</div>
+      ${unlockBtn}
+    </div>`;
 }
 
 function fbCidRenderProgression() {
@@ -588,41 +635,20 @@ function fbCidRenderProgression() {
 
   const bars = fbCidBarsFromChords(s.chords, s.breaks);
   let idx = 0;
-  let html = '<div class="cid-prog-row">';
+  let html = '<div class="cid-prog-list">';
   bars.forEach((bar, bi) => {
-    const beatNote = bar.length === 2 ? '各半小节' : bar.length === 3 ? '2+1+1 拍' : '';
-    html += '<div class="cid-bar">';
+    const beatNote = bar.length === 2 ? '（各半小节）' : bar.length === 3 ? '（2+1+1 拍）' : '';
+    html += `<div class="cid-bar-block"><div class="cid-bar-note">第 ${bi + 1} 小节${beatNote}</div><div class="cid-bar-cards">`;
     bar.forEach((slot, ci) => {
       const myIdx = idx;
-      const resolved = fbCidRepresentativeChord(slot);
-      const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
-      html += `<span class="cid-prog-chip${slot.locked ? '' : ' unresolved'}">
-          <span class="cid-prog-chip-label" onclick="fbCidToggleExpand(${myIdx})" title="${slot.locked ? '点击重新选择' : '还不确定 — 点击查看候选，或先按调号自动判断'}">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
-          <button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${myIdx})" title="删除">✕</button>
-        </span>`;
-      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿</button>`;
+      html += fbCidRenderChordCard(slot, myIdx);
+      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿ 拆分</button>`;
       idx++;
     });
-    if (beatNote) html += `<div class="cid-bar-note">${beatNote}</div>`;
-    html += '</div>';
-    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">|</button>`;
+    html += '</div></div>';
+    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break-row" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">─── 合并到同一小节 ───</button>`;
   });
   html += '</div>';
-
-  if (s.expandedSlotIdx != null && s.chords[s.expandedSlotIdx]) {
-    const slot = s.chords[s.expandedSlotIdx];
-    const candidatesHtml = slot.candidates.length ? slot.candidates.map((c, ci) => {
-      const note = !c.rootPresent ? '省略根音' : (c.missing.length ? '省略 ' + fbCidMissingLabels(c.rootPc, c.quality, c.missing).join('、') : '完整');
-      const sel = slot.chosenIdx === ci;
-      return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidPickSlotCandidate(${s.expandedSlotIdx},${ci})">
-          <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
-          <span class="cid-candidate-note">${note}</span>
-        </button>`;
-    }).join('') : '<div class="cid-candidate-empty">没有候选</div>';
-    const unlockBtn = slot.locked ? `<button type="button" class="btn btn-ghost btn-sm" onclick="fbCidUnlockSlot(${s.expandedSlotIdx})">🔄 交给自动判断</button>` : '';
-    html += `<div class="cid-slot-picker"><div class="cid-candidate-list">${candidatesHtml}</div>${unlockBtn}</div>`;
-  }
-
   el.innerHTML = html;
 }
 
@@ -688,25 +714,29 @@ function fbCidRenderAll() {
 
 const FB_CID_PREFS_KEY = 'fb_chordid_prefs';
 
+const FB_CID_BLANK_INPUT = ['x', 'x', 'x', 'x', 'x', 'x'];
+function fbCidValidInputArr(v) {
+  return Array.isArray(v) && v.length === 6 && v.every(f => f === 'x' || (Number.isInteger(f) && f >= 0 && f <= 24));
+}
+
 function fbCidPrefsLoad() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(FB_CID_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
   const s = fbState.chordId;
-  if (Array.isArray(saved.input) && saved.input.length === 6 &&
-      saved.input.every(v => v === 'x' || (Number.isInteger(v) && v >= 0 && v <= 24))) {
-    s.input = saved.input;
-  }
+  if (fbCidValidInputArr(saved.input)) s.input = saved.input;
   const validChordRef = c => c && Number.isInteger(c.rootPc) && c.rootPc >= 0 && c.rootPc < 12 && FB_CHORD_QUALITIES[c.quality];
   if (Array.isArray(saved.chords)) {
     s.chords = saved.chords.map(c => {
       if (c && Array.isArray(c.candidates) && c.candidates.every(validChordRef)) {
         // current format
         const chosenIdx = Number.isInteger(c.chosenIdx) && c.candidates[c.chosenIdx] ? c.chosenIdx : null;
-        return { candidates: c.candidates, chosenIdx, locked: !!c.locked && chosenIdx != null };
+        const input = fbCidValidInputArr(c.input) ? c.input : FB_CID_BLANK_INPUT.slice();
+        return { candidates: c.candidates, chosenIdx, locked: !!c.locked && chosenIdx != null, input };
       }
       if (validChordRef(c)) {
-        // migrate pre-"unresolved slot" format: a bare {rootPc,quality} was always locked
-        return { candidates: [c], chosenIdx: 0, locked: true };
+        // migrate pre-"unresolved slot" format: a bare {rootPc,quality} was always
+        // locked, and predates per-slot diagrams — nothing to draw for it.
+        return { candidates: [c], chosenIdx: 0, locked: true, input: FB_CID_BLANK_INPUT.slice() };
       }
       return null;
     }).filter(Boolean);

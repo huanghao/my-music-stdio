@@ -634,6 +634,14 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 
 /* Chord ID: clickable fretboard grid + candidate list + progression/analysis */
+/* The identify tools (left) change height constantly — clarify prompts and
+   candidate counts come and go as you click around the grid. Keeping the
+   progression (right) in its own column means none of that ever shifts it;
+   stacks to one column on narrow viewports, identify tools first. */
+.cid-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
+.cid-input-col { flex: 1 1 360px; min-width: 300px; max-width: 420px; }
+.cid-prog-col { flex: 2 1 480px; min-width: 320px; }
+
 .cid-grid {
   background: var(--bg-subtle); border: 1px solid var(--border-warm); border-radius: 8px;
   padding: 10px 14px; margin-bottom: 8px; overflow-x: auto;
@@ -684,7 +692,16 @@ input[type="number"] { width: 64px; text-align: center; }
 
 .cid-section-title { font-size: 14px; margin: 18px 0 8px; color: var(--text-dim); }
 .cid-hint { font-size: 11.5px; color: var(--text-faint); margin-bottom: 8px; }
-.cid-progression-empty { font-size: 12px; color: var(--text-faint); margin-bottom: 8px; }
+.cid-progression-empty { font-size: 12px; color: var(--text-faint); margin-bottom: 4px; }
+
+/* A "line" is one full progression — the point of having several is
+   repeats-with-variation: duplicate a line (⎘) and only touch the handful
+   of chords/bars that actually differ instead of rebuilding from scratch. */
+.cid-line { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-dim); }
+.cid-line:last-of-type { border-bottom: none; }
+.cid-line-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.cid-line-title { font-size: 12px; font-weight: 700; color: var(--text-dim); }
+.cid-add-line-btn { margin-top: 4px; }
 
 /* Progression: bar-blocks flow left-to-right and wrap like a real chord
    chart's "several bars per line" layout, instead of one bar per row —
@@ -719,6 +736,9 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .cid-gap-barline.present { color: var(--text-dim); font-weight: 700; }
 .cid-gap-barline:hover { color: var(--primary); }
+/* Drag-and-drop target feedback (see fbCidGapDragOver/fbCidGapDrop) — a
+   gap glows while a dragged card is hovering over it as a valid drop spot. */
+.cid-gap.drop-target { background: var(--primary-bg); border-radius: 8px; }
 
 /* One identified (or still-guessed) chord: a compact tile — diagram +
    resolved name only. Click to reload its shape into the grid above for
@@ -741,13 +761,7 @@ input[type="number"] { width: 64px; text-align: center; }
   color: var(--text-faint); font-size: 10px; padding: 0; line-height: 1;
 }
 .cid-prog-chip-del:hover { color: var(--danger-dark); }
-.cid-prog-card-moves { display: flex; gap: 2px; margin-top: 1px; }
-.cid-move-btn {
-  border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px; cursor: pointer;
-  color: var(--text-faint); font-size: 10px; padding: 0 6px; line-height: 1.4;
-}
-.cid-move-btn:hover:not(:disabled) { border-color: var(--primary-lt); color: var(--primary); }
-.cid-move-btn:disabled { opacity: 0.3; cursor: default; }
+.cid-prog-card[draggable="true"] { cursor: grab; }
 
 /* Standard chord-box diagram (svguitar, see fbCidRenderChordDiagram) —
    reuses .fb-board/.fb-svguitar-box's own svg sizing, shrunk to fit the
@@ -776,6 +790,8 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-fn-legend .fn-S { color: var(--warn); }
 .cid-fn-legend .fn-D { color: var(--danger-dark); }
 .cid-cadence-list, .cid-sug-list { font-size: 12.5px; color: var(--text-dim); margin: 6px 0; padding-left: 18px; }
+.cid-line-analysis { margin-bottom: 16px; }
+.cid-line-key { font-size: 11px; font-weight: 400; color: var(--text-faint); margin-left: 6px; }
 
 .statusbar {
   position: fixed; bottom: 0; left: 0; right: 0;

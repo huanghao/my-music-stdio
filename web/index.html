@@ -204,28 +204,37 @@
        string identified chords into a progression for roman-numeral /
        functional-harmony analysis. See chord-id.js (fbCid* namespace). -->
   <div class="fb-panel" id="fb-chordid">
-    <div id="cid-edit-banner" class="cid-edit-banner"></div>
-    <div id="cid-grid" class="cid-grid"></div>
-    <div class="cid-input-actions">
-      <button class="btn btn-ghost btn-sm" onclick="fbCidClearInput()">清空指位</button>
-    </div>
-    <div id="cid-notes" class="cid-notes"></div>
-    <div id="cid-clarify"></div>
-    <div id="cid-candidate-list" class="cid-candidate-list"></div>
-    <div class="cid-input-actions">
-      <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
-      <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()" style="display:none">✕ 取消</button>
-    </div>
+    <div class="cid-layout">
+      <!-- Identify tools: this column's height changes a lot (clarify prompts,
+           candidate counts) as you click around the grid — kept in its own
+           column so that never shifts the progression on the right. -->
+      <div class="cid-input-col">
+        <div id="cid-edit-banner" class="cid-edit-banner"></div>
+        <div id="cid-grid" class="cid-grid"></div>
+        <div class="cid-input-actions">
+          <button class="btn btn-ghost btn-sm" onclick="fbCidClearInput()">清空指位</button>
+        </div>
+        <div id="cid-notes" class="cid-notes"></div>
+        <div id="cid-clarify"></div>
+        <div id="cid-candidate-list" class="cid-candidate-list"></div>
+        <div class="cid-input-actions">
+          <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
+          <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()" style="display:none">✕ 取消</button>
+        </div>
+      </div>
 
-    <h3 class="cid-section-title">和声进行</h3>
-    <div class="cid-hint">💡 每个带编号的方框就是一个小节；和弦之间的 + 用来插入新和弦，┃/⌇ 用来加/减这里的小节线；点 ‹ › 调整顺序；点卡片本身可修改</div>
-    <div id="cid-progression"></div>
-    <div id="cid-bar-msg" class="cid-bar-msg"></div>
-    <div class="cid-input-actions">
-      <button class="btn btn-ghost btn-sm" onclick="fbCidClearProgression()">清空进行</button>
-    </div>
+      <div class="cid-prog-col">
+        <h3 class="cid-section-title">和声进行</h3>
+        <div class="cid-hint">💡 每个带编号的方框是一个小节；和弦之间的 + 插入新和弦，┃/⌇ 加/减小节线；拖拽卡片可调整位置或换到别的小节/行；点卡片本身可修改</div>
+        <div id="cid-progression"></div>
+        <div id="cid-bar-msg" class="cid-bar-msg"></div>
+        <div class="cid-input-actions">
+          <button class="btn btn-ghost btn-sm" onclick="fbCidClearProgression()">清空全部</button>
+        </div>
 
-    <div id="cid-analysis" class="cid-analysis"></div>
+        <div id="cid-analysis" class="cid-analysis"></div>
+      </div>
+    </div>
   </div>
 </div>
 

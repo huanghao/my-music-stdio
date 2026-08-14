@@ -1510,6 +1510,10 @@ document.addEventListener('keydown', e => {
 // has loaded (browser only, not the Node test environment for this file).
 if (typeof guarded === 'function') {
   licksPracticeWithSongLoop = guarded(licksPracticeWithSongLoop);
+  // saveLickEdit is a submit action (button click, Ctrl+S, Enter-in-title —
+  // three triggers that can double-fire) — same double-submit convention as
+  // above.
+  saveLickEdit = guarded(saveLickEdit);
 }
 
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).

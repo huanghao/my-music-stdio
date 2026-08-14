@@ -204,6 +204,7 @@
        string identified chords into a progression for roman-numeral /
        functional-harmony analysis. See chord-id.js (fbCid* namespace). -->
   <div class="fb-panel" id="fb-chordid">
+    <div id="cid-edit-banner" class="cid-edit-banner"></div>
     <div id="cid-grid" class="cid-grid"></div>
     <div class="cid-input-actions">
       <button class="btn btn-ghost btn-sm" onclick="fbCidClearInput()">清空指位</button>
@@ -213,6 +214,7 @@
     <div id="cid-candidate-list" class="cid-candidate-list"></div>
     <div class="cid-input-actions">
       <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
+      <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelEdit()" style="display:none">✕ 取消编辑</button>
     </div>
 
     <h3 class="cid-section-title">和声进行</h3>

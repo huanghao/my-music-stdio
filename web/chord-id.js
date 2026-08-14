@@ -28,6 +28,7 @@ fbState.chordId = {
   // fretted rather than just the resolved chord's name.
   chords: [],
   breaks: [],          // length chords.length-1; breaks[i] = true => bar break between chord i and i+1
+  editingIdx: null,    // index into chords currently loaded into the grid for correction, or null when adding a new one
   keyMode: 'auto',      // 'auto' | 'manual'
   manualTonicPc: 0,
   manualIsMinor: false,
@@ -373,6 +374,32 @@ function fbCidClearInput() {
   fbCidRenderAll();
 }
 
+// Loads an existing progression chord's fretted shape back into the grid so
+// it can be re-fretted or re-picked — "+ 加入进行" becomes "update this
+// chord" instead of appending a new one (see fbCidAddToProgression) until
+// fbCidCancelEdit or a successful update clears editingIdx.
+function fbCidStartEdit(i) {
+  const s = fbState.chordId;
+  const slot = s.chords[i];
+  if (!slot) return;
+  fbCidResetClarify();
+  s.input = slot.input.slice();
+  s.editingIdx = i;
+  const resolved = fbCidRepresentativeChord(slot);
+  if (resolved) s.selected = { rootPc: resolved.rootPc, quality: resolved.quality };
+  fbCidRenderAll();
+  const grid = document.getElementById('cid-grid');
+  if (grid && grid.scrollIntoView) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function fbCidCancelEdit() {
+  const s = fbState.chordId;
+  s.editingIdx = null;
+  s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
+  fbCidResetClarify();
+  fbCidRenderAll();
+}
+
 function fbCidClarifyQuality(rootPc, quality) {
   const s = fbState.chordId;
   s.forceRootPc = rootPc;
@@ -395,15 +422,15 @@ function fbCidSelectCandidate(rootPc, quality) {
 
 // ── Progression mutation ──
 
-// Adds whatever shape is currently on the grid as a new slot — even if you
-// have no idea which candidate is right. If you pre-picked one (via
+// Builds a progression slot from whatever's currently on the grid, or
+// returns null if nothing's been played. If you pre-picked a candidate (via
 // fbCidSelectCandidate) that pick is locked in; otherwise the slot is left
 // unresolved for fbCidResolveProgression to work out later from the key +
 // the rest of the progression.
-function fbCidAddToProgression() {
+function fbCidBuildSlotFromInput() {
   const s = fbState.chordId;
   const { pcSet } = fbCidPitchClasses(s.input);
-  if (!pcSet.size) return;
+  if (!pcSet.size) return null;
 
   let candidates = fbCidCandidates(pcSet);
   if (s.forceRootPc != null) candidates = candidates.filter(c => c.rootPc === s.forceRootPc);
@@ -416,9 +443,24 @@ function fbCidAddToProgression() {
     const idx = candidates.findIndex(c => c.rootPc === s.selected.rootPc && c.quality === s.selected.quality);
     if (idx !== -1) { chosenIdx = idx; locked = true; }
   }
+  return { candidates, chosenIdx, locked, input: s.input.slice() };
+}
 
-  s.chords.push({ candidates, chosenIdx, locked, input: s.input.slice() });
-  if (s.chords.length > 1) s.breaks.push(true);
+// Appends the current grid shape as a new progression slot — or, if
+// fbCidStartEdit loaded an existing slot for correction, replaces that slot
+// in place (same position, same bar grouping) instead of appending.
+function fbCidAddToProgression() {
+  const s = fbState.chordId;
+  const slot = fbCidBuildSlotFromInput();
+  if (!slot) return;
+
+  if (s.editingIdx != null && s.chords[s.editingIdx]) {
+    s.chords[s.editingIdx] = slot;
+    s.editingIdx = null;
+  } else {
+    s.chords.push(slot);
+    if (s.chords.length > 1) s.breaks.push(true);
+  }
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
   fbCidRenderAll();
@@ -430,26 +472,8 @@ function fbCidRemoveChord(i) {
   s.chords.splice(i, 1);
   if (i === 0) s.breaks.shift();
   else s.breaks.splice(i - 1, 1);
-  fbCidRenderAll();
-}
-
-// Re-picking a slot's candidate (from its always-visible candidate row) pins
-// it — fbCidResolveProgression will never override it again until unlocked.
-function fbCidPickSlotCandidate(i, candidateIdx) {
-  const s = fbState.chordId;
-  const slot = s.chords[i];
-  if (!slot || !slot.candidates[candidateIdx]) return;
-  slot.chosenIdx = candidateIdx;
-  slot.locked = true;
-  fbCidRenderAll();
-}
-
-// Hands a locked slot back to auto-resolution.
-function fbCidUnlockSlot(i) {
-  const s = fbState.chordId;
-  const slot = s.chords[i];
-  if (!slot) return;
-  slot.locked = false;
+  if (s.editingIdx === i) { fbCidCancelEdit(); return; } // the slot being edited no longer exists
+  if (s.editingIdx != null && s.editingIdx > i) s.editingIdx -= 1; // keep pointing at the same logical slot
   fbCidRenderAll();
 }
 
@@ -471,6 +495,7 @@ function fbCidToggleBreak(i) {
 function fbCidClearProgression() {
   fbState.chordId.chords = [];
   fbState.chordId.breaks = [];
+  fbState.chordId.editingIdx = null;
   fbCidRenderAll();
 }
 
@@ -579,11 +604,18 @@ function fbCidCandidateNote(c) {
 
 function fbCidRenderCandidates() {
   const s = fbState.chordId;
+  const bannerEl = document.getElementById('cid-edit-banner');
   const notesEl = document.getElementById('cid-notes');
   const clarifyEl = document.getElementById('cid-clarify');
   const listEl = document.getElementById('cid-candidate-list');
   const addBtn = document.getElementById('cid-add-btn');
-  if (!notesEl || !clarifyEl || !listEl || !addBtn) return;
+  const cancelBtn = document.getElementById('cid-cancel-edit-btn');
+  if (!notesEl || !clarifyEl || !listEl || !addBtn || !bannerEl || !cancelBtn) return;
+
+  const editing = s.editingIdx != null && s.chords[s.editingIdx];
+  bannerEl.textContent = editing ? `正在修改第 ${s.editingIdx + 1} 个和弦 — 重新点指板后点"更新"` : '';
+  addBtn.textContent = editing ? '✔ 更新' : '+ 加入进行';
+  cancelBtn.style.display = editing ? '' : 'none';
 
   const { pcSet, bassPc } = fbCidPitchClasses(s.input);
   s._lastBassPc = bassPc;
@@ -634,30 +666,20 @@ function fbCidRenderCandidates() {
   addBtn.disabled = !pcSet.size;
 }
 
-// One progression entry: the shape you clicked (mini diagram), its resolved
-// name, and its full candidate row so you can re-pick right there — always
-// visible, no expand/collapse step.
+// One progression entry: a compact tile — small diagram + resolved name,
+// nothing else. Click it to reload its shape into the grid for correction
+// (fbCidStartEdit); the always-visible candidate list this used to carry
+// moved there too, since editing is now a deliberate action rather than a
+// permanent fixture on every card (keeps ~10 chords visible without
+// scrolling — see fbCidRenderProgression).
 function fbCidRenderChordCard(slot, idx) {
   const resolved = fbCidRepresentativeChord(slot);
   const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
-  const candidatesHtml = slot.candidates && slot.candidates.length
-    ? slot.candidates.map((c, ci) => {
-        const sel = slot.chosenIdx === ci;
-        return `<button type="button" class="cid-candidate${sel ? ' sel' : ''}" onclick="fbCidPickSlotCandidate(${idx},${ci})">
-            <span class="cid-candidate-name">${fbChordDisplaySymbol(c.rootPc, c.quality)}</span>
-            <span class="cid-candidate-note">${fbCidCandidateNote(c)}</span>
-          </button>`;
-      }).join('')
-    : '<div class="cid-candidate-empty">没有候选</div>';
-  const unlockBtn = slot.locked ? `<button type="button" class="btn btn-ghost btn-sm" onclick="fbCidUnlockSlot(${idx})">🔄 交给自动判断</button>` : '';
-  return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}">
-      <div class="cid-prog-card-head">
-        <span class="cid-prog-card-label" title="${slot.locked ? '你选定的读法' : '还不确定 — 已按当前调号自动判断，可在下方改选'}">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
-        <button type="button" class="cid-prog-chip-del" onclick="fbCidRemoveChord(${idx})" title="删除">✕</button>
-      </div>
+  const title = slot.locked ? '你选定的读法 — 点击修改' : '还不确定，已按当前调号自动判断 — 点击修改';
+  return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}" onclick="fbCidStartEdit(${idx})" title="${title}">
+      <button type="button" class="cid-prog-chip-del" onclick="event.stopPropagation();fbCidRemoveChord(${idx})" title="删除">✕</button>
       <div class="cid-prog-card-diagram" id="cid-diagram-${idx}"></div>
-      <div class="cid-candidate-list">${candidatesHtml}</div>
-      ${unlockBtn}
+      <span class="cid-prog-card-label">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
     </div>`;
 }
 
@@ -669,20 +691,23 @@ function fbCidRenderProgression() {
 
   fbCidResolveProgression(s.chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
 
+  // Bar-blocks flow left-to-right and wrap, like a real chord chart's
+  // multiple-bars-per-line layout, rather than one bar per row — with tiny
+  // diagrams a whole 10-chord progression fits without scrolling.
   const bars = fbCidBarsFromChords(s.chords, s.breaks);
   let idx = 0;
-  let html = '<div class="cid-prog-list">';
+  let html = '<div class="cid-prog-flow">';
   bars.forEach((bar, bi) => {
-    const beatNote = bar.length === 2 ? '（各半小节）' : bar.length === 3 ? '（2+1+1 拍）' : '';
-    html += `<div class="cid-bar-block"><div class="cid-bar-note">第 ${bi + 1} 小节${beatNote}</div><div class="cid-bar-cards">`;
+    const beatNote = bar.length === 2 ? '各半小节' : bar.length === 3 ? '2+1+1 拍' : '整小节';
+    html += `<div class="cid-bar-block" title="第 ${bi + 1} 小节 · ${beatNote}"><div class="cid-bar-cards">`;
     bar.forEach((slot, ci) => {
       const myIdx = idx;
       html += fbCidRenderChordCard(slot, myIdx);
-      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿ 拆分</button>`;
+      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿</button>`;
       idx++;
     });
     html += '</div></div>';
-    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break-row" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">─── 合并到同一小节 ───</button>`;
+    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">｜</button>`;
   });
   html += '</div>';
   el.innerHTML = html;

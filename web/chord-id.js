@@ -518,21 +518,30 @@ function fbCidRenderGrid() {
 // top), the same convention fretboard.js's fbShapeToSvguitarChord draws for
 // CAGED shapes. That function is keyed to *movable-shape* offsets though
 // (relative to a barre position); this one is simpler because the input
-// here is always already absolute frets — always shown from the nut
-// (position 1), which is exactly what you want for the open-position
-// voicings this feature is built around.
+// here is always already absolute frets.
+//
+// The window always starts at the nut (position 1) if any string is played
+// open — an open string can only be drawn when the nut row is visible — or
+// otherwise at the lowest fret actually played (svguitar then draws the
+// usual "Nfr" position label), so a shape fretted entirely up at 7-8-9
+// doesn't render as a mostly-empty diagram starting from fret 1.
 function fbCidShapeToSvguitarChord(input) {
+  const fretted = input.filter(v => typeof v === 'number' && v > 0);
+  const hasOpen = input.some(v => v === 0);
+  const position = (!hasOpen && fretted.length) ? Math.min(...fretted) : 1;
+
   const fingers = [];
-  let maxFret = 1;
+  let maxRelFret = 1;
   for (let i = 0; i < 6; i++) {
     const svString = 6 - i; // low E (index 0) -> string 6, high e (index 5) -> string 1
     const v = input[i];
     if (v === 'x') { fingers.push([svString, svguitar.SILENT]); continue; }
     if (v === 0) { fingers.push([svString, svguitar.OPEN]); continue; }
-    fingers.push([svString, v, { color: '#4a7c4a' }]);
-    if (v > maxFret) maxFret = v;
+    const relFret = v - position + 1;
+    fingers.push([svString, relFret, { color: '#4a7c4a' }]);
+    if (relFret > maxRelFret) maxRelFret = relFret;
   }
-  return { fingers, position: 1, fretsToShow: Math.max(2, maxFret) };
+  return { fingers, position, fretsToShow: Math.max(2, maxRelFret) };
 }
 
 // Draws the standard chord-box diagram for the shape you actually clicked

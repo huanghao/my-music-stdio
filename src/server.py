@@ -493,7 +493,31 @@ def api_get_material(material_id: str):
     p = _materials_store.path_for(material_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Material not found")
-    return FileResponse(p)
+    # A material's id/url never changes even when its content is overwritten
+    # in place (see update_content — the PDF annotate-and-save flow relies on
+    # this). Without Cache-Control, browsers apply heuristic freshness and
+    # can keep serving an old cached response for hours/days without ever
+    # even asking the server — so a successful save can look "lost" after
+    # refresh even though the file on disk is already correct. `no-cache`
+    # forces the browser to hit the network on every load instead of trusting
+    # a stale local copy (Starlette's FileResponse here doesn't implement
+    # conditional-GET/304, so this always re-sends the full body — a bit more
+    # bandwidth, but that's a minor cost next to silently showing stale data).
+    return FileResponse(p, headers={"Cache-Control": "no-cache"})
+
+
+# Overwrites a material's bytes in place (same id/url) — used by the Lick PDF
+# viewer's annotate-and-save flow (web/vendor/pdfjs/save-hook.js) to bake
+# drawn annotations into the PDF and write it straight back, without
+# re-uploading or touching any link that already points at this material.
+@app.put("/api/materials/{material_id}/content")
+async def api_update_material_content(material_id: str, file: UploadFile = File(...)):
+    content = await file.read()
+    if len(content) > MAX_MATERIAL_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 100MB)")
+    if not _materials_store.update_content(material_id, content):
+        raise HTTPException(status_code=404, detail="Material not found")
+    return {"ok": True}
 
 
 @app.delete("/api/materials/{material_id}")

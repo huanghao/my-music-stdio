@@ -219,20 +219,21 @@ function licksPlayVideoEmbed(thumbEl) {
     `allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>`;
 }
 
-// PDF preview: click-to-expand inline, using the browser's own built-in PDF
-// viewer via an iframe fragment — no PDF-rendering library needed.
+// PDF preview: click-to-expand inline, rendered by our vendored pdf.js
+// viewer (web/vendor/pdfjs) instead of the browser's own built-in PDF
+// viewer. Gives every browser the same "view=FitH" / annotation behavior
+// (no more Firefox/Safari degrading to their own defaults), and — the
+// actual reason for the switch — its toolbar's draw/highlight/text tools
+// bake annotations into the PDF and save it back to the materials library
+// on click (see web/vendor/pdfjs/save-hook.js), instead of vanishing on
+// refresh the way the native viewer's scratch annotations always did.
 //
-// The fragment always carries view=FitH (fit page width): Chrome/Edge's
-// PDFium viewer honors it, so the score fills the embed instead of opening
-// fit-page with dead margins on both sides. Firefox/Safari's viewers ignore
-// it and fall back to their own default — same scoped degradation the `y`
-// parameter always had (see below), not something fixable here without
-// vendoring a full PDF-rendering library.
+// The fragment always carries view=FitH (fit page width) so the score
+// fills the embed instead of opening fit-page with dead margins on both
+// sides.
 //
 // `y` (0-1, fraction down the page) rides on FitH's optional top argument,
-// mapped from page-height points with a bottom-left origin, which only
-// Chrome/PDFium's built-in viewer reliably honors — Firefox/Safari are
-// expected to just land on the top of the page.
+// mapped from page-height points with a bottom-left origin.
 //
 // Expanded/collapsed state persists per PDF URL (localStorage, last toggle
 // wins) so a score you opened stays open across refreshes/previews instead
@@ -254,6 +255,20 @@ function licksPdfSetOpen(href, open) {
   localStorage.setItem(LICK_PDF_OPEN_KEY, JSON.stringify(m));
 }
 
+// Builds the iframe src for our vendored pdf.js viewer: `file` is always the
+// original material URL (so the viewer loads it same-origin), `frag` is the
+// page/view hash (see below). `saveMaterialId` is only added for materials
+// library links (the only kind PDFs in Lick notes ever are — see the
+// `.pdf,audio/*` accept filter on the materials upload input) so the
+// viewer's Save button can PUT annotated bytes back (see save-hook.js);
+// links that don't match still render fine, just without save-to-server.
+function licksPdfViewerSrc(href, frag) {
+  const m = href.match(/^\/api\/materials\/([^/?#]+)$/);
+  const params = new URLSearchParams({ file: href });
+  if (m) params.set('saveMaterialId', m[1]);
+  return `/vendor/pdfjs/web/viewer.html?${params.toString()}#${frag}`;
+}
+
 // The wrapper carries everything needed to rebuild either state (data-href/
 // data-src/data-page/data-h) so expanding and collapsing are just innerHTML
 // swaps — no re-parsing of the Markdown source required.
@@ -270,7 +285,7 @@ function licksPdfEmbedHtml(href, dir, mlIdx) {
   const frag = Number.isFinite(dir.y)
     ? `page=${page}&view=FitH,${Math.round((1 - Math.min(1, Math.max(0, dir.y))) * PAGE_HEIGHT_PT)}`
     : `page=${page}&view=FitH`;
-  const src = `${href}#${frag}`;
+  const src = licksPdfViewerSrc(href, frag);
   const dataAttrs = ` data-href="${htmlEsc(href)}" data-src="${htmlEsc(src)}" data-page="${page}"` +
     (h ? ` data-h="${h}"` : '');
   const body = licksPdfOpenMap()[href]

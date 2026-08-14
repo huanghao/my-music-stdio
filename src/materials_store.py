@@ -58,6 +58,14 @@ class MaterialsStore(ABC):
         ...
 
     @abstractmethod
+    def update_content(self, material_id: str, content: bytes) -> bool:
+        """Overwrite an existing material's bytes in place — same id/url, so
+        every reference to it (a Lick's notes, Song Loop's sourceUrl) keeps
+        working. Used by the PDF viewer's annotate-and-save flow. Returns
+        False if the material doesn't exist."""
+        ...
+
+    @abstractmethod
     def save_state(self, material_id: str, state: dict) -> bool:
         """Attach an arbitrary JSON-serializable blob to a material, keyed
         by its id. The store doesn't interpret it. Returns False if the
@@ -186,6 +194,19 @@ class LocalFlatMaterialsStore(MaterialsStore):
         p.unlink()
         index = self._load_index()
         index.pop(material_id, None)
+        self._save_index(index)
+        return True
+
+    def update_content(self, material_id: str, content: bytes) -> bool:
+        p = self._resolve(material_id)
+        if not p or not p.exists():
+            return False
+        index = self._load_index()
+        if material_id not in index:
+            return False
+        p.write_bytes(content)
+        index[material_id]["size"] = len(content)
+        index[material_id]["content_hash"] = hashlib.sha256(content).hexdigest()
         self._save_index(index)
         return True
 

@@ -66,6 +66,20 @@ test('fbCidBarsFromChords groups by break flags; fbCidCanMergeAt blocks bars ove
   assert.equal(cid.fbCidCanMergeAt(chords, [true, false, true], 0), true);
 });
 
+test('fbCidBreaksAfterInsert splits the boundary the insertion point falls on, leaving other boundaries untouched', () => {
+  // 4 chords A,B,C,D with breaks [b0,b1,b2] = A-B,B-C,C-D
+  const breaks = [false, false, true]; // A~B~C same bar, C|D separate
+
+  // insert before index 2 (between B and C) -> A~B|X|C|D: b0 (A-B) survives, the two new boundaries around X are forced true
+  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 2), [false, true, true, true]);
+
+  // insert at the very front -> X|A~B~C|D
+  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 0), [true, false, false, true]);
+
+  // insert at the very end (idx === chords.length) is just append, same as breaks.push(true)
+  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 4), [false, false, true, true]);
+});
+
 test('fbCidInferKey picks C major for a I-IV-V-I progression', () => {
   const chords = [{ rootPc: 0, quality: '' }, { rootPc: 5, quality: '' }, { rootPc: 7, quality: '' }, { rootPc: 0, quality: '' }];
   const key = cid.fbCidInferKey(chords);

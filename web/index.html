@@ -214,10 +214,11 @@
     <div id="cid-candidate-list" class="cid-candidate-list"></div>
     <div class="cid-input-actions">
       <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
-      <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelEdit()" style="display:none">✕ 取消编辑</button>
+      <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()" style="display:none">✕ 取消</button>
     </div>
 
     <h3 class="cid-section-title">和声进行</h3>
+    <div class="cid-hint">💡 点和弦之间的按钮合并/拆分小节；点卡片左上角 + 在此之前插入；点 ‹ › 调整顺序；点卡片本身可修改</div>
     <div id="cid-progression"></div>
     <div id="cid-bar-msg" class="cid-bar-msg"></div>
     <div class="cid-input-actions">

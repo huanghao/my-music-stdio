@@ -28,7 +28,11 @@ fbState.chordId = {
   // fretted rather than just the resolved chord's name.
   chords: [],
   breaks: [],          // length chords.length-1; breaks[i] = true => bar break between chord i and i+1
-  editingIdx: null,    // index into chords currently loaded into the grid for correction, or null when adding a new one
+  // What "+ 加入进行" does next: null = append a new chord at the end;
+  // { mode: 'edit', idx } = replace chords[idx] in place (fbCidStartEdit);
+  // { mode: 'insert', idx } = splice a new chord in before chords[idx]
+  // (fbCidStartInsert). Set/cleared together with the grid input.
+  pending: null,
   keyMode: 'auto',      // 'auto' | 'manual'
   manualTonicPc: 0,
   manualIsMinor: false,
@@ -146,6 +150,19 @@ function fbCidCanMergeAt(chords, breaks, i) {
   const trial = breaks.slice();
   trial[i] = false;
   return fbCidBarsFromChords(chords, trial).every(b => b.length <= 3);
+}
+
+// Computes the new `breaks` array for inserting a chord before position
+// `idx` (0..chords.length, pre-insert). The boundary that idx splits (if
+// any) is forced to `true` on both sides — the inserted chord always starts
+// its own bar — while every boundary NOT touched by the insertion is left
+// exactly as it was. Also covers plain append for free: idx === chords.length
+// degenerates to "push a new trailing true", same as the old dedicated code.
+function fbCidBreaksAfterInsert(breaks, idx) {
+  const out = breaks.slice();
+  if (idx > 0 && idx <= out.length) out[idx - 1] = true; // old boundary at idx-1 now separates the previous chord from the new one
+  out.splice(idx, 0, true); // new boundary between the inserted chord and whatever now follows it
+  return out;
 }
 
 // ── Key inference: score every (tonic, major/minor) pair by how many played
@@ -374,27 +391,42 @@ function fbCidClearInput() {
   fbCidRenderAll();
 }
 
+function fbCidScrollToGrid() {
+  const grid = document.getElementById('cid-grid');
+  if (grid && grid.scrollIntoView) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 // Loads an existing progression chord's fretted shape back into the grid so
 // it can be re-fretted or re-picked — "+ 加入进行" becomes "update this
 // chord" instead of appending a new one (see fbCidAddToProgression) until
-// fbCidCancelEdit or a successful update clears editingIdx.
+// fbCidCancelPending or a successful update clears s.pending.
 function fbCidStartEdit(i) {
   const s = fbState.chordId;
   const slot = s.chords[i];
   if (!slot) return;
   fbCidResetClarify();
   s.input = slot.input.slice();
-  s.editingIdx = i;
+  s.pending = { mode: 'edit', idx: i };
   const resolved = fbCidRepresentativeChord(slot);
   if (resolved) s.selected = { rootPc: resolved.rootPc, quality: resolved.quality };
   fbCidRenderAll();
-  const grid = document.getElementById('cid-grid');
-  if (grid && grid.scrollIntoView) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  fbCidScrollToGrid();
 }
 
-function fbCidCancelEdit() {
+// Starts a fresh (blank) shape that will be spliced in before chords[i] —
+// "+ 加入进行" becomes "insert here" instead of appending at the end.
+function fbCidStartInsert(i) {
   const s = fbState.chordId;
-  s.editingIdx = null;
+  fbCidResetClarify();
+  s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
+  s.pending = { mode: 'insert', idx: i };
+  fbCidRenderAll();
+  fbCidScrollToGrid();
+}
+
+function fbCidCancelPending() {
+  const s = fbState.chordId;
+  s.pending = null;
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
   fbCidRenderAll();
@@ -446,21 +478,25 @@ function fbCidBuildSlotFromInput() {
   return { candidates, chosenIdx, locked, input: s.input.slice() };
 }
 
-// Appends the current grid shape as a new progression slot — or, if
-// fbCidStartEdit loaded an existing slot for correction, replaces that slot
-// in place (same position, same bar grouping) instead of appending.
+// Appends the current grid shape as a new progression slot — or, per
+// s.pending (see fbCidStartEdit/fbCidStartInsert), replaces an existing slot
+// in place or splices a new one in at a specific position instead.
 function fbCidAddToProgression() {
   const s = fbState.chordId;
   const slot = fbCidBuildSlotFromInput();
   if (!slot) return;
 
-  if (s.editingIdx != null && s.chords[s.editingIdx]) {
-    s.chords[s.editingIdx] = slot;
-    s.editingIdx = null;
+  if (s.pending && s.pending.mode === 'edit' && s.chords[s.pending.idx]) {
+    s.chords[s.pending.idx] = slot;
+  } else if (s.pending && s.pending.mode === 'insert' && s.pending.idx >= 0 && s.pending.idx <= s.chords.length) {
+    const idx = s.pending.idx;
+    s.chords.splice(idx, 0, slot);
+    s.breaks = fbCidBreaksAfterInsert(s.breaks, idx);
   } else {
     s.chords.push(slot);
     if (s.chords.length > 1) s.breaks.push(true);
   }
+  s.pending = null;
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
   fbCidRenderAll();
@@ -472,8 +508,23 @@ function fbCidRemoveChord(i) {
   s.chords.splice(i, 1);
   if (i === 0) s.breaks.shift();
   else s.breaks.splice(i - 1, 1);
-  if (s.editingIdx === i) { fbCidCancelEdit(); return; } // the slot being edited no longer exists
-  if (s.editingIdx != null && s.editingIdx > i) s.editingIdx -= 1; // keep pointing at the same logical slot
+  if (s.pending) {
+    if (s.pending.mode === 'edit' && s.pending.idx === i) { fbCidCancelPending(); return; } // the slot being edited no longer exists
+    if (s.pending.idx > i) s.pending.idx -= 1; // keep pointing at the same logical position
+  }
+  fbCidRenderAll();
+}
+
+// Swaps two adjacent chords — bar boundaries are positional (see
+// fbCidBarsFromChords), so `breaks` doesn't need touching, only the chords
+// themselves move. Cancels any in-progress edit/insert to avoid it silently
+// pointing at the wrong (now-shifted) slot.
+function fbCidMoveChord(i, dir) {
+  const s = fbState.chordId;
+  const j = i + dir;
+  if (j < 0 || j >= s.chords.length) return;
+  [s.chords[i], s.chords[j]] = [s.chords[j], s.chords[i]];
+  if (s.pending) { s.pending = null; s.input = ['x', 'x', 'x', 'x', 'x', 'x']; fbCidResetClarify(); }
   fbCidRenderAll();
 }
 
@@ -495,7 +546,7 @@ function fbCidToggleBreak(i) {
 function fbCidClearProgression() {
   fbState.chordId.chords = [];
   fbState.chordId.breaks = [];
-  fbState.chordId.editingIdx = null;
+  fbState.chordId.pending = null;
   fbCidRenderAll();
 }
 
@@ -517,20 +568,31 @@ function fbCidSetManualMode(v) {
 
 // ── Rendering ──
 
+// Standard fretboard inlay positions (single dot; 12 doubles up, like a real
+// neck) — purely a visual landmark to count frets by at a glance, no effect
+// on input.
+const FB_CID_INLAY_FRETS = new Set([5, 7, 9, 12]);
+
 function fbCidRenderGrid() {
   const s = fbState.chordId;
   const el = document.getElementById('cid-grid');
   if (!el) return;
   const rowOrder = [5, 4, 3, 2, 1, 0]; // high e at top, low E at bottom — matches standard tab layout
   let html = '<div class="cid-grid-row cid-grid-header"><span class="cid-string-label"></span>';
-  for (let f = 0; f <= 12; f++) html += `<span class="cid-fret-head">${f === 0 ? '○' : f}</span>`;
+  for (let f = 0; f <= 12; f++) {
+    const inlay = FB_CID_INLAY_FRETS.has(f) ? ' cid-fret-inlay' : '';
+    html += `<span class="cid-fret-head${inlay}">${f === 0 ? '○' : f}</span>`;
+  }
   html += '</div>';
   rowOrder.forEach(i => {
     const muted = s.input[i] === 'x';
     html += `<div class="cid-grid-row"><span class="cid-string-label${muted ? ' muted' : ''}" onclick="fbCidToggleMute(${i})">${FB_STRING_NAMES[i]}${muted ? ' ✕' : ''}</span>`;
     for (let f = 0; f <= 12; f++) {
       const sel = !muted && s.input[i] === f;
-      html += `<button type="button" class="cid-fret-cell${sel ? ' sel' : ''}${f === 0 ? ' cid-fret-open' : ''}" onclick="fbCidSetFret(${i},${f})"></button>`;
+      const inlay = FB_CID_INLAY_FRETS.has(f) ? ' cid-fret-inlay' : '';
+      // the fretted note's own name, right on the cell — no need to cross-reference the "组成音" line to know what you just clicked
+      const label = sel ? FB_NOTE_NAMES[(FB_STRING_OPEN[i] + f) % 12] : '';
+      html += `<button type="button" class="cid-fret-cell${sel ? ' sel' : ''}${f === 0 ? ' cid-fret-open' : ''}${inlay}" onclick="fbCidSetFret(${i},${f})">${label}</button>`;
     }
     html += '</div>';
   });
@@ -612,10 +674,13 @@ function fbCidRenderCandidates() {
   const cancelBtn = document.getElementById('cid-cancel-edit-btn');
   if (!notesEl || !clarifyEl || !listEl || !addBtn || !bannerEl || !cancelBtn) return;
 
-  const editing = s.editingIdx != null && s.chords[s.editingIdx];
-  bannerEl.textContent = editing ? `正在修改第 ${s.editingIdx + 1} 个和弦 — 重新点指板后点"更新"` : '';
-  addBtn.textContent = editing ? '✔ 更新' : '+ 加入进行';
-  cancelBtn.style.display = editing ? '' : 'none';
+  const editing = s.pending && s.pending.mode === 'edit' && s.chords[s.pending.idx];
+  const inserting = s.pending && s.pending.mode === 'insert';
+  bannerEl.textContent = editing ? `正在修改第 ${s.pending.idx + 1} 个和弦 — 重新点指板后点"更新"`
+    : inserting ? `将插入为第 ${s.pending.idx + 1} 个和弦 — 点指板后点"插入到此处"`
+    : '';
+  addBtn.textContent = editing ? '✔ 更新' : inserting ? '✔ 插入到此处' : '+ 加入进行';
+  cancelBtn.style.display = (editing || inserting) ? '' : 'none';
 
   const { pcSet, bassPc } = fbCidPitchClasses(s.input);
   s._lastBassPc = bassPc;
@@ -672,14 +737,19 @@ function fbCidRenderCandidates() {
 // moved there too, since editing is now a deliberate action rather than a
 // permanent fixture on every card (keeps ~10 chords visible without
 // scrolling — see fbCidRenderProgression).
-function fbCidRenderChordCard(slot, idx) {
+function fbCidRenderChordCard(slot, idx, total) {
   const resolved = fbCidRepresentativeChord(slot);
   const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
   const title = slot.locked ? '你选定的读法 — 点击修改' : '还不确定，已按当前调号自动判断 — 点击修改';
   return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}" onclick="fbCidStartEdit(${idx})" title="${title}">
+      <button type="button" class="cid-prog-chip-ins" onclick="event.stopPropagation();fbCidStartInsert(${idx})" title="在此之前插入新和弦">+</button>
       <button type="button" class="cid-prog-chip-del" onclick="event.stopPropagation();fbCidRemoveChord(${idx})" title="删除">✕</button>
       <div class="cid-prog-card-diagram" id="cid-diagram-${idx}"></div>
       <span class="cid-prog-card-label">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
+      <div class="cid-prog-card-moves">
+        <button type="button" class="cid-move-btn" onclick="event.stopPropagation();fbCidMoveChord(${idx},-1)" ${idx === 0 ? 'disabled' : ''} title="左移">‹</button>
+        <button type="button" class="cid-move-btn" onclick="event.stopPropagation();fbCidMoveChord(${idx},1)" ${idx === total - 1 ? 'disabled' : ''} title="右移">›</button>
+      </div>
     </div>`;
 }
 
@@ -695,6 +765,7 @@ function fbCidRenderProgression() {
   // multiple-bars-per-line layout, rather than one bar per row — with tiny
   // diagrams a whole 10-chord progression fits without scrolling.
   const bars = fbCidBarsFromChords(s.chords, s.breaks);
+  const total = s.chords.length;
   let idx = 0;
   let html = '<div class="cid-prog-flow">';
   bars.forEach((bar, bi) => {
@@ -702,12 +773,12 @@ function fbCidRenderProgression() {
     html += `<div class="cid-bar-block" title="第 ${bi + 1} 小节 · ${beatNote}"><div class="cid-bar-cards">`;
     bar.forEach((slot, ci) => {
       const myIdx = idx;
-      html += fbCidRenderChordCard(slot, myIdx);
-      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="点击拆分为两个小节">‿</button>`;
+      html += fbCidRenderChordCard(slot, myIdx, total);
+      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="这两个和弦同属一小节，点击拆分">拆分</button>`;
       idx++;
     });
     html += '</div></div>';
-    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击合并到同一小节">｜</button>`;
+    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击把相邻两个小节合并成一个">合并</button>`;
   });
   html += '</div>';
   el.innerHTML = html;
@@ -834,7 +905,7 @@ function fbCidInit() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity,
-    fbCidBarsFromChords, fbCidCanMergeAt,
+    fbCidBarsFromChords, fbCidCanMergeAt, fbCidBreaksAfterInsert,
     fbCidInferKey, fbCidScoreKey,
     fbCidRepresentativeChord, fbCidResolveProgression,
     fbCidRomanForChord, fbCidDegreeLabel, fbCidDetectCadences, fbCidSuggestAlts,

@@ -642,6 +642,11 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-grid-row + .cid-grid-row { margin-top: 2px; }
 .cid-grid-header { color: var(--text-faint); font-size: 11px; text-align: center; margin-bottom: 4px; }
 .cid-fret-head { text-align: center; }
+/* Standard fretboard inlay frets (5/7/9/12) — a fret-counting landmark,
+   same convention as a real neck (12 gets the double-dot treatment). */
+.cid-fret-head.cid-fret-inlay { color: var(--warn-dark); font-weight: 700; }
+.cid-fret-cell.cid-fret-inlay { background: var(--warn-bg); }
+.cid-fret-cell.cid-fret-inlay.sel { background: var(--primary); } /* selection still wins over the inlay tint */
 .cid-string-label {
   font-size: 12px; font-weight: 700; color: var(--text-dim); cursor: pointer; text-align: center; user-select: none;
 }
@@ -649,10 +654,14 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-fret-cell {
   height: 24px; border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px;
   cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
 }
 .cid-fret-cell:hover { border-color: var(--primary-lt); }
 .cid-fret-cell.cid-fret-open { border-left: 2px solid var(--border); }
-.cid-fret-cell.sel { background: var(--primary); border-color: var(--primary); }
+/* The clicked fret's own note name (see fbCidRenderGrid) — no need to
+   cross-reference the "组成音" line below to know what you just fretted. */
+.cid-fret-cell.sel { background: var(--primary); border-color: var(--primary); color: var(--text-inverse); }
 
 .cid-input-actions { display: flex; gap: 8px; margin-bottom: 10px; }
 .cid-notes { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; min-height: 18px; }
@@ -674,6 +683,7 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-candidate-empty { font-size: 12px; color: var(--text-faint); }
 
 .cid-section-title { font-size: 14px; margin: 18px 0 8px; color: var(--text-dim); }
+.cid-hint { font-size: 11.5px; color: var(--text-faint); margin-bottom: 8px; }
 .cid-progression-empty { font-size: 12px; color: var(--text-faint); margin-bottom: 8px; }
 
 /* Progression: bar-blocks flow left-to-right and wrap like a real chord
@@ -684,11 +694,14 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
 }
 .cid-bar-cards { display: flex; align-items: flex-start; gap: 3px; }
+/* Merge/split controls — labeled pill buttons rather than a bare glyph, so
+   they read as clickable UI at a glance instead of stray punctuation. */
 .cid-bar-tie, .cid-bar-break {
-  border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 12px; padding: 0 1px;
-  align-self: center;
+  align-self: center; cursor: pointer; font-size: 10px; white-space: nowrap;
+  border: 1px dashed var(--border-dim); background: var(--bg-page); border-radius: 10px;
+  color: var(--text-dim); padding: 3px 6px;
 }
-.cid-bar-tie:hover, .cid-bar-break:hover { color: var(--primary); }
+.cid-bar-tie:hover, .cid-bar-break:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-bg-lt); }
 .cid-bar-msg { font-size: 11px; color: var(--danger-dark); min-height: 14px; margin-bottom: 6px; }
 
 /* One identified (or still-guessed) chord: a compact tile — diagram +
@@ -707,11 +720,21 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-prog-card.unresolved { border-style: dashed; }
 .cid-prog-card-label { font-family: Georgia, serif; font-weight: 700; font-size: 13px; color: var(--text); }
 .cid-prog-card.unresolved .cid-prog-card-label sup { color: var(--warn); font-size: 9px; }
-.cid-prog-chip-del {
-  position: absolute; top: 1px; right: 3px; border: none; background: none; cursor: pointer;
+.cid-prog-chip-del, .cid-prog-chip-ins {
+  position: absolute; top: 1px; border: none; background: none; cursor: pointer;
   color: var(--text-faint); font-size: 10px; padding: 0; line-height: 1;
 }
+.cid-prog-chip-del { right: 3px; }
 .cid-prog-chip-del:hover { color: var(--danger-dark); }
+.cid-prog-chip-ins { left: 3px; font-weight: 700; }
+.cid-prog-chip-ins:hover { color: var(--primary); }
+.cid-prog-card-moves { display: flex; gap: 2px; margin-top: 1px; }
+.cid-move-btn {
+  border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px; cursor: pointer;
+  color: var(--text-faint); font-size: 10px; padding: 0 6px; line-height: 1.4;
+}
+.cid-move-btn:hover:not(:disabled) { border-color: var(--primary-lt); color: var(--primary); }
+.cid-move-btn:disabled { opacity: 0.3; cursor: default; }
 
 /* Standard chord-box diagram (svguitar, see fbCidRenderChordDiagram) —
    reuses .fb-board/.fb-svguitar-box's own svg sizing, shrunk to fit the

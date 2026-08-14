@@ -688,21 +688,37 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* Progression: bar-blocks flow left-to-right and wrap like a real chord
    chart's "several bars per line" layout, instead of one bar per row —
-   cards are small enough that ~10 chords fit without scrolling. */
-.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-bottom: 8px; }
+   cards are small enough that ~10 chords fit without scrolling. Each block
+   carries an always-visible "小节 N" label — the bar structure is drawn
+   directly rather than only discoverable by hovering. */
+.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; margin-bottom: 8px; }
 .cid-bar-block {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
 }
+.cid-bar-label { font-size: 9.5px; color: var(--text-faint); text-align: center; margin-bottom: 2px; }
 .cid-bar-cards { display: flex; align-items: flex-start; gap: 3px; }
-/* Merge/split controls — labeled pill buttons rather than a bare glyph, so
-   they read as clickable UI at a glance instead of stray punctuation. */
-.cid-bar-tie, .cid-bar-break {
-  align-self: center; cursor: pointer; font-size: 10px; white-space: nowrap;
-  border: 1px dashed var(--border-dim); background: var(--bg-page); border-radius: 10px;
-  color: var(--text-dim); padding: 3px 6px;
-}
-.cid-bar-tie:hover, .cid-bar-break:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-bg-lt); }
 .cid-bar-msg { font-size: 11px; color: var(--danger-dark); min-height: 14px; margin-bottom: 6px; }
+
+/* Every gap between (or around) chords always has exactly one job for the
+   "+": insert a chord there — same control, same meaning, everywhere, so
+   it never competes with the barline toggle for that spot. Internal gaps
+   additionally draw the barline itself as a small separate glyph ("┃" if
+   one is there, faint "⌇" if not) instead of a text button whose label
+   flips between "合并"/"拆分" depending on state you'd have to infer. */
+.cid-gap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 1px; padding-bottom: 4px; }
+.cid-gap.cid-gap-edge { padding-bottom: 4px; }
+.cid-gap-ins {
+  border: 1px solid var(--primary-lt); background: var(--bg-page); border-radius: 50%;
+  width: 16px; height: 16px; line-height: 14px; padding: 0; text-align: center;
+  color: var(--primary); font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.cid-gap-ins:hover { background: var(--primary-bg); }
+.cid-gap-barline {
+  border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 12px;
+  padding: 4px 6px; line-height: 1; margin: -4px -6px; /* generous hit area without inflating the visible glyph */
+}
+.cid-gap-barline.present { color: var(--text-dim); font-weight: 700; }
+.cid-gap-barline:hover { color: var(--primary); }
 
 /* One identified (or still-guessed) chord: a compact tile — diagram +
    resolved name only. Click to reload its shape into the grid above for
@@ -720,14 +736,11 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-prog-card.unresolved { border-style: dashed; }
 .cid-prog-card-label { font-family: Georgia, serif; font-weight: 700; font-size: 13px; color: var(--text); }
 .cid-prog-card.unresolved .cid-prog-card-label sup { color: var(--warn); font-size: 9px; }
-.cid-prog-chip-del, .cid-prog-chip-ins {
-  position: absolute; top: 1px; border: none; background: none; cursor: pointer;
+.cid-prog-chip-del {
+  position: absolute; top: 1px; right: 3px; border: none; background: none; cursor: pointer;
   color: var(--text-faint); font-size: 10px; padding: 0; line-height: 1;
 }
-.cid-prog-chip-del { right: 3px; }
 .cid-prog-chip-del:hover { color: var(--danger-dark); }
-.cid-prog-chip-ins { left: 3px; font-weight: 700; }
-.cid-prog-chip-ins:hover { color: var(--primary); }
 .cid-prog-card-moves { display: flex; gap: 2px; margin-top: 1px; }
 .cid-move-btn {
   border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px; cursor: pointer;

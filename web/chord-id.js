@@ -742,7 +742,6 @@ function fbCidRenderChordCard(slot, idx, total) {
   const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
   const title = slot.locked ? '你选定的读法 — 点击修改' : '还不确定，已按当前调号自动判断 — 点击修改';
   return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}" onclick="fbCidStartEdit(${idx})" title="${title}">
-      <button type="button" class="cid-prog-chip-ins" onclick="event.stopPropagation();fbCidStartInsert(${idx})" title="在此之前插入新和弦">+</button>
       <button type="button" class="cid-prog-chip-del" onclick="event.stopPropagation();fbCidRemoveChord(${idx})" title="删除">✕</button>
       <div class="cid-prog-card-diagram" id="cid-diagram-${idx}"></div>
       <span class="cid-prog-card-label">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
@@ -751,6 +750,25 @@ function fbCidRenderChordCard(slot, idx, total) {
         <button type="button" class="cid-move-btn" onclick="event.stopPropagation();fbCidMoveChord(${idx},1)" ${idx === total - 1 ? 'disabled' : ''} title="右移">›</button>
       </div>
     </div>`;
+}
+
+// A gap between two positions in the progression — every gap always has an
+// "insert a chord here" control (unambiguous, same everywhere); an internal
+// gap (between two existing chords) additionally shows the actual barline
+// as a small separate glyph: "┃" drawn = there IS a bar break here (click
+// removes it, joining the two into one bar), a faint "⌇" = there ISN'T
+// (click adds one, splitting). Showing the barline itself, rather than a
+// text button whose label flips between "合并"/"拆分" depending on hidden
+// state, is what actually answers "怎么划定小节" — the boundary's current
+// state is drawn, not implied.
+function fbCidRenderGap(insertIdx, hasBarline) {
+  const insertBtn = `<button type="button" class="cid-gap-ins" onclick="fbCidStartInsert(${insertIdx})" title="在此插入一个新和弦">+</button>`;
+  if (hasBarline == null) return `<div class="cid-gap cid-gap-edge">${insertBtn}</div>`;
+  const breakIdx = insertIdx - 1;
+  const barlineBtn = hasBarline
+    ? `<button type="button" class="cid-gap-barline present" onclick="fbCidToggleBreak(${breakIdx})" title="这里有小节线 — 点击移除（并入同一小节）">┃</button>`
+    : `<button type="button" class="cid-gap-barline" onclick="fbCidToggleBreak(${breakIdx})" title="这里没有小节线 — 点击加入（拆成两个小节）">⌇</button>`;
+  return `<div class="cid-gap">${barlineBtn}${insertBtn}</div>`;
 }
 
 function fbCidRenderProgression() {
@@ -763,23 +781,27 @@ function fbCidRenderProgression() {
 
   // Bar-blocks flow left-to-right and wrap, like a real chord chart's
   // multiple-bars-per-line layout, rather than one bar per row — with tiny
-  // diagrams a whole 10-chord progression fits without scrolling.
+  // diagrams a whole 10-chord progression fits without scrolling. Each
+  // block carries its own always-visible "小节 N" label (not just a hover
+  // tooltip) so the bar structure itself is directly visible.
   const bars = fbCidBarsFromChords(s.chords, s.breaks);
   const total = s.chords.length;
   let idx = 0;
   let html = '<div class="cid-prog-flow">';
   bars.forEach((bar, bi) => {
-    const beatNote = bar.length === 2 ? '各半小节' : bar.length === 3 ? '2+1+1 拍' : '整小节';
-    html += `<div class="cid-bar-block" title="第 ${bi + 1} 小节 · ${beatNote}"><div class="cid-bar-cards">`;
+    const beatNote = bar.length === 2 ? '（各半小节）' : bar.length === 3 ? '（2+1+1 拍）' : '';
+    html += `<div class="cid-bar-block"><div class="cid-bar-label">小节 ${bi + 1}${beatNote}</div><div class="cid-bar-cards">`;
     bar.forEach((slot, ci) => {
       const myIdx = idx;
+      if (myIdx === 0) html += fbCidRenderGap(0, null); // one leading insert point, before the very first chord
       html += fbCidRenderChordCard(slot, myIdx, total);
-      if (ci < bar.length - 1) html += `<button type="button" class="cid-bar-tie" onclick="fbCidToggleBreak(${myIdx})" title="这两个和弦同属一小节，点击拆分">拆分</button>`;
+      if (ci < bar.length - 1) html += fbCidRenderGap(myIdx + 1, false); // within this bar — no barline yet
       idx++;
     });
     html += '</div></div>';
-    if (bi < bars.length - 1) html += `<button type="button" class="cid-bar-break" onclick="fbCidToggleBreak(${idx - 1})" title="点击把相邻两个小节合并成一个">合并</button>`;
+    if (bi < bars.length - 1) html += fbCidRenderGap(idx, true); // between bars — barline is here
   });
+  html += fbCidRenderGap(total, null); // trailing insert point, after the very last chord
   html += '</div>';
   el.innerHTML = html;
 

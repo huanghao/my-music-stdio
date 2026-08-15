@@ -704,6 +704,22 @@ async def api_agent_ask(req: AgentAskRequest, request: Request) -> StreamingResp
 
 
 # Serve frontend static files
+#
+# StaticFiles sends no Cache-Control header by default, so once a browser has
+# cached a response it can (per RFC 7234's heuristic freshness — Last-Modified
+# with no explicit Cache-Control/Expires) skip revalidation entirely on a
+# later request, silently serving stale JS/CSS after an edit even on a hard
+# reload. Never confirmed as anything but a dev-loop nuisance until it cost
+# real time chasing a "fix" that had already landed on disk — no-cache (not
+# no-store) keeps the ETag/If-None-Match 304 path for cheap repeat loads,
+# it just forces every request to actually ask the server first.
+class _NoCacheStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 _web_dir = Path(__file__).parent.parent / "web"
 if _web_dir.exists():
-    app.mount("/", StaticFiles(directory=str(_web_dir), html=True), name="static")
+    app.mount("/", _NoCacheStaticFiles(directory=str(_web_dir), html=True), name="static")

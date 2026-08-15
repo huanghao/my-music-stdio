@@ -93,6 +93,10 @@ test('licksParseLinkDirectives parses page=N and page=N,y=F together', () => {
   assert.deepEqual(licks.licksParseLinkDirectives('page=3,y=0.4'), { page: 3, y: 0.4 });
 });
 
+test('licksParseLinkDirectives parses dual=N (dual-page-view companion page) alongside page=', () => {
+  assert.deepEqual(licks.licksParseLinkDirectives('page=2,dual=3'), { page: 2, dual: 3 });
+});
+
 test('licksIsPdfUrl / licksIsAudioUrl detect by extension, ignoring query/fragment', () => {
   assert.equal(licks.licksIsPdfUrl('/api/materials/abc_Chapter1.pdf'), true);
   assert.equal(licks.licksIsPdfUrl('/api/materials/abc_Chapter1.pdf?x=1'), true);
@@ -287,4 +291,54 @@ test('licksRewriteLinkSize returns null for a single-quote title instead of mang
 
 test('licksRewriteLinkSize returns null when no size is given', () => {
   assert.equal(licks.licksRewriteLinkSize('[demo](https://youtu.be/keQUk4VQCi4)', 0, {}), null);
+});
+
+// ── licksRewriteLinkPageDual / licksSplitDualLink: dual-page-view linking ──
+
+test('licksRewriteLinkPageDual sets page= and dual= together on a bare PDF link', () => {
+  const notes = '[score](https://x.com/a.pdf)';
+  assert.equal(
+    licks.licksRewriteLinkPageDual(notes, 0, { page: 2, dual: 3 }),
+    '[score](https://x.com/a.pdf "page=2,dual=3")'
+  );
+});
+
+test('licksRewriteLinkPageDual updates dual= in place, preserving page= and other directives', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,dual=3,w=900")';
+  assert.equal(
+    licks.licksRewriteLinkPageDual(notes, 0, { dual: 5 }),
+    '[score](https://x.com/a.pdf "page=2,dual=5,w=900")'
+  );
+});
+
+test('licksRewriteLinkPageDual removes dual= (passing null) instead of writing dual=null', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,dual=3,w=900")';
+  assert.equal(
+    licks.licksRewriteLinkPageDual(notes, 0, { dual: null }),
+    '[score](https://x.com/a.pdf "page=2,w=900")'
+  );
+});
+
+test('licksRewriteLinkPageDual drops the title attribute entirely once every directive is cleared', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,dual=3")';
+  assert.equal(
+    licks.licksRewriteLinkPageDual(notes, 0, { page: null, dual: null }),
+    '[score](https://x.com/a.pdf)'
+  );
+});
+
+test('licksSplitDualLink turns one dual-page-view link into two independent ones on their own lines', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,dual=3,w=900")';
+  assert.equal(
+    licks.licksSplitDualLink(notes, 0, 2, 3),
+    '[score](https://x.com/a.pdf "page=2,w=900")\n[score](https://x.com/a.pdf "page=3,w=900")'
+  );
+});
+
+test('licksSplitDualLink uses whatever pages are passed in (e.g. after nudging the companion), not the original dual=', () => {
+  const notes = '[score](https://x.com/a.pdf "page=2,dual=3")';
+  assert.equal(
+    licks.licksSplitDualLink(notes, 0, 2, 6),
+    '[score](https://x.com/a.pdf "page=2")\n[score](https://x.com/a.pdf "page=6")'
+  );
 });

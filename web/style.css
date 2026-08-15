@@ -1170,6 +1170,27 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-pdf-thumb-icon { font-size: 22px; }
 .lick-pdf-thumb-label { font-size: 13px; color: var(--text-dim); }
 .lick-pdf-collapse { margin-bottom: 4px; }
+.lick-pdf-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+
+/* Dual-page view: primary (editable) and a read-only companion, side by side,
+   scroll-synced in both directions — see licksSetupDualPdfSync in licks.js.
+   Each pane keeps its own .lick-pdf-frame (so the two independently existing
+   iframe sizing/positioning rules above still apply unchanged); what's new is
+   just the row wrapper and the companion's own mini toolbar above its frame. */
+.lick-pdf-dual-row { display: flex; gap: 10px; align-items: flex-start; }
+.lick-pdf-pane { flex: 1 1 0; min-width: 260px; }
+.lick-pdf-companion-toolbar {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  font-size: 12px; color: var(--text-dim);
+}
+.lick-pdf-companion-toolbar .btn { padding: 2px 8px; }
+.lick-pdf-companion-label { flex: 1; }
+.lick-pdf-companion-pane .lick-pdf-frame { border-radius: 6px; } /* no collapse button below it to notch a corner for */
+/* Narrow viewport: stack instead of squeezing two PDF panes unreadably. */
+@media (max-width: 900px) {
+  .lick-pdf-dual-row { flex-direction: column; }
+  .lick-pdf-pane { width: 100%; }
+}
 
 /* Audio embeds: an inline mini-player (play/seek/speed) for listen-while-
    reading-the-score, plus a secondary hand-off button into Song Loop's

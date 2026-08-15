@@ -82,7 +82,9 @@ function licksParseLinkDirectives(title) {
     // instead of rendering as the tooltip text the user actually wrote.
     // `h`/`height` is PDF-specific (see licksPdfEmbedHtml) — video embeds
     // ignore it since their aspect ratio is fixed by the player itself.
-    const m = part.trim().match(/^(w|width|h|height|page|y)[:=]\s*([\d.]+)$/i);
+    // `dual` (PDF-only, too) is the page number of a linked read-only
+    // companion pane — see licksPdfDualHtml / licksAddDualPdf.
+    const m = part.trim().match(/^(w|width|h|height|page|y|dual)[:=]\s*([\d.]+)$/i);
     if (!m) continue;
     const lowered = m[1].toLowerCase();
     const key = lowered === 'width' ? 'w' : lowered === 'height' ? 'h' : lowered;
@@ -91,20 +93,15 @@ function licksParseLinkDirectives(title) {
   return out;
 }
 
-// Rewrites the w=/h= preview-size directives of the idx-th resizable media
-// link (video/PDF, in document order — the ordinal the link renderer stamps
-// as data-ml-idx) in the raw notes Markdown, returning the updated notes.
-// This is how a drag-resize on the detail page persists: the new pixel size
-// is written back into the link's title directives and saved to the server.
-// Returns null when the link can't be rewritten safely (unexpected syntax —
-// single-quote/paren title forms, angle-bracket hrefs — or idx out of
-// range); the caller then keeps the resize as a view-only tweak.
-function licksRewriteLinkSize(notes, idx, sizes) {
+// Locates the idx-th resizable media link (video/PDF, in document order —
+// the ordinal the link renderer stamps as data-ml-idx) in the raw notes
+// Markdown. Shared by every write-back below (drag-resize's w=/h=, dual-page
+// view's page=/dual=) — they all need the same "find this exact occurrence,
+// only touch `[text](href)`/`[text](href "title")` syntax" groundwork.
+// Returns null when the link can't be located safely (unexpected syntax —
+// single-quote/paren title forms, angle-bracket hrefs — or idx out of range).
+function licksFindLinkAt(notes, idx) {
   if (typeof marked === 'undefined' || !notes) return null;
-  const w = Number.isFinite(sizes.w) ? Math.round(sizes.w) : null;
-  const h = Number.isFinite(sizes.h) ? Math.round(sizes.h) : null;
-  if (w === null && h === null) return null;
-
   const links = [];
   try {
     marked.walkTokens(marked.lexer(notes), (t) => {
@@ -112,7 +109,7 @@ function licksRewriteLinkSize(notes, idx, sizes) {
       if (licksYoutubeId(t.href) || licksBilibiliId(t.href) || licksIsPdfUrl(t.href)) links.push(t);
     });
   } catch (e) {
-    console.warn('licksRewriteLinkSize: failed to lex notes:', e);
+    console.warn('licksFindLinkAt: failed to lex notes:', e);
     return null;
   }
   if (idx < 0 || idx >= links.length) return null;
@@ -131,22 +128,91 @@ function licksRewriteLinkSize(notes, idx, sizes) {
   // Only `[text](href)` and `[text](href "title")` are rewritten.
   const m = raw.match(/^\[([^\]]*)\]\((\S+?)(?:\s+"([^"]*)")?\)$/);
   if (!m) {
-    console.warn('licksRewriteLinkSize: unsupported link syntax, leaving notes unchanged:', raw);
+    console.warn('licksFindLinkAt: unsupported link syntax, leaving notes unchanged:', raw);
     return null;
   }
-  // Split the title into its comma-separated parts and replace (or append)
-  // the size keys, preserving everything else (page=, y=, plain captions).
-  const parts = m[3] ? m[3].split(',').map(p => p.trim()).filter(Boolean) : [];
-  const setKey = (keyRe, key, val) => {
-    const i = parts.findIndex(p => keyRe.test(p));
-    if (i >= 0) parts[i] = parts[i].replace(keyRe, `${key}=${val}`);
-    else parts.push(`${key}=${val}`);
-  };
-  if (w !== null) setKey(/^(?:w|width)[:=]\s*[\d.]+$/i, 'w', w);
-  if (h !== null) setKey(/^(?:h|height)[:=]\s*[\d.]+$/i, 'h', h);
+  return { pos, raw, text: m[1], href: m[2], title: m[3] || '' };
+}
 
-  const newRaw = `[${m[1]}](${m[2]} "${parts.join(',')}")`;
-  return notes.slice(0, pos) + newRaw + notes.slice(pos + raw.length);
+// Splits a link's title into its comma-separated directive parts, and
+// returns a setter that replaces (or appends) one key's value in place —
+// the shared "rewrite one directive, keep the rest" move every write-back
+// below needs (see licksRewriteLinkSize / licksRewriteLinkPageDual).
+function licksTitleParts(title) {
+  const parts = title ? title.split(',').map(p => p.trim()).filter(Boolean) : [];
+  return {
+    parts,
+    set(keyRe, key, val) {
+      const i = parts.findIndex(p => keyRe.test(p));
+      if (i >= 0) parts[i] = parts[i].replace(keyRe, `${key}=${val}`);
+      else parts.push(`${key}=${val}`);
+    },
+    clear(keyRe) {
+      const i = parts.findIndex(p => keyRe.test(p));
+      if (i >= 0) parts.splice(i, 1);
+    },
+    join() { return parts.join(','); },
+  };
+}
+
+// Rewrites the w=/h= preview-size directives of the idx-th resizable media
+// link, returning the updated notes. This is how a drag-resize on the detail
+// page persists: the new pixel size is written back into the link's title
+// directives and saved to the server. Returns null when the link can't be
+// found/rewritten safely (see licksFindLinkAt); the caller then keeps the
+// resize as a view-only tweak.
+function licksRewriteLinkSize(notes, idx, sizes) {
+  const w = Number.isFinite(sizes.w) ? Math.round(sizes.w) : null;
+  const h = Number.isFinite(sizes.h) ? Math.round(sizes.h) : null;
+  if (w === null && h === null) return null;
+  const found = licksFindLinkAt(notes, idx);
+  if (!found) return null;
+
+  // Preserves everything else in the title (page=, y=, dual=, plain captions).
+  const t = licksTitleParts(found.title);
+  if (w !== null) t.set(/^(?:w|width)[:=]\s*[\d.]+$/i, 'w', w);
+  if (h !== null) t.set(/^(?:h|height)[:=]\s*[\d.]+$/i, 'h', h);
+
+  const newRaw = `[${found.text}](${found.href} "${t.join()}")`;
+  return notes.slice(0, found.pos) + newRaw + notes.slice(found.pos + found.raw.length);
+}
+
+// Rewrites (or, passing null, removes) the page=/dual= directives of the
+// idx-th resizable link — same write-back mechanism licksRewriteLinkSize
+// uses for w=/h=, just a different pair of keys. Used when linking (📖 显示
+// 对照页 — licksAddDualPdf), nudging (◀/▶ — licksPdfNudgeCompanion), or
+// re-snapshotting a dual-page view's two page numbers.
+function licksRewriteLinkPageDual(notes, idx, { page, dual } = {}) {
+  const found = licksFindLinkAt(notes, idx);
+  if (!found) return null;
+  const t = licksTitleParts(found.title);
+  if (page !== undefined) {
+    if (page === null) t.clear(/^page[:=]\s*[\d.]+$/i);
+    else t.set(/^page[:=]\s*[\d.]+$/i, 'page', page);
+  }
+  if (dual !== undefined) {
+    if (dual === null) t.clear(/^dual[:=]\s*[\d.]+$/i);
+    else t.set(/^dual[:=]\s*[\d.]+$/i, 'dual', dual);
+  }
+  const titleSuffix = t.parts.length ? ` "${t.join()}"` : '';
+  const newRaw = `[${found.text}](${found.href}${titleSuffix})`;
+  return notes.slice(0, found.pos) + newRaw + notes.slice(found.pos + found.raw.length);
+}
+
+// Unlinking a dual-page view (🔓 取消联动) splits its one link back into two
+// independent, fully-capable embeds — the companion becomes a real separate
+// link (taking its own new data-ml-idx, so everything after it in the note
+// shifts by one) rather than a special mode of the first. Callers always
+// follow this with a full re-render (renderLickDetail), never a targeted DOM
+// patch, for exactly that reason.
+function licksSplitDualLink(notes, idx, primaryPage, companionPage) {
+  const found = licksFindLinkAt(notes, idx);
+  if (!found) return null;
+  const rest = (found.title ? found.title.split(',').map(p => p.trim()).filter(Boolean) : [])
+    .filter(p => !/^(?:page|dual)[:=]/i.test(p));
+  const primaryLink = `[${found.text}](${found.href} "${[`page=${primaryPage}`, ...rest].join(',')}")`;
+  const companionLink = `[${found.text}](${found.href} "${[`page=${companionPage}`, ...rest].join(',')}")`;
+  return notes.slice(0, found.pos) + primaryLink + '\n' + companionLink + notes.slice(found.pos + found.raw.length);
 }
 
 // Ordinal of the next resizable media embed (video/PDF — audio players are
@@ -262,36 +328,51 @@ function licksPdfSetOpen(href, open) {
 // `.pdf,audio/*` accept filter on the materials upload input) so the
 // viewer's Save button can PUT annotated bytes back (see save-hook.js);
 // links that don't match still render fine, just without save-to-server.
-function licksPdfViewerSrc(href, frag) {
+// `readonly: true` (a dual-page view's companion pane — see licksPdfDualHtml)
+// requests the opposite: no save-back offered at all, and the annotation
+// tools hidden/disabled in the viewer itself (see save-hook.js's readonly
+// block) — a passive mirror of the primary pane, never a second place to draw.
+function licksPdfViewerSrc(href, frag, { readonly = false } = {}) {
   const m = href.match(/^\/api\/materials\/([^/?#]+)$/);
   const params = new URLSearchParams({ file: href });
-  if (m) params.set('saveMaterialId', m[1]);
+  if (m && !readonly) params.set('saveMaterialId', m[1]);
+  if (readonly) params.set('readonly', '1');
   return `/vendor/pdfjs/web/viewer.html?${params.toString()}#${frag}`;
 }
 
-// The wrapper carries everything needed to rebuild either state (data-href/
-// data-src/data-page/data-h) so expanding and collapsing are just innerHTML
-// swaps — no re-parsing of the Markdown source required.
+const LICK_PDF_PAGE_HEIGHT_PT = 792; // US Letter height in PDF points — approximate for A4/other sizes
+
+// `y` (0-1, fraction down the page) rides on FitH's optional top argument,
+// mapped from page-height points with a bottom-left origin.
+function licksPdfFrag(page, y) {
+  return Number.isFinite(y)
+    ? `page=${page}&view=FitH,${Math.round((1 - Math.min(1, Math.max(0, y))) * LICK_PDF_PAGE_HEIGHT_PT)}`
+    : `page=${page}&view=FitH`;
+}
+
+// The wrapper carries everything needed to rebuild any state (data-href/
+// data-src/data-page/data-dual/data-h) so expanding, collapsing, and
+// dual-page-view are just innerHTML swaps — no re-parsing of the Markdown
+// source required.
 function licksPdfEmbedHtml(href, dir, mlIdx) {
   const page = Number.isFinite(dir.page) ? Math.max(1, Math.round(dir.page)) : 1;
+  const dual = Number.isFinite(dir.dual) ? Math.max(1, Math.round(dir.dual)) : null;
   // `w` overrides the default max-width (see .lick-pdf-embed in style.css —
   // raised from a cramped 480px default, but still capped unless you ask
-  // for wider, e.g. for a two-page spread that needs real width to be
-  // legible). `h` overrides the fixed 600px iframe height for the same
+  // for wider). `h` overrides the fixed 600px iframe height for the same
   // reason — a much wider embed with the old fixed height would letterbox.
-  const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : '';
+  // A dual-page view needs real width for both panes to be legible, so it
+  // gets a wider default than a single page, same override rule either way.
+  const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : (dual ? ` style="max-width:1100px"` : '');
   const h = Number.isFinite(dir.h) ? Math.max(100, Math.round(dir.h)) : null;
-  const PAGE_HEIGHT_PT = 792; // US Letter height in PDF points — approximate for A4/other sizes
-  const frag = Number.isFinite(dir.y)
-    ? `page=${page}&view=FitH,${Math.round((1 - Math.min(1, Math.max(0, dir.y))) * PAGE_HEIGHT_PT)}`
-    : `page=${page}&view=FitH`;
-  const src = licksPdfViewerSrc(href, frag);
+  const src = licksPdfViewerSrc(href, licksPdfFrag(page, dir.y));
   const dataAttrs = ` data-href="${htmlEsc(href)}" data-src="${htmlEsc(src)}" data-page="${page}"` +
+    (dual ? ` data-dual="${dual}"` : '') +
     (h ? ` data-h="${h}"` : '');
   const body = licksPdfOpenMap()[href]
-    ? licksPdfExpandedHtml(src, page, h)
+    ? (dual ? licksPdfDualHtml(href, page, dual, h) : licksPdfExpandedHtml(src, page, h))
     : licksPdfThumbHtml(src, page);
-  return `<div class="lick-pdf-embed" data-ml-idx="${mlIdx}"${styleAttr}${dataAttrs}>${body}</div>`;
+  return `<div class="lick-pdf-embed${dual ? ' lick-pdf-dual' : ''}" data-ml-idx="${mlIdx}"${styleAttr}${dataAttrs}>${body}</div>`;
 }
 
 function licksPdfThumbHtml(src, page) {
@@ -305,24 +386,279 @@ function licksPdfExpandedHtml(src, page, h) {
   // (resize: both — iframes are replaced elements and can't be resized
   // directly), with the iframe filling it absolutely.
   const styleAttr = h ? ` style="height:${h}px"` : '';
-  return `<button class="btn btn-ghost btn-sm lick-pdf-collapse" onclick="licksCollapsePdfEmbed(this)">▾ 收起谱例（第 ${page} 页）</button>` +
-    `<div class="lick-pdf-frame"${styleAttr}><iframe src="${htmlEsc(src)}" title="PDF preview"></iframe></div>`;
+  return `<div class="lick-pdf-toolbar">` +
+      `<button class="btn btn-ghost btn-sm lick-pdf-collapse" onclick="licksCollapsePdfEmbed(this)">▾ 收起谱例（第 ${page} 页）</button>` +
+      `<button type="button" class="btn btn-ghost btn-sm" onclick="licksAddDualPdf(this)">📖 显示对照页</button>` +
+    `</div>` +
+    `<div class="lick-pdf-frame"${styleAttr}><iframe class="lick-pdf-primary" src="${htmlEsc(src)}" title="PDF preview"></iframe></div>`;
+}
+
+// Dual-page view: the primary (editable, annotatable — same as a normal
+// expanded embed) next to a read-only companion pane, scroll-linked
+// bidirectionally (see licksSetupDualPdfSync). `page`/`dual` are each pane's
+// *current* page — not necessarily adjacent; see licksPdfNudgeCompanion for
+// why the gap between them isn't assumed to always be exactly 1.
+function licksPdfDualHtml(href, page, dual, h) {
+  const styleAttr = h ? ` style="height:${h}px"` : '';
+  const primarySrc = licksPdfViewerSrc(href, licksPdfFrag(page));
+  const companionSrc = licksPdfViewerSrc(href, licksPdfFrag(dual), { readonly: true });
+  return `<div class="lick-pdf-toolbar">` +
+      `<button class="btn btn-ghost btn-sm lick-pdf-collapse" onclick="licksCollapsePdfEmbed(this)">▾ 收起谱例（第 ${page} 页）</button>` +
+    `</div>` +
+    `<div class="lick-pdf-dual-row">` +
+      `<div class="lick-pdf-pane">` +
+        `<div class="lick-pdf-frame"${styleAttr}><iframe class="lick-pdf-primary" src="${htmlEsc(primarySrc)}" title="PDF preview"></iframe></div>` +
+      `</div>` +
+      `<div class="lick-pdf-pane lick-pdf-companion-pane">` +
+        `<div class="lick-pdf-companion-toolbar">` +
+          `<button type="button" class="btn btn-ghost btn-sm" onclick="licksPdfNudgeCompanion(this,-1)" title="对照页往前一页">◀</button>` +
+          `<span class="lick-pdf-companion-label">对照页（只读）</span>` +
+          `<button type="button" class="btn btn-ghost btn-sm" onclick="licksPdfNudgeCompanion(this,1)" title="对照页往后一页">▶</button>` +
+          `<button type="button" class="btn btn-ghost btn-sm" onclick="licksPdfUnlinkDual(this)" title="取消联动，两侧各自独立">🔓 取消联动</button>` +
+        `</div>` +
+        `<div class="lick-pdf-frame"${styleAttr}><iframe class="lick-pdf-companion" src="${htmlEsc(companionSrc)}" title="PDF preview（对照页，只读）"></iframe></div>` +
+      `</div>` +
+    `</div>`;
 }
 
 function licksPlayPdfEmbed(thumbEl) {
   const wrapper = thumbEl.closest('.lick-pdf-embed');
   licksPdfSetOpen(wrapper.dataset.href, true);
-  wrapper.innerHTML = licksPdfExpandedHtml(
-    wrapper.dataset.src, +(wrapper.dataset.page || 1), +(wrapper.dataset.h || 0) || null);
-  // A collapsed PDF had no frame to observe at render time — watch the fresh
-  // one so its resizes write back too (no-op outside the detail page).
-  licksWatchEmbedResizes(wrapper);
+  const page = +(wrapper.dataset.page || 1);
+  const h = +(wrapper.dataset.h || 0) || null;
+  const dual = +(wrapper.dataset.dual || 0) || null;
+  if (dual) {
+    wrapper.innerHTML = licksPdfDualHtml(wrapper.dataset.href, page, dual, h);
+    licksSetupDualPdfSync(wrapper);
+  } else {
+    wrapper.innerHTML = licksPdfExpandedHtml(wrapper.dataset.src, page, h);
+    // A collapsed PDF had no frame to observe at render time — watch the
+    // fresh one so its resizes write back too (no-op outside the detail page).
+    licksWatchEmbedResizes(wrapper);
+  }
 }
 
 function licksCollapsePdfEmbed(btnEl) {
   const wrapper = btnEl.closest('.lick-pdf-embed');
   licksPdfSetOpen(wrapper.dataset.href, false);
+  delete wrapper._dualSync;
+  // Same reasoning as licksAddDualPdf: stop each frame's resize observer
+  // before the swap removes it, or a stale post-detach callback can stomp
+  // the wrapper's width right after collapsing.
+  wrapper.querySelectorAll('.lick-pdf-frame').forEach(licksUnwatchEmbedResize);
+  wrapper.classList.remove('lick-pdf-dual');
+  wrapper.style.maxWidth = '';
   wrapper.innerHTML = licksPdfThumbHtml(wrapper.dataset.src, +(wrapper.dataset.page || 1));
+}
+
+// ── Dual-page view: link two pages of the same PDF side by side, scroll-
+// synced in both directions ──
+//
+// "📖 显示对照页" adds a read-only companion showing the next page next to
+// the (still fully editable) primary; "🔓 取消联动" reverses it, splitting
+// back into two ordinary, independent, fully-capable embeds. See the design
+// notes above licksSetupDualPdfSync for how the sync itself works and why
+// the companion has to be strictly read-only for that to be safe.
+
+// Snapshots wherever the primary is CURRENTLY scrolled to (not just its
+// original page= directive) as the new page=, so the two persisted numbers
+// (page=/dual=) both reflect reality at the moment of linking rather than
+// page= silently drifting stale under a scroll that never gets written back
+// (same as a single embed's page= today: it's where it *opens*, not a live
+// mirror of however far you've since scrolled).
+async function licksAddDualPdf(btnEl) {
+  const wrapper = btnEl.closest('.lick-pdf-embed');
+  const lick = licksState.currentLick;
+  if (!wrapper || !lick) return;
+  const iframe = wrapper.querySelector('.lick-pdf-primary');
+  const app = iframe?.contentWindow?.PDFViewerApplication;
+  if (!app) return;
+  await app.initializedPromise;
+  const primaryPage = app.page;
+  if (primaryPage >= app.pagesCount) {
+    setStatus('已经是最后一页，没有可显示的对照页');
+    return;
+  }
+  const dualPage = primaryPage + 1;
+
+  const idx = parseInt(wrapper.dataset.mlIdx, 10);
+  const notes = licksRewriteLinkPageDual(lick.notes, idx, { page: primaryPage, dual: dualPage });
+  if (notes === null) { setStatus('无法关联对照页（笔记里这个链接的写法比较特殊）'); return; }
+  try {
+    await api(`/api/licks/${lick.id}`, 'PUT', { title: lick.title, notes, target_bpm: lick.target_bpm ?? null });
+  } catch (e) {
+    setStatus('保存失败: ' + (e?.message || e));
+    return;
+  }
+  lick.notes = notes;
+  const cached = licksState.licksById[lick.id];
+  if (cached) cached.notes = notes;
+
+  const href = wrapper.dataset.href;
+  const h = +(wrapper.dataset.h || 0) || null;
+  // Stop the old single-pane frame's resize observer *before* tearing it
+  // out — see licksUnwatchEmbedResize for why leaving it running corrupts
+  // the wrapper's width right after this swap.
+  licksUnwatchEmbedResize(wrapper.querySelector('.lick-pdf-frame'));
+  wrapper.classList.add('lick-pdf-dual');
+  wrapper.dataset.page = primaryPage;
+  wrapper.dataset.dual = dualPage;
+  wrapper.style.maxWidth = '1100px'; // dual's own default — any custom w= is re-applied correctly on the next full render
+  wrapper.innerHTML = licksPdfDualHtml(href, primaryPage, dualPage, h);
+  licksSetupDualPdfSync(wrapper);
+}
+
+// Bidirectional page sync: scrolling/paging either pane moves the other by
+// the same fixed offset (companion page − primary page), established once
+// both viewers are ready. Guarded against feedback loops by remembering the
+// exact value each side last set on the other — pdf.js's own `pagechanging`
+// event carries the new page number, so a page number that matches what we
+// *just* set there is our own echo, not a fresh user action, and is swallowed
+// instead of bouncing back.
+function licksSetupDualPdfSync(wrapper) {
+  const primaryFrame = wrapper.querySelector('.lick-pdf-primary');
+  const companionFrame = wrapper.querySelector('.lick-pdf-companion');
+  if (!primaryFrame || !companionFrame) return;
+
+  // initializedPromise resolves once the app *shell* is ready — well before
+  // the document has actually opened and applied its #page=N initial view
+  // (pdf.js settles the real page number several chained promises later, to
+  // restore zoom/scroll/rotation together — measured over a second on a
+  // multi-MB scanned score). Capturing the sync offset before that settles
+  // locks in the wrong number (both sides still reading their pre-navigation
+  // default). Polling for the page number to stop changing sidesteps needing
+  // to know pdf.js's exact internal event sequence; the 10s cap is just a
+  // safety net so a pathological PDF can't hang the sync setup forever, not
+  // the expected case — normal loads resolve via the stability check well
+  // before it.
+  function waitForInitialView(app) {
+    return new Promise(resolve => {
+      let lastPage = null, stableCount = 0;
+      const startedAt = Date.now();
+      const tick = () => {
+        const page = app.pdfDocument ? app.page : null;
+        stableCount = (page != null && page === lastPage) ? stableCount + 1 : 0;
+        lastPage = page;
+        if ((page != null && stableCount >= 2) || Date.now() - startedAt > 10000) resolve();
+        else setTimeout(tick, 120);
+      };
+      tick();
+    });
+  }
+
+  function whenReady(iframe) {
+    return new Promise(resolve => {
+      const tryNow = () => {
+        const app = iframe.contentWindow?.PDFViewerApplication;
+        if (app?.initializedPromise) app.initializedPromise.then(() => waitForInitialView(app)).then(() => resolve(app));
+        else iframe.addEventListener('load', tryNow, { once: true });
+      };
+      tryNow();
+    });
+  }
+
+  Promise.all([whenReady(primaryFrame), whenReady(companionFrame)]).then(([primaryApp, companionApp]) => {
+    let offset = companionApp.page - primaryApp.page;
+    let lastSetOnPrimary = null, lastSetOnCompanion = null;
+    let suppressCompanionReaction = false; // set by licksPdfNudgeCompanion — that move must NOT drag the primary along
+
+    primaryApp.eventBus.on('pagechanging', evt => {
+      if (evt.pageNumber === lastSetOnPrimary) { lastSetOnPrimary = null; return; }
+      const target = Math.min(Math.max(1, evt.pageNumber + offset), companionApp.pagesCount);
+      if (companionApp.page !== target) { lastSetOnCompanion = target; companionApp.page = target; }
+    });
+    companionApp.eventBus.on('pagechanging', evt => {
+      if (evt.pageNumber === lastSetOnCompanion) { lastSetOnCompanion = null; return; }
+      if (suppressCompanionReaction) { suppressCompanionReaction = false; return; }
+      const target = Math.min(Math.max(1, evt.pageNumber - offset), primaryApp.pagesCount);
+      if (primaryApp.page !== target) { lastSetOnPrimary = target; primaryApp.page = target; }
+    });
+
+    wrapper._dualSync = {
+      primaryApp, companionApp,
+      // Moves *only* the companion and redefines the offset from here —
+      // real sheet music isn't always a clean adjacent-page spread (repeats,
+      // D.C./coda), so "linked" means "a fixed distance apart", not
+      // "always exactly +1".
+      nudgeCompanion(delta) {
+        const target = Math.min(Math.max(1, companionApp.page + delta), companionApp.pagesCount);
+        if (target === companionApp.page) return;
+        offset += target - companionApp.page;
+        suppressCompanionReaction = true;
+        lastSetOnCompanion = target;
+        companionApp.page = target;
+        licksSaveDualPageDirective(wrapper, 'dual', target);
+      },
+    };
+  });
+}
+
+function licksPdfNudgeCompanion(btnEl, delta) {
+  const wrapper = btnEl.closest('.lick-pdf-dual');
+  wrapper?._dualSync?.nudgeCompanion(delta);
+}
+
+// Persists a single page=/dual= update (nudging the companion) — un-debounced
+// since it's an infrequent, deliberate click, not a drag-resize stream.
+async function licksSaveDualPageDirective(wrapper, key, value) {
+  const lick = licksState.currentLick;
+  if (!lick) return;
+  const idx = parseInt(wrapper.dataset.mlIdx, 10);
+  if (!Number.isInteger(idx)) return;
+  const notes = licksRewriteLinkPageDual(lick.notes, idx, { [key]: value });
+  if (notes === null) return;
+  try {
+    await api(`/api/licks/${lick.id}`, 'PUT', { title: lick.title, notes, target_bpm: lick.target_bpm ?? null });
+    lick.notes = notes;
+    const cached = licksState.licksById[lick.id];
+    if (cached) cached.notes = notes;
+    wrapper.dataset[key] = value;
+  } catch (e) {
+    console.warn('failed to save dual-page-view state:', e);
+  }
+}
+
+async function licksPdfUnlinkDual(btnEl) {
+  const wrapper = btnEl.closest('.lick-pdf-dual');
+  const lick = licksState.currentLick;
+  if (!wrapper || !lick) return;
+  const idx = parseInt(wrapper.dataset.mlIdx, 10);
+  const sync = wrapper._dualSync;
+  const primaryPage = sync?.primaryApp?.page ?? +(wrapper.dataset.page || 1);
+  const companionPage = sync?.companionApp?.page ?? +(wrapper.dataset.dual || primaryPage + 1);
+
+  const notes = licksSplitDualLink(lick.notes, idx, primaryPage, companionPage);
+  if (notes === null) { setStatus('无法取消联动（笔记里这个链接的写法比较特殊）'); return; }
+  try {
+    await api(`/api/licks/${lick.id}`, 'PUT', { title: lick.title, notes, target_bpm: lick.target_bpm ?? null });
+  } catch (e) {
+    setStatus('保存失败: ' + (e?.message || e));
+    return;
+  }
+  lick.notes = notes;
+  const cached = licksState.licksById[lick.id];
+  if (cached) cached.notes = notes;
+  licksPdfSetOpen(wrapper.dataset.href, true); // keep both halves expanded, not back to a collapsed thumb
+  renderLickDetail(lick); // link count changed — data-ml-idx ordinals after this one all shift, so a full re-render is required
+}
+
+// Called (via window.parent, same-origin — see save-hook.js) after a
+// successful save-back: any OTHER currently-mounted iframe showing this same
+// PDF has stale bytes in memory and needs to reload to see the new
+// annotations — the dual-page view's companion is the main beneficiary, but
+// this also covers the (today, rarer) case of two independent embeds of the
+// same file elsewhere in one note. Skips the iframe that did the saving (its
+// own document already reflects the save) and preserves whatever page each
+// reloaded iframe was currently on, rather than resetting to its opening page=.
+function licksNotifyPdfSaved(href, sourceWindow) {
+  document.querySelectorAll(`.lick-pdf-embed[data-href="${CSS.escape(href)}"] iframe`).forEach(iframe => {
+    if (iframe.contentWindow === sourceWindow) return;
+    const app = iframe.contentWindow?.PDFViewerApplication;
+    const url = new URL(iframe.src, location.href);
+    const readonly = url.searchParams.get('readonly') === '1';
+    const frag = app ? licksPdfFrag(app.page) : (url.hash.slice(1) || 'view=FitH');
+    iframe.src = licksPdfViewerSrc(href, frag, { readonly });
+  });
 }
 
 // Audio preview: an inline mini-player (play/pause, seek, speed) right next
@@ -405,6 +741,11 @@ function licksAudioEl(playerEl) {
   // default output, ignoring the app-wide output-device picker (fretboard.js)
   // — same reason Song Loop's player registers itself (see slState.audioEl).
   if (typeof fbRegisterMediaElement === 'function') fbRegisterMediaElement(a);
+  // Same reason as above, for loudness instead of routing: audio interfaces
+  // with no software-controlled output (Focusrite Scarlett etc.) need the
+  // app's own master-volume slider to work on every player, not just Song
+  // Loop's — see fbMasterGain (fretboard.js) for why this exists at all.
+  if (typeof fbMasterGain === 'function') a.volume = fbMasterGain();
   a.addEventListener('play', () => {
     for (const other of lickAudioPlayers) { if (other !== a) other.pause(); }
     playerEl.querySelector('.lick-audio-toggle').textContent = '⏸';
@@ -481,6 +822,14 @@ function licksAudioStopAll() {
   lickAudioPlayers.clear();
 }
 
+// Keeps already-created players in sync when the master-volume slider moves
+// mid-playback — licksAudioEl only sets volume once, at creation.
+document.addEventListener('fb-master-volume-change', () => {
+  if (typeof fbMasterGain !== 'function') return;
+  const gain = fbMasterGain();
+  for (const a of lickAudioPlayers) a.volume = gain;
+});
+
 // navigateTo (not plain showPage+slLoadFromUrl) so this jump lands in
 // history — Back from Song Loop now returns to this exact Lick instead of
 // leaving the browser with nothing to go back to. Error handling for a
@@ -514,6 +863,23 @@ const licksEmbedResizeWatched = new WeakSet();
 
 function licksDisconnectEmbedResizes() {
   while (licksEmbedResizeObservers.length) licksEmbedResizeObservers.pop().disconnect();
+}
+
+// Stops (and forgets) a single watched element's observer — for a targeted
+// innerHTML swap that removes just this one element rather than the full
+// licksDisconnectEmbedResizes() sweep a whole-page re-render does. Matters
+// because ResizeObserver still fires once more when its target is detached
+// (reporting size 0); without this, that stale callback runs *after* the
+// swap and stomps the new content's width via the very same "uncap mid-drag"
+// line that's usually helpful (see licksWatchEmbedResizes) — exactly what
+// licksAddDualPdf hit before this existed.
+function licksUnwatchEmbedResize(el) {
+  if (!el?._resizeObserver) return;
+  el._resizeObserver.disconnect();
+  const i = licksEmbedResizeObservers.indexOf(el._resizeObserver);
+  if (i >= 0) licksEmbedResizeObservers.splice(i, 1);
+  licksEmbedResizeWatched.delete(el);
+  el._resizeObserver = null;
 }
 
 // Finds not-yet-observed resizable embeds under `container` and watches them.
@@ -550,12 +916,16 @@ function licksWatchEmbedResizes(container) {
       schedule(idx, getSizes());
     });
     ro.observe(el);
+    el._resizeObserver = ro; // so a caller about to remove this element can stop it first — see licksUnwatchEmbedResize
     licksEmbedResizeObservers.push(ro);
   };
   container.querySelectorAll('.lick-video-embed[data-ml-idx]').forEach(el => {
     watch(el, el, () => ({ w: el.offsetWidth }));
   });
-  container.querySelectorAll('.lick-pdf-embed[data-ml-idx] .lick-pdf-frame').forEach(el => {
+  // Dual-page-view embeds (two .lick-pdf-frame per wrapper) opt out of this —
+  // one shared idx couldn't tell which pane's resize should win, and their
+  // width is meant to come from the flex row, not an independent drag anyway.
+  container.querySelectorAll('.lick-pdf-embed[data-ml-idx]:not(.lick-pdf-dual) .lick-pdf-frame').forEach(el => {
     const embed = el.closest('.lick-pdf-embed');
     watch(el, embed, () => {
       // Uncap mid-drag: the embed's default 640px max-width would otherwise
@@ -897,6 +1267,10 @@ function renderLickDetail(lick) {
   `;
   licksSyncPracticePanelHome();
   licksWatchEmbedResizes(el);
+  // Re-wires scroll-sync for every dual-page-view embed that was already
+  // open (persisted via dual= — see licksPdfEmbedHtml) before this render;
+  // licksAddDualPdf/licksPlayPdfEmbed handle the single-embed case directly.
+  el.querySelectorAll('.lick-pdf-embed.lick-pdf-dual').forEach(licksSetupDualPdfSync);
 }
 
 // ── SVG progress chart ──
@@ -1524,7 +1898,7 @@ if (typeof guarded === 'function') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
-    licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
+    licksRewriteLinkSize, licksRewriteLinkPageDual, licksSplitDualLink, licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,
   };

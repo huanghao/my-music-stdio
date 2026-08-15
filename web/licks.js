@@ -401,6 +401,10 @@ function licksAudioEl(playerEl) {
   a.src = playerEl.dataset.url;
   a.preservesPitch = true; // default in modern browsers, stated for clarity
   a.playbackRate = parseFloat(playerEl.querySelector('.lick-audio-speed').value) || 1;
+  // Without this, a plain <audio> element always plays through the OS
+  // default output, ignoring the app-wide output-device picker (fretboard.js)
+  // — same reason Song Loop's player registers itself (see slState.audioEl).
+  if (typeof fbRegisterMediaElement === 'function') fbRegisterMediaElement(a);
   a.addEventListener('play', () => {
     for (const other of lickAudioPlayers) { if (other !== a) other.pause(); }
     playerEl.querySelector('.lick-audio-toggle').textContent = '⏸';

@@ -55,29 +55,36 @@ test('fbCidComputeAmbiguity flags too-few-notes and bass-mismatch cases', () => 
   assert.equal(amb2.bassAmbiguous, 0);
 });
 
-test('fbCidBarsFromChords groups by break flags; fbCidCanMergeAt blocks bars over 3 chords', () => {
-  const chords = [{ rootPc: 0, quality: '' }, { rootPc: 5, quality: '' }, { rootPc: 7, quality: '' }, { rootPc: 0, quality: '' }];
-  const bars = cid.fbCidBarsFromChords(chords, [false, true, true]);
-  assert.deepEqual(bars.map(b => b.length), [2, 1, 1]);
-
-  // merging chord index 2 into a bar that already holds 3 chords should be rejected
-  const breaks = [false, false, true];
-  assert.equal(cid.fbCidCanMergeAt(chords, breaks, 2), false);
-  assert.equal(cid.fbCidCanMergeAt(chords, [true, false, true], 0), true);
+test('fbCidChordsOfLine flattens measures in beat order, skipping empty and continuation slots', () => {
+  const line = {
+    measures: [
+      [{ rootPc: 0, span: 2 }, 'occupied', null, null],
+      [{ rootPc: 7, span: 4 }, 'occupied', 'occupied', 'occupied'],
+    ],
+  };
+  assert.deepEqual(cid.fbCidChordsOfLine(line).map(c => c.rootPc), [0, 7]);
 });
 
-test('fbCidBreaksAfterInsert splits the boundary the insertion point falls on, leaving other boundaries untouched', () => {
-  // 4 chords A,B,C,D with breaks [b0,b1,b2] = A-B,B-C,C-D
-  const breaks = [false, false, true]; // A~B~C same bar, C|D separate
+test('fbCidCanPlaceSpan checks room in a 4-beat measure, and ignoreFrom exempts a chip\'s own current cells', () => {
+  const measure = [{ rootPc: 0, span: 2 }, 'occupied', null, null];
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 2, 2, null), true); // the two empty trailing beats
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 1, 2, null), false); // beat 1 is occupied by the first chord
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 0, 3, null), false); // would run past the occupied beat
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 0, 4, null), false); // wouldn't fit in 4 beats total once occupied
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 0, 2, { si: 0, span: 2 }), true); // resizing/dropping back onto itself
+  assert.equal(cid.fbCidCanPlaceSpan(measure, 0, 5, null), false); // longer than a measure, full stop
+});
 
-  // insert before index 2 (between B and C) -> A~B|X|C|D: b0 (A-B) survives, the two new boundaries around X are forced true
-  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 2), [false, true, true, true]);
-
-  // insert at the very front -> X|A~B~C|D
-  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 0), [true, false, false, true]);
-
-  // insert at the very end (idx === chords.length) is just append, same as breaks.push(true)
-  assert.deepEqual(cid.fbCidBreaksAfterInsert(breaks, 4), [false, false, true, true]);
+test('fbCidLegacyChordsToMeasures migrates old bar/break lines to measures, splitting beats the way each bar used to imply', () => {
+  const chords = [
+    { rootPc: 0, quality: '' }, { rootPc: 5, quality: '' }, { rootPc: 7, quality: '' }, { rootPc: 0, quality: '' },
+  ].map(c => ({ candidates: [c], chosenIdx: 0, locked: true, input: ['x', 'x', 'x', 'x', 'x', 'x'] }));
+  // breaks: [false, true, true] -> bars of length [2, 1, 1]
+  const measures = cid.fbCidLegacyChordsToMeasures(chords, [false, true, true]);
+  assert.equal(measures.length, 3);
+  assert.deepEqual(measures[0].map(c => c && c !== 'occupied' ? c.span : c), [2, 'occupied', 2, 'occupied']); // 2-chord bar -> half each
+  assert.deepEqual(measures[1].map(c => c && c !== 'occupied' ? c.span : c), [4, 'occupied', 'occupied', 'occupied']); // 1-chord bar -> whole measure
+  assert.deepEqual(measures[2].map(c => c && c !== 'occupied' ? c.span : c), [4, 'occupied', 'occupied', 'occupied']);
 });
 
 test('fbCidInferKey picks C major for a I-IV-V-I progression', () => {
@@ -163,4 +170,31 @@ test('fbCidResolveProgression: an unresolved power-chord slot is filled in from 
   chords[1].locked = true;
   cid.fbCidResolveProgression(chords, 'auto', 0, false);
   assert.equal(cid.fbCidRepresentativeChord(chords[1]).quality, '');
+});
+
+test('fbCidResolveProgression picks Am over C6 for an A-C-E shape in the key of C — a candidate\'s root landing on the tonic must not out-vote a candidate that actually fits the scale degree', () => {
+  // A,C,E played with no clarify: matches both Am (root A, diatonic vi) and
+  // C6 (root C, only 3/4 of its tones present) — C6's root happens to equal
+  // the key's tonic, which must not by itself outweigh Am actually being
+  // the diatonic (and fuller-coverage) reading.
+  const amCandidates = cid.fbCidCandidates(new Set([9, 0, 4]));
+  const chords = [
+    { candidates: cid.fbCidCandidates(new Set([0, 4, 7])), chosenIdx: 0, locked: true }, // C, locked
+    { candidates: amCandidates, chosenIdx: null, locked: false },
+    { candidates: cid.fbCidCandidates(new Set([7, 11, 2])), chosenIdx: 0, locked: true }, // G, locked
+  ];
+  cid.fbCidResolveProgression(chords, 'auto', 0, false);
+  const middle = cid.fbCidRepresentativeChord(chords[1]);
+  assert.equal(middle.rootPc, 9);
+  assert.equal(middle.quality, 'm'); // Am, not C6
+});
+
+test('fbCidScoreChordInKey scores a single chord\'s diatonic fit without the whole-progression tonic tie-break', () => {
+  // C in the key of C: root on tonic (offset 0, in table) + quality matches -> 2+1
+  assert.equal(cid.fbCidScoreChordInKey(0, '', 0, false), 3);
+  // A minor in the key of C: root on vi (offset 9, in table) + quality matches -> 2+1,
+  // same as C6 (root 0, quality '6' also reads as the major-family default at offset 0)
+  // so neither one gets an extra, unearned boost just because its root equals the tonic.
+  assert.equal(cid.fbCidScoreChordInKey(9, 'm', 0, false), 3);
+  assert.equal(cid.fbCidScoreChordInKey(0, '6', 0, false), 3);
 });

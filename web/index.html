@@ -214,20 +214,21 @@
         <div class="cid-input-actions">
           <button class="btn btn-ghost btn-sm" onclick="fbCidClearInput()">清空指位</button>
         </div>
+        <div id="cid-identify-diagram" class="cid-identify-diagram"></div>
         <div id="cid-notes" class="cid-notes"></div>
         <div id="cid-clarify"></div>
         <div id="cid-candidate-list" class="cid-candidate-list"></div>
         <div class="cid-input-actions">
           <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
+          <button class="btn btn-ghost btn-sm" id="cid-remove-btn" onclick="fbCidRemoveEditing()" style="display:none">🗑 从进行中删除</button>
           <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()" style="display:none">✕ 取消</button>
         </div>
       </div>
 
       <div class="cid-prog-col">
         <h3 class="cid-section-title">和声进行</h3>
-        <div class="cid-hint">💡 每个带编号的方框是一个小节；和弦之间的 + 插入新和弦，┃/⌇ 加/减小节线；拖拽卡片可调整位置或换到别的小节/行；点卡片本身可修改</div>
+        <div class="cid-hint">💡 每个方框是一个小节（4 拍格子）；点空格加入和弦；拖拽和弦右边缘调整拍数，拖拽和弦本身可换位置、换小节或换行；点和弦本身可在左侧修改或删除</div>
         <div id="cid-progression"></div>
-        <div id="cid-bar-msg" class="cid-bar-msg"></div>
         <div class="cid-input-actions">
           <button class="btn btn-ghost btn-sm" onclick="fbCidClearProgression()">清空全部</button>
         </div>

@@ -672,6 +672,17 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-fret-cell.sel { background: var(--primary); border-color: var(--primary); color: var(--text-inverse); }
 
 .cid-input-actions { display: flex; gap: 8px; margin-bottom: 10px; }
+
+/* Standard chord-box diagram (svguitar, see fbCidRenderChordDiagram) for
+   whatever's currently on the grid above — the one place a diagram is
+   drawn, whether you're identifying a new shape or (via fbCidClickSlot)
+   re-fretting a chord already placed in the progression. Not repeated per
+   progression card: a real chord chart is symbols, not a diagram per chord,
+   and this is the one spot you're ever looking at one shape at a time anyway. */
+.cid-identify-diagram { width: 100px; margin: 0 auto 8px; }
+.cid-identify-diagram .fb-board { padding: 3px; margin-bottom: 0; }
+.cid-identify-diagram:empty { display: none; }
+
 .cid-notes { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; min-height: 18px; }
 .cid-clarify, .cid-clarify > div {
   background: var(--primary-bg-lt); border: 1px solid var(--primary-lt); border-radius: 6px;
@@ -703,71 +714,84 @@ input[type="number"] { width: 64px; text-align: center; }
 .cid-line-title { font-size: 12px; font-weight: 700; color: var(--text-dim); }
 .cid-add-line-btn { margin-top: 4px; }
 
-/* Progression: bar-blocks flow left-to-right and wrap like a real chord
-   chart's "several bars per line" layout, instead of one bar per row —
-   cards are small enough that ~10 chords fit without scrolling. Each block
-   carries an always-visible "小节 N" label — the bar structure is drawn
-   directly rather than only discoverable by hovering. */
-.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; margin-bottom: 8px; }
-.cid-bar-block {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 4px;
+/* Progression: measures are real 4-beat boxes, always visible — never an
+   inferred grouping behind a merge/split control. A chord's width is its
+   duration (span 1-4 beats); dragging its right edge resizes it (see
+   fbCidBeginResize), dragging the chip itself moves it to any empty slot,
+   in this measure, another measure, or another line. Rows of measures wrap
+   like a real chord chart's "several bars per line" layout. */
+.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin-bottom: 8px; }
+.cid-measure {
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 5px;
+  display: flex; gap: 3px; min-height: 46px;
 }
-.cid-bar-label { font-size: 9.5px; color: var(--text-faint); text-align: center; margin-bottom: 2px; }
-.cid-bar-cards { display: flex; align-items: flex-start; gap: 3px; }
-.cid-bar-msg { font-size: 11px; color: var(--danger-dark); min-height: 14px; margin-bottom: 6px; }
+.cid-measure-add {
+  border: 1px dashed var(--border-dim); border-radius: 6px; min-width: 30px; min-height: 46px;
+  display: flex; align-items: center; justify-content: center; color: var(--text-faint);
+  cursor: pointer; font-size: 15px; background: none;
+}
+.cid-measure-add:hover { border-color: var(--primary-lt); color: var(--primary); }
 
-/* Every gap between (or around) chords always has exactly one job for the
-   "+": insert a chord there — same control, same meaning, everywhere, so
-   it never competes with the barline toggle for that spot. Internal gaps
-   additionally draw the barline itself as a small separate glyph ("┃" if
-   one is there, faint "⌇" if not) instead of a text button whose label
-   flips between "合并"/"拆分" depending on state you'd have to infer. */
-.cid-gap { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 1px; padding-bottom: 4px; }
-.cid-gap.cid-gap-edge { padding-bottom: 4px; }
-.cid-gap-ins {
-  border: 1px solid var(--primary-lt); background: var(--bg-page); border-radius: 50%;
-  width: 16px; height: 16px; line-height: 14px; padding: 0; text-align: center;
-  color: var(--primary); font-size: 12px; font-weight: 700; cursor: pointer;
+.cid-slot { width: 34px; border-radius: 4px; border: 1px dashed transparent; position: relative; display: flex; }
+.cid-slot-empty {
+  border-color: var(--border-dim); background: none; cursor: pointer; color: var(--text-faint);
+  font-size: 12px; align-items: center; justify-content: center; width: 100%;
 }
-.cid-gap-ins:hover { background: var(--primary-bg); }
-.cid-gap-barline {
-  border: none; background: none; cursor: pointer; color: var(--text-faint); font-size: 12px;
-  padding: 4px 6px; line-height: 1; margin: -4px -6px; /* generous hit area without inflating the visible glyph */
+.cid-slot-empty:hover { border-color: var(--primary-lt); color: var(--primary); background: var(--primary-bg-lt); }
+.cid-slot.chip-slot { width: auto; }
+/* Drag-and-drop target feedback (see fbCidGridDragOver/fbCidSlotDrop). */
+.cid-slot.drop-target { border-color: var(--primary); background: var(--primary-bg); }
+@keyframes cid-reject-shake {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
 }
-.cid-gap-barline.present { color: var(--text-dim); font-weight: 700; }
-.cid-gap-barline:hover { color: var(--primary); }
-/* Drag-and-drop target feedback (see fbCidGapDragOver/fbCidGapDrop) — a
-   gap glows while a dragged card is hovering over it as a valid drop spot. */
-.cid-gap.drop-target { background: var(--primary-bg); border-radius: 8px; }
+.cid-slot.reject { animation: cid-reject-shake 0.4s; border-color: var(--danger-dark); background: var(--danger-bg); }
 
-/* One identified (or still-guessed) chord: a compact tile — diagram +
-   resolved name only. Click to reload its shape into the grid above for
-   correction (fbCidStartEdit) rather than showing a permanent candidate
-   list/unlock control on every card — keeps the whole progression
-   glanceable instead of each entry eating a full card's worth of space. */
+/* One identified (or still-guessed) chord: a compact chip — name only, no
+   diagram (see .cid-identify-diagram above for why). Click it to reload its
+   shape into the grid for correction (fbCidClickSlot); drag it to move,
+   drag its right edge to resize. */
 .cid-prog-card {
-  position: relative; cursor: pointer;
-  background: var(--bg-subtle); border: 1px solid var(--border-dim); border-radius: 6px;
-  padding: 4px; width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  position: relative; cursor: pointer; height: 100%; box-sizing: border-box;
+  background: var(--bg-subtle); border: 1.5px solid var(--primary-lt); border-radius: 5px;
+  padding: 0 6px; display: flex; align-items: center; justify-content: center;
 }
-.cid-prog-card:hover { border-color: var(--primary-lt); }
+.cid-prog-card:hover { border-color: var(--primary); }
 /* A slot you haven't (or the auto-resolver hasn't) pinned down yet — dashed
    border + superscript "?" so it reads as a guess, not a confirmed chord. */
 .cid-prog-card.unresolved { border-style: dashed; }
 .cid-prog-card-label { font-family: Georgia, serif; font-weight: 700; font-size: 13px; color: var(--text); }
 .cid-prog-card.unresolved .cid-prog-card-label sup { color: var(--warn); font-size: 9px; }
 .cid-prog-chip-del {
-  position: absolute; top: 1px; right: 3px; border: none; background: none; cursor: pointer;
-  color: var(--text-faint); font-size: 10px; padding: 0; line-height: 1;
+  position: absolute; top: -6px; right: -6px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--bg-card); border: 1px solid var(--border-dim); font-size: 9px; color: var(--text-faint);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; opacity: 0;
 }
-.cid-prog-chip-del:hover { color: var(--danger-dark); }
+.cid-prog-card:hover .cid-prog-chip-del { opacity: 1; }
 .cid-prog-card[draggable="true"] { cursor: grab; }
+.cid-prog-card.dragging { opacity: 0.4; }
+.cid-prog-card-resize {
+  position: absolute; right: -3px; top: 0; bottom: 0; width: 8px; cursor: ew-resize;
+}
 
-/* Standard chord-box diagram (svguitar, see fbCidRenderChordDiagram) —
-   reuses .fb-board/.fb-svguitar-box's own svg sizing, shrunk to fit the
-   compact tile above. */
-.cid-prog-card-diagram { width: 84px; }
-.cid-prog-card-diagram .fb-board { padding: 3px; margin-bottom: 0; }
+/* Variation lines (fbCidDuplicateLine) diff against the snapshot taken at
+   duplicate time: a chip identical to that snapshot fades back so only what
+   you actually edited stays legible at a glance, instead of every chip
+   competing equally for attention. */
+.cid-prog-card.var-changed {
+  border-color: var(--warn); border-width: 2px; background: var(--warn-bg);
+}
+.cid-prog-card.var-changed::after {
+  content: ""; position: absolute; top: -4px; left: -4px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--warn);
+}
+.cid-prog-card.var-unchanged {
+  border-color: var(--border); border-style: dashed; background: var(--bg-faint);
+  opacity: 0.55; filter: grayscale(0.4);
+}
+.cid-prog-card.var-unchanged .cid-prog-card-label { color: var(--text-faint); }
 
 .cid-edit-banner { font-size: 12.5px; color: var(--warn-dark); min-height: 16px; margin-bottom: 4px; }
 

@@ -21,23 +21,33 @@ fbState.chordId = {
   selected: null,      // { rootPc, quality } pre-picked from the candidate list before "+ 加入进行" (optional)
   // Multiple progression *lines* — for the common "mostly the same
   // progression, repeated with a small variation" case: duplicate a line
-  // (fbCidDuplicateLine) and only touch the handful of chords/bars that
-  // actually differ, instead of rebuilding the whole thing from scratch.
-  // Each line is independently { chords, breaks } — same shape the single
-  // progression used to be. Each chord: { candidates, chosenIdx, locked,
-  // input }. A shape you're not sure about yet can still be added —
-  // `locked:false` means "figure this one out from the key + the rest of
-  // the line" (see fbCidResolveProgression), `locked:true` means you (or an
-  // earlier clarify) already pinned it down. `input` is the fret shape you
-  // actually clicked, kept around so the line can redraw the diagram you
-  // fretted rather than just the resolved chord's name.
-  lines: [{ chords: [], breaks: [] }],
-  activeLine: 0, // which line a plain "+ 加入进行" (no s.pending below) appends to
-  // What "+ 加入进行" does next: null = append to lines[activeLine];
-  // { mode: 'edit', lineIdx, idx } = replace lines[lineIdx].chords[idx] in
-  // place (fbCidStartEdit); { mode: 'insert', lineIdx, idx } = splice a new
-  // chord into lines[lineIdx] before idx (fbCidStartInsert). Set/cleared
-  // together with the grid input.
+  // (fbCidDuplicateLine) and only touch the handful of chords that actually
+  // differ, instead of rebuilding the whole thing from scratch.
+  //
+  // Each line is { measures, baseline }. `measures` is an array of 4-beat
+  // measures — always real, always-visible boxes, never an inferred
+  // grouping. Each measure is a fixed-length-4 array of beat slots:
+  //   null       — empty beat, click it to place a chord there
+  //   'occupied' — continuation of the chord starting at an earlier slot
+  //   slot object — { candidates, chosenIdx, locked, input, span }
+  // `span` (1-4) is how many beats the chord holds; the following span-1
+  // slots are 'occupied'. A shape you're not sure about yet can still be
+  // added — `locked:false` means "figure this one out from the key + the
+  // rest of the line" (see fbCidResolveProgression), `locked:true` means
+  // you (or an earlier clarify) already pinned it down. `input` is the fret
+  // shape actually clicked, kept so re-editing loads the real shape back.
+  //
+  // `baseline` (nullable) is a deep snapshot of `measures` taken at the
+  // moment this line was created via fbCidDuplicateLine — diffed against on
+  // render so unedited chips can fade back and only real edits stay bold
+  // (see fbCidRenderChordCard). null for a line that wasn't a duplicate.
+  lines: [{ measures: [fbCidMakeEmptyMeasure()], baseline: null }],
+  activeLine: 0, // which line a plain "+ 加入进行" (no s.pending below) targets
+  // What "+ 加入进行" writes into next: null = the first empty beat in
+  // lines[activeLine] (or a new measure if there isn't one); { lineIdx, mi,
+  // si } = that exact measure/slot — set by fbCidClickSlot when you click
+  // an empty beat (place here) or an existing chip (re-fret it in place).
+  // Cleared together with the grid input.
   pending: null,
   keyMode: 'auto',      // 'auto' | 'manual' — shared across all lines: a variation is still the same song in the same key
   manualTonicPc: 0,
@@ -137,38 +147,32 @@ function fbCidComputeAmbiguity(pcSet, bassPc, candidates, s) {
   return { tooFew, qualityAmbiguous, bassAmbiguous };
 }
 
-// ── Progression bar grouping (display only — see CLAUDE.md-adjacent design
-// notes: a bar is either one whole-bar chord, two half-bar chords, or three
-// chords split 2+1+1 beats. Harmonic analysis below works off the flat chord
-// order and never needs these bar weights.) ──
+// ── Measures: a line is an array of fixed-length-4 beat arrays (see the
+// `lines` doc comment in fbState.chordId above). Harmonic analysis below
+// works off the flat chord order and never needs measure/beat positions —
+// fbCidChordsOfLine bridges the two. ──
 
-function fbCidBarsFromChords(chords, breaks) {
-  const bars = [];
-  let cur = [];
-  chords.forEach((ch, i) => {
-    cur.push(ch);
-    if (i === chords.length - 1 || breaks[i]) { bars.push(cur); cur = []; }
-  });
-  return bars;
-}
+function fbCidMakeEmptyMeasure() { return [null, null, null, null]; }
 
-function fbCidCanMergeAt(chords, breaks, i) {
-  const trial = breaks.slice();
-  trial[i] = false;
-  return fbCidBarsFromChords(chords, trial).every(b => b.length <= 3);
-}
-
-// Computes the new `breaks` array for inserting a chord before position
-// `idx` (0..chords.length, pre-insert). The boundary that idx splits (if
-// any) is forced to `true` on both sides — the inserted chord always starts
-// its own bar — while every boundary NOT touched by the insertion is left
-// exactly as it was. Also covers plain append for free: idx === chords.length
-// degenerates to "push a new trailing true", same as the old dedicated code.
-function fbCidBreaksAfterInsert(breaks, idx) {
-  const out = breaks.slice();
-  if (idx > 0 && idx <= out.length) out[idx - 1] = true; // old boundary at idx-1 now separates the previous chord from the new one
-  out.splice(idx, 0, true); // new boundary between the inserted chord and whatever now follows it
+function fbCidChordsOfLine(line) {
+  const out = [];
+  line.measures.forEach(m => m.forEach(v => { if (v && v !== 'occupied') out.push(v); }));
   return out;
+}
+
+// Can a chord of `span` beats starting at `si` fit in `measure`? Cells
+// occupied by the chord's own current position (ignoreFrom) don't block —
+// that's what lets a resize or a same-measure move land back on itself.
+function fbCidCanPlaceSpan(measure, si, span, ignoreFrom) {
+  if (si < 0 || si + span > 4) return false;
+  for (let k = 0; k < span; k++) {
+    const idx = si + k;
+    const cell = measure[idx];
+    if (cell == null) continue;
+    if (ignoreFrom && idx >= ignoreFrom.si && idx < ignoreFrom.si + ignoreFrom.span) continue;
+    return false;
+  }
+  return true;
 }
 
 // ── Key inference: score every (tonic, major/minor) pair by how many played
@@ -187,16 +191,24 @@ function fbCidQualityFamily(quality) {
   return '';
 }
 
-function fbCidScoreKey(chords, tonicPc, isMinor) {
+// How well a single chord fits a candidate key — diatonic root position
+// (+2) plus its own quality matching what that scale degree natively is
+// (+1 more). No tonic-first/last bonus here; that's a whole-*progression*
+// tie-break (see fbCidScoreKey below) and doesn't mean anything for one
+// chord in isolation — folding it in here once caused fbCidResolveProgression
+// to prefer whichever candidate's root simply equalled the tonic (e.g.
+// picking "C6" over "Am" for an A-C-E shape in the key of C, just because
+// C6's root is C) regardless of which one actually fit better.
+function fbCidScoreChordInKey(rootPc, quality, tonicPc, isMinor) {
   const table = isMinor ? FB_CID_MINOR_DIATONIC : FB_CID_MAJOR_DIATONIC;
+  const offset = ((rootPc - tonicPc) % 12 + 12) % 12;
+  if (!(offset in table)) return 0;
+  return 2 + (fbCidQualityFamily(quality) === table[offset] ? 1 : 0);
+}
+
+function fbCidScoreKey(chords, tonicPc, isMinor) {
   let score = 0;
-  chords.forEach(ch => {
-    const offset = ((ch.rootPc - tonicPc) % 12 + 12) % 12;
-    if (offset in table) {
-      score += 2;
-      if (fbCidQualityFamily(ch.quality) === table[offset]) score += 1;
-    }
-  });
+  chords.forEach(ch => { score += fbCidScoreChordInKey(ch.rootPc, ch.quality, tonicPc, isMinor); });
   // A relative-major/relative-minor pair (e.g. C major vs A minor) scores
   // identically on pitch content alone — break that tie the way ears do:
   // a progression usually starts and/or ends on its tonic.
@@ -244,7 +256,7 @@ function fbCidResolveProgression(chords, keyMode, manualTonicPc, manualIsMinor) 
     if (slot.locked || !slot.candidates || !slot.candidates.length) return;
     let bestIdx = 0, bestScore = -Infinity;
     slot.candidates.forEach((c, idx) => {
-      const fit = fbCidScoreKey([{ rootPc: c.rootPc, quality: c.quality }], key.tonicPc, key.isMinor);
+      const fit = fbCidScoreChordInKey(c.rootPc, c.quality, key.tonicPc, key.isMinor);
       const score = fit * 10 - idx; // key fit dominates; original rank breaks remaining ties
       if (score > bestScore) { bestScore = score; bestIdx = idx; }
     });
@@ -402,33 +414,28 @@ function fbCidScrollToGrid() {
   if (grid && grid.scrollIntoView) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// Loads an existing progression chord's fretted shape back into the grid so
-// it can be re-fretted or re-picked — "+ 加入进行" becomes "update this
-// chord" instead of appending a new one (see fbCidAddToProgression) until
-// fbCidCancelPending or a successful update clears s.pending.
-function fbCidStartEdit(lineIdx, i) {
+// Click anywhere in the progression grid — an empty beat or an existing
+// chip — and the identify panel becomes the editor for that exact slot:
+// "+ 加入进行" writes there instead of appending. Clicking an existing chip
+// also reloads its actual fretted shape into the grid (and its diagram, via
+// fbCidRenderCandidates) so it can be re-fretted or re-picked in place;
+// clicking an empty beat just aims the next new shape at that position,
+// leaving the grid as-is for fresh entry.
+function fbCidClickSlot(lineIdx, mi, si) {
   const s = fbState.chordId;
   const line = s.lines[lineIdx];
-  const slot = line && line.chords[i];
-  if (!slot) return;
+  const slot = line && line.measures[mi] && line.measures[mi][si];
   fbCidResetClarify();
-  s.input = slot.input.slice();
-  s.pending = { mode: 'edit', lineIdx, idx: i };
-  s.activeLine = lineIdx;
-  const resolved = fbCidRepresentativeChord(slot);
-  if (resolved) s.selected = { rootPc: resolved.rootPc, quality: resolved.quality };
-  fbCidRenderAll();
-  fbCidScrollToGrid();
-}
-
-// Starts a fresh (blank) shape that will be spliced into lines[lineIdx]
-// before chords[i] — "+ 加入进行" becomes "insert here" instead of
-// appending at the end.
-function fbCidStartInsert(lineIdx, i) {
-  const s = fbState.chordId;
-  fbCidResetClarify();
-  s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
-  s.pending = { mode: 'insert', lineIdx, idx: i };
+  if (slot && slot !== 'occupied') {
+    s.input = slot.input.slice();
+    const resolved = fbCidRepresentativeChord(slot);
+    if (resolved) s.selected = { rootPc: resolved.rootPc, quality: resolved.quality };
+  } else if (!slot) {
+    s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
+  } else {
+    return; // clicked the tail ('occupied') of a chip spanning multiple beats — no-op
+  }
+  s.pending = { lineIdx, mi, si };
   s.activeLine = lineIdx;
   fbCidRenderAll();
   fbCidScrollToGrid();
@@ -440,6 +447,17 @@ function fbCidCancelPending() {
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
   fbCidRenderAll();
+}
+
+// Explicit delete while editing a chord in the identify panel — the same
+// removal fbCidRemoveChordAt does from the ✕ on the card itself, exposed
+// here too so "remove this" doesn't require going back to hunt for the tiny
+// corner button on the card you're already looking at.
+function fbCidRemoveEditing() {
+  const s = fbState.chordId;
+  if (!s.pending) return;
+  const { lineIdx, mi, si } = s.pending;
+  fbCidRemoveChordAt(lineIdx, mi, si);
 }
 
 function fbCidClarifyQuality(rootPc, quality) {
@@ -488,27 +506,51 @@ function fbCidBuildSlotFromInput() {
   return { candidates, chosenIdx, locked, input: s.input.slice() };
 }
 
-// Appends the current grid shape as a new progression slot — or, per
-// s.pending (see fbCidStartEdit/fbCidStartInsert), replaces an existing slot
-// in place or splices a new one in at a specific position instead.
+// First empty beat in `line`, scanning measures in order; pushes a new
+// empty measure (rather than ever inferring one implicitly) if every
+// existing measure is full.
+function fbCidFindOpenSlot(line) {
+  for (let mi = 0; mi < line.measures.length; mi++) {
+    const si = line.measures[mi].indexOf(null);
+    if (si !== -1) return { mi, si };
+  }
+  line.measures.push(fbCidMakeEmptyMeasure());
+  return { mi: line.measures.length - 1, si: 0 };
+}
+
+// Writes `built` (from fbCidBuildSlotFromInput) into line.measures[mi]
+// starting at si, holding `span` beats. Caller guarantees those beats are
+// free (fbCidFindOpenSlot / fbCidCanPlaceSpan) or is intentionally
+// overwriting the chord already occupying exactly that span (re-fretting in
+// place via fbCidClickSlot).
+function fbCidPlaceChordAt(line, mi, si, span, built) {
+  const measure = line.measures[mi];
+  measure[si] = Object.assign({}, built, { span });
+  for (let k = 1; k < span; k++) measure[si + k] = 'occupied';
+}
+
+// Writes the current grid shape into the progression: at s.pending's exact
+// slot if a click aimed one there (fbCidClickSlot — an empty beat you
+// clicked, or a chord you clicked to re-fret, whose span is preserved), or
+// otherwise into the first open beat in lines[activeLine].
 function fbCidAddToProgression() {
   const s = fbState.chordId;
-  const slot = fbCidBuildSlotFromInput();
-  if (!slot) return;
+  const built = fbCidBuildSlotFromInput();
+  if (!built) return;
   const lineIdx = s.pending ? s.pending.lineIdx : s.activeLine;
   const line = s.lines[lineIdx];
   if (!line) return;
 
-  if (s.pending && s.pending.mode === 'edit' && line.chords[s.pending.idx]) {
-    line.chords[s.pending.idx] = slot;
-  } else if (s.pending && s.pending.mode === 'insert' && s.pending.idx >= 0 && s.pending.idx <= line.chords.length) {
-    const idx = s.pending.idx;
-    line.chords.splice(idx, 0, slot);
-    line.breaks = fbCidBreaksAfterInsert(line.breaks, idx);
+  let mi, si, span = 1;
+  if (s.pending && s.pending.lineIdx === lineIdx) {
+    ({ mi, si } = s.pending);
+    const existing = line.measures[mi] && line.measures[mi][si];
+    if (existing && existing !== 'occupied') span = existing.span; // re-fretting in place keeps its duration
   } else {
-    line.chords.push(slot);
-    if (line.chords.length > 1) line.breaks.push(true);
+    ({ mi, si } = fbCidFindOpenSlot(line));
   }
+  fbCidPlaceChordAt(line, mi, si, span, built);
+
   s.activeLine = lineIdx;
   s.pending = null;
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
@@ -517,106 +559,148 @@ function fbCidAddToProgression() {
 }
 fbCidAddToProgression = guarded(fbCidAddToProgression);
 
-function fbCidRemoveChord(lineIdx, i) {
+function fbCidRemoveChordAt(lineIdx, mi, si) {
   const s = fbState.chordId;
   const line = s.lines[lineIdx];
-  if (!line) return;
-  line.chords.splice(i, 1);
-  if (i === 0) line.breaks.shift();
-  else line.breaks.splice(i - 1, 1);
-  if (s.pending && s.pending.lineIdx === lineIdx) {
-    if (s.pending.mode === 'edit' && s.pending.idx === i) { fbCidCancelPending(); return; } // the slot being edited no longer exists
-    if (s.pending.idx > i) s.pending.idx -= 1; // keep pointing at the same logical position
+  const measure = line && line.measures[mi];
+  const slot = measure && measure[si];
+  if (!slot || slot === 'occupied') return;
+  for (let k = 0; k < slot.span; k++) measure[si + k] = null;
+  if (s.pending && s.pending.lineIdx === lineIdx && s.pending.mi === mi && s.pending.si === si) {
+    fbCidCancelPending();
+    return;
   }
   fbCidRenderAll();
 }
 
-// ── Drag-and-drop reordering: pick up a card, drop it on any gap (in the
-// same line or a different one) to move it there. Implemented as remove-
-// then-insert through the exact same splice logic every other position
-// change already goes through (fbCidBreaksAfterInsert), so a dropped chord
-// always starts its own bar at the new spot — use the ┃/⌇ toggle afterward
-// if you want it to join a neighboring bar instead. ──
+// ── Drag-and-drop: pick up a chip, drop it on any empty beat (this
+// measure, another measure, or another line) to move it there. A drop that
+// doesn't fit — not enough consecutive empty beats — rejects visibly
+// (fbCidRenderChordCard's caller adds a brief shake) instead of silently
+// doing nothing. ──
 
-function fbCidDragStart(ev, lineIdx, idx) {
-  fbState.chordId._drag = { lineIdx, idx };
+function fbCidDragStart(ev, lineIdx, mi, si) {
+  fbState.chordId._drag = { lineIdx, mi, si };
   ev.dataTransfer.effectAllowed = 'move';
   ev.dataTransfer.setData('text/plain', ''); // Firefox refuses to start a drag without data set
 }
 
 function fbCidDragEnd() {
   fbState.chordId._drag = null;
-  document.querySelectorAll('.cid-gap.drop-target').forEach(el => el.classList.remove('drop-target'));
+  document.querySelectorAll('.cid-slot.drop-target').forEach(el => el.classList.remove('drop-target'));
 }
 
-function fbCidGapDragOver(ev) {
+function fbCidSlotDragOver(ev) {
   if (!fbState.chordId._drag) return;
   ev.preventDefault(); // required for the element to accept a drop at all
   ev.currentTarget.classList.add('drop-target');
 }
 
-function fbCidGapDragLeave(ev) {
+function fbCidSlotDragLeave(ev) {
   ev.currentTarget.classList.remove('drop-target');
 }
 
-function fbCidGapDrop(ev, toLine, toGapIdx) {
+function fbCidSlotDrop(ev, toLine, toMi, toSi) {
   ev.preventDefault();
-  ev.currentTarget.classList.remove('drop-target');
+  const el = ev.currentTarget;
+  el.classList.remove('drop-target');
   const drag = fbState.chordId._drag;
   fbState.chordId._drag = null;
   if (!drag) return;
-  fbCidMoveChordTo(drag.lineIdx, drag.idx, toLine, toGapIdx);
+  const ok = fbCidMoveChordTo(drag.lineIdx, drag.mi, drag.si, toLine, toMi, toSi);
+  if (!ok) {
+    el.classList.remove('reject'); void el.offsetWidth; el.classList.add('reject'); // restart the shake even if it's still mid-animation
+    setTimeout(() => el.classList.remove('reject'), 400);
+  }
 }
 
-function fbCidMoveChordTo(fromLine, fromIdx, toLine, toGapIdx) {
+// Returns true on success, false if the target has no room — callers
+// surface that as a visible reject rather than a silent no-op.
+function fbCidMoveChordTo(fromLine, fromMi, fromSi, toLine, toMi, toSi) {
   const s = fbState.chordId;
   const src = s.lines[fromLine];
   const dst = s.lines[toLine];
-  if (!src || !dst || !src.chords[fromIdx]) return;
+  if (!src || !dst) return false;
+  const srcMeasure = src.measures[fromMi];
+  const slot = srcMeasure && srcMeasure[fromSi];
+  if (!slot || slot === 'occupied') return false;
+  const span = slot.span;
+  const dstMeasure = dst.measures[toMi];
+  if (!dstMeasure) return false;
+  const ignoreFrom = (dstMeasure === srcMeasure) ? { si: fromSi, span } : null;
+  if (!fbCidCanPlaceSpan(dstMeasure, toSi, span, ignoreFrom)) return false;
 
-  const [slot] = src.chords.splice(fromIdx, 1);
-  if (fromIdx === 0) src.breaks.shift();
-  else src.breaks.splice(fromIdx - 1, 1);
+  for (let k = 0; k < span; k++) srcMeasure[fromSi + k] = null;
+  dstMeasure[toSi] = slot;
+  for (let k = 1; k < span; k++) dstMeasure[toSi + k] = 'occupied';
 
-  let insertAt = toGapIdx;
-  if (fromLine === toLine && insertAt > fromIdx) insertAt -= 1; // the removal above shifted everything after it left by one
-  dst.chords.splice(insertAt, 0, slot);
-  dst.breaks = fbCidBreaksAfterInsert(dst.breaks, insertAt);
-
-  if (s.pending) { s.pending = null; s.input = ['x', 'x', 'x', 'x', 'x', 'x']; fbCidResetClarify(); }
-  fbCidRenderAll();
-}
-
-function fbCidToggleBreak(lineIdx, i) {
-  const s = fbState.chordId;
-  const line = s.lines[lineIdx];
-  if (!line) return;
-  if (line.breaks[i]) {
-    line.breaks[i] = false;
-  } else {
-    if (!fbCidCanMergeAt(line.chords, line.breaks, i)) {
-      const msg = document.getElementById('cid-bar-msg');
-      if (msg) { msg.textContent = '一小节最多 3 个和弦'; setTimeout(() => { if (msg.textContent === '一小节最多 3 个和弦') msg.textContent = ''; }, 2000); }
-      return;
-    }
-    line.breaks[i] = true;
+  if (s.pending && s.pending.lineIdx === fromLine && s.pending.mi === fromMi && s.pending.si === fromSi) {
+    s.pending = { lineIdx: toLine, mi: toMi, si: toSi };
   }
   fbCidRenderAll();
+  return true;
+}
+
+// Drag a chip's own right edge to change its duration (1-4 beats), capped
+// by however much room is left in its measure. A live drag rather than a
+// stepper because "how long does this chord hold" is exactly what the
+// chip's width already means visually — dragging the edge is the same
+// gesture as resizing it. Re-renders the progression (not the whole panel —
+// the identify grid isn't involved) on every beat-width crossed for direct
+// visual feedback while dragging.
+const FB_CID_SLOT_PX = 34; // must match .cid-slot's CSS width
+function fbCidBeginResize(ev, lineIdx, mi, si) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const line = fbState.chordId.lines[lineIdx];
+  const measure = line && line.measures[mi];
+  const slot = measure && measure[si];
+  if (!slot || slot === 'occupied') return;
+  const startX = ev.clientX;
+  const startSpan = slot.span;
+
+  function onMove(e) {
+    const deltaSlots = Math.round((e.clientX - startX) / FB_CID_SLOT_PX);
+    const newSpan = Math.max(1, Math.min(4, 4 - si, startSpan + deltaSlots));
+    if (newSpan === slot.span) return;
+    // Shrinking only ever frees cells (always safe); growing must not run
+    // into whatever chord already occupies the next beat.
+    if (!fbCidCanPlaceSpan(measure, si, newSpan, { si, span: slot.span })) return;
+    for (let k = 0; k < slot.span; k++) measure[si + k] = null;
+    slot.span = newSpan;
+    measure[si] = slot;
+    for (let k = 1; k < newSpan; k++) measure[si + k] = 'occupied';
+    fbCidRenderProgression();
+    fbCidRenderAnalysis();
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    fbCidPrefsSave();
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Deep-clones a line's measures — used both to duplicate a line and to take
+// its `baseline` snapshot (a second, independent clone) at that same
+// moment, so later edits to either copy never touch the other.
+function fbCidCloneMeasures(measures) {
+  return measures.map(m => m.map(v => (v && v !== 'occupied')
+    ? { candidates: v.candidates.slice(), chosenIdx: v.chosenIdx, locked: v.locked, input: v.input.slice(), span: v.span }
+    : v));
 }
 
 // Duplicates a whole line right below itself — the "same progression, one
-// chord/bar different" workflow: duplicate, then only edit the handful of
-// cards that actually change instead of rebuilding from scratch.
+// chord different" workflow: duplicate, then only edit the handful of
+// chips that actually change instead of rebuilding from scratch. The new
+// line's `baseline` freezes how it looked at this instant, so
+// fbCidRenderChordCard can fade whatever you never touch.
 function fbCidDuplicateLine(lineIdx) {
   const s = fbState.chordId;
   const line = s.lines[lineIdx];
   if (!line) return;
-  const copy = {
-    chords: line.chords.map(slot => ({
-      candidates: slot.candidates.slice(), chosenIdx: slot.chosenIdx, locked: slot.locked, input: slot.input.slice(),
-    })),
-    breaks: line.breaks.slice(),
-  };
+  const copy = { measures: fbCidCloneMeasures(line.measures), baseline: fbCidCloneMeasures(line.measures) };
   s.lines.splice(lineIdx + 1, 0, copy);
   if (s.pending && s.pending.lineIdx > lineIdx) s.pending.lineIdx += 1;
   s.activeLine = lineIdx + 1;
@@ -625,8 +709,16 @@ function fbCidDuplicateLine(lineIdx) {
 
 function fbCidAddLine() {
   const s = fbState.chordId;
-  s.lines.push({ chords: [], breaks: [] });
+  s.lines.push({ measures: [fbCidMakeEmptyMeasure()], baseline: null });
   s.activeLine = s.lines.length - 1;
+  fbCidRenderAll();
+}
+
+function fbCidAddMeasure(lineIdx) {
+  const s = fbState.chordId;
+  const line = s.lines[lineIdx];
+  if (!line) return;
+  line.measures.push(fbCidMakeEmptyMeasure());
   fbCidRenderAll();
 }
 
@@ -644,7 +736,7 @@ function fbCidRemoveLine(lineIdx) {
 
 function fbCidClearProgression() {
   const s = fbState.chordId;
-  s.lines = [{ chords: [], breaks: [] }];
+  s.lines = [{ measures: [fbCidMakeEmptyMeasure()], baseline: null }];
   s.activeLine = 0;
   s.pending = null;
   fbCidRenderAll();
@@ -777,18 +869,31 @@ function fbCidRenderCandidates() {
   const listEl = document.getElementById('cid-candidate-list');
   const addBtn = document.getElementById('cid-add-btn');
   const cancelBtn = document.getElementById('cid-cancel-edit-btn');
-  if (!notesEl || !clarifyEl || !listEl || !addBtn || !bannerEl || !cancelBtn) return;
+  const removeBtn = document.getElementById('cid-remove-btn');
+  const diagramEl = document.getElementById('cid-identify-diagram');
+  if (!notesEl || !clarifyEl || !listEl || !addBtn || !bannerEl || !cancelBtn || !removeBtn) return;
 
-  const editing = s.pending && s.pending.mode === 'edit' && s.lines[s.pending.lineIdx] && s.lines[s.pending.lineIdx].chords[s.pending.idx];
-  const inserting = s.pending && s.pending.mode === 'insert';
-  bannerEl.textContent = editing ? `正在修改第 ${s.pending.lineIdx + 1} 行第 ${s.pending.idx + 1} 个和弦 — 重新点指板后点"更新"`
-    : inserting ? `将插入为第 ${s.pending.lineIdx + 1} 行第 ${s.pending.idx + 1} 个和弦 — 点指板后点"插入到此处"`
+  let editingSlot = null;
+  if (s.pending) {
+    const line = s.lines[s.pending.lineIdx];
+    const cell = line && line.measures[s.pending.mi] && line.measures[s.pending.mi][s.pending.si];
+    if (cell && cell !== 'occupied') editingSlot = cell;
+  }
+  const placing = !!s.pending && !editingSlot; // pending points at an empty beat you clicked
+  bannerEl.textContent = editingSlot ? `正在修改第 ${s.pending.lineIdx + 1} 行第 ${s.pending.mi + 1} 小节的和弦 — 重新点指板后点"更新"`
+    : placing ? `将加入第 ${s.pending.lineIdx + 1} 行第 ${s.pending.mi + 1} 小节 — 点指板后点"加入到此处"`
     : '';
-  addBtn.textContent = editing ? '✔ 更新' : inserting ? '✔ 插入到此处' : '+ 加入进行';
-  cancelBtn.style.display = (editing || inserting) ? '' : 'none';
+  addBtn.textContent = editingSlot ? '✔ 更新' : placing ? '✔ 加入到此处' : '+ 加入进行';
+  cancelBtn.style.display = s.pending ? '' : 'none';
+  removeBtn.style.display = editingSlot ? '' : 'none';
 
   const { pcSet, bassPc } = fbCidPitchClasses(s.input);
   s._lastBassPc = bassPc;
+
+  if (diagramEl) {
+    if (pcSet.size) fbCidRenderChordDiagram(diagramEl, s.input);
+    else diagramEl.innerHTML = ''; // nothing fretted yet — nothing to draw (see .cid-identify-diagram:empty)
+  }
 
   if (!pcSet.size) {
     notesEl.textContent = '点指板输入音符';
@@ -836,49 +941,46 @@ function fbCidRenderCandidates() {
   addBtn.disabled = !pcSet.size;
 }
 
-// One progression entry: a compact tile — small diagram + resolved name,
-// nothing else. Click it to reload its shape into the grid for correction
-// (fbCidStartEdit); drag it onto any gap (fbCidGapDrop) to move it there,
-// in this line or a different one. The always-visible candidate list this
-// used to carry moved to the edit flow, since editing is a deliberate
-// action rather than a permanent fixture on every card (keeps a whole
-// progression glanceable instead of each entry eating a full card's worth
-// of space) — and a fixed 4-row-minimum diagram height (see
-// fbCidShapeToSvguitarChord) keeps every card the same size regardless of
-// which frets its chord happens to use.
-function fbCidRenderChordCard(lineIdx, slot, idx) {
+// A chord already placed in the progression: a compact chip — name only, no
+// diagram (that lives in the identify panel, see fbCidRenderCandidates, one
+// at a time rather than duplicated onto every chip — a real chord chart is
+// symbols, not a diagram per chord). Click it to reload its shape into the
+// identify panel for correction (fbCidClickSlot); drag it onto any empty
+// beat to move it, in this measure, another measure, or another line; drag
+// its own right edge to change how many beats it holds.
+function fbCidRenderChordCard(lineIdx, mi, si, slot, baselineCell) {
   const resolved = fbCidRepresentativeChord(slot);
   const label = resolved ? fbChordDisplaySymbol(resolved.rootPc, resolved.quality) : '?';
-  const title = slot.locked ? '你选定的读法 — 点击修改，或拖拽到别处调整位置' : '还不确定，已按当前调号自动判断 — 点击修改，或拖拽到别处调整位置';
-  return `<div class="cid-prog-card${slot.locked ? '' : ' unresolved'}" draggable="true"
-      onclick="fbCidStartEdit(${lineIdx},${idx})"
-      ondragstart="fbCidDragStart(event,${lineIdx},${idx})" ondragend="fbCidDragEnd()"
-      title="${title}">
-      <button type="button" class="cid-prog-chip-del" onclick="event.stopPropagation();fbCidRemoveChord(${lineIdx},${idx})" title="删除">✕</button>
-      <div class="cid-prog-card-diagram" id="cid-diagram-${lineIdx}-${idx}"></div>
+  const title = slot.locked ? '你选定的读法 — 点击修改，或拖拽移动/调整拍数' : '还不确定，已按当前调号自动判断 — 点击修改，或拖拽移动/调整拍数';
+
+  let diffClass = '';
+  if (baselineCell !== undefined) {
+    const changed = !baselineCell || baselineCell === 'occupied' ||
+      baselineCell.span !== slot.span ||
+      !fbCidRepresentativeChord(baselineCell) || !resolved ||
+      fbCidRepresentativeChord(baselineCell).rootPc !== resolved.rootPc ||
+      fbCidRepresentativeChord(baselineCell).quality !== resolved.quality;
+    diffClass = changed ? ' var-changed' : ' var-unchanged';
+  }
+
+  return `<div class="cid-slot chip-slot" style="flex:${slot.span} 0 auto"
+      ondragover="fbCidSlotDragOver(event)" ondragleave="fbCidSlotDragLeave(event)" ondrop="fbCidSlotDrop(event,${lineIdx},${mi},${si})">
+    <div class="cid-prog-card${slot.locked ? '' : ' unresolved'}${diffClass}" draggable="true"
+        onclick="fbCidClickSlot(${lineIdx},${mi},${si})"
+        ondragstart="fbCidDragStart(event,${lineIdx},${mi},${si})" ondragend="fbCidDragEnd()"
+        title="${title}">
+      <button type="button" class="cid-prog-chip-del" onclick="event.stopPropagation();fbCidRemoveChordAt(${lineIdx},${mi},${si})" title="删除">✕</button>
       <span class="cid-prog-card-label">${label}${slot.locked ? '' : '<sup>?</sup>'}</span>
-    </div>`;
+      <span class="cid-prog-card-resize" onmousedown="fbCidBeginResize(event,${lineIdx},${mi},${si})" title="拖拽调整拍数"></span>
+    </div>
+  </div>`;
 }
 
-// A gap between two positions within a line — every gap always has an
-// "insert a chord here" control (unambiguous, same everywhere) and doubles
-// as a drop target for dragging an existing card here; an internal gap
-// (between two existing chords) additionally shows the actual barline as a
-// small separate glyph: "┃" drawn = there IS a bar break here (click
-// removes it, joining the two into one bar), a faint "⌇" = there ISN'T
-// (click adds one, splitting). Showing the barline itself, rather than a
-// text button whose label flips between "合并"/"拆分" depending on hidden
-// state, is what actually answers "怎么划定小节" — the boundary's current
-// state is drawn, not implied.
-function fbCidRenderGap(lineIdx, insertIdx, hasBarline) {
-  const dropAttrs = `ondragover="fbCidGapDragOver(event)" ondragleave="fbCidGapDragLeave(event)" ondrop="fbCidGapDrop(event,${lineIdx},${insertIdx})"`;
-  const insertBtn = `<button type="button" class="cid-gap-ins" onclick="fbCidStartInsert(${lineIdx},${insertIdx})" title="在此插入一个新和弦">+</button>`;
-  if (hasBarline == null) return `<div class="cid-gap cid-gap-edge" ${dropAttrs}>${insertBtn}</div>`;
-  const breakIdx = insertIdx - 1;
-  const barlineBtn = hasBarline
-    ? `<button type="button" class="cid-gap-barline present" onclick="fbCidToggleBreak(${lineIdx},${breakIdx})" title="这里有小节线 — 点击移除（并入同一小节）">┃</button>`
-    : `<button type="button" class="cid-gap-barline" onclick="fbCidToggleBreak(${lineIdx},${breakIdx})" title="这里没有小节线 — 点击加入（拆成两个小节）">⌇</button>`;
-  return `<div class="cid-gap" ${dropAttrs}>${barlineBtn}${insertBtn}</div>`;
+function fbCidRenderEmptySlot(lineIdx, mi, si) {
+  return `<div class="cid-slot cid-slot-empty"
+      onclick="fbCidClickSlot(${lineIdx},${mi},${si})"
+      ondragover="fbCidSlotDragOver(event)" ondragleave="fbCidSlotDragLeave(event)" ondrop="fbCidSlotDrop(event,${lineIdx},${mi},${si})"
+      title="点击在此加入和弦">+</div>`;
 }
 
 function fbCidRenderLineHeader(li, totalLines) {
@@ -891,35 +993,33 @@ function fbCidRenderLineHeader(li, totalLines) {
     </div>`;
 }
 
+// Measures are real 4-beat boxes, always visible — never an inferred
+// grouping. A measure's slots render left-to-right: an empty beat is a
+// dashed "+", an occupied one is the chord's chip stretched to its span (a
+// chord's width literally is its duration). Rows of measures wrap like a
+// real chord chart's "several bars per line" layout.
 function fbCidRenderLineBody(line, li) {
   const s = fbState.chordId;
-  fbCidResolveProgression(line.chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
-  if (!line.chords.length) {
-    return `<div class="cid-prog-flow">${fbCidRenderGap(li, 0, null)}<div class="cid-progression-empty">还没有加入和弦</div></div>`;
-  }
-  // Bar-blocks flow left-to-right and wrap, like a real chord chart's
-  // multiple-bars-per-line layout — with fixed-size cards a whole
-  // progression fits without scrolling. Each block carries its own
-  // always-visible "小节 N" label (not just a hover tooltip) so the bar
-  // structure itself is directly visible.
-  const bars = fbCidBarsFromChords(line.chords, line.breaks);
-  let idx = 0;
+  const chords = fbCidChordsOfLine(line);
+  fbCidResolveProgression(chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
+
   let html = '<div class="cid-prog-flow">';
-  bars.forEach((bar, bi) => {
-    const beatNote = bar.length === 2 ? '（各半小节）' : bar.length === 3 ? '（2+1+1 拍）' : '';
-    html += `<div class="cid-bar-block"><div class="cid-bar-label">小节 ${bi + 1}${beatNote}</div><div class="cid-bar-cards">`;
-    bar.forEach((slot, ci) => {
-      const myIdx = idx;
-      if (myIdx === 0) html += fbCidRenderGap(li, 0, null); // one leading insert point, before the very first chord
-      html += fbCidRenderChordCard(li, slot, myIdx);
-      if (ci < bar.length - 1) html += fbCidRenderGap(li, myIdx + 1, false); // within this bar — no barline yet
-      idx++;
-    });
-    html += '</div></div>';
-    if (bi < bars.length - 1) html += fbCidRenderGap(li, idx, true); // between bars — barline is here
+  line.measures.forEach((measure, mi) => {
+    html += '<div class="cid-measure">';
+    let si = 0;
+    while (si < 4) {
+      const cell = measure[si];
+      if (cell === 'occupied') { si++; continue; }
+      if (cell === null) { html += fbCidRenderEmptySlot(li, mi, si); si++; continue; }
+      const baselineCell = line.baseline && line.baseline[mi] ? line.baseline[mi][si] : undefined;
+      html += fbCidRenderChordCard(li, mi, si, cell, baselineCell);
+      si += cell.span;
+    }
+    html += '</div>';
   });
-  html += fbCidRenderGap(li, line.chords.length, null); // trailing insert point, after the very last chord
+  html += `<button type="button" class="cid-measure-add" onclick="fbCidAddMeasure(${li})" title="新增一小节">+</button>`;
   html += '</div>';
+  if (!chords.length) html += '<div class="cid-progression-empty">还没有加入和弦</div>';
   return html;
 }
 
@@ -934,18 +1034,14 @@ function fbCidRenderProgression() {
   });
   html += '<button type="button" class="btn btn-ghost btn-sm cid-add-line-btn" onclick="fbCidAddLine()">+ 新建一行</button>';
   el.innerHTML = html;
-
-  // svguitar draws into real DOM nodes, so the diagrams can't be part of the
-  // innerHTML string above — fill each placeholder now that it exists in the DOM.
-  s.lines.forEach((line, li) => line.chords.forEach((slot, i) =>
-    fbCidRenderChordDiagram(document.getElementById(`cid-diagram-${li}-${i}`), slot.input)));
 }
 
 function fbCidRenderAnalysisForLine(line, li) {
   const s = fbState.chordId;
-  if (!line.chords.length) return '';
-  const { key, inferred } = fbCidResolveProgression(line.chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
-  const items = line.chords.map(slot => {
+  const chords = fbCidChordsOfLine(line);
+  if (!chords.length) return '';
+  const { key, inferred } = fbCidResolveProgression(chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
+  const items = chords.map(slot => {
     const chord = fbCidRepresentativeChord(slot);
     return chord ? { slot, roman: fbCidRomanForChord(chord.rootPc, chord.quality, key.tonicPc) } : null;
   }).filter(Boolean);
@@ -980,7 +1076,7 @@ function fbCidRenderAnalysis() {
   const s = fbState.chordId;
   const el = document.getElementById('cid-analysis');
   if (!el) return;
-  if (!s.lines.some(l => l.chords.length)) { el.innerHTML = ''; return; }
+  if (!s.lines.some(l => fbCidChordsOfLine(l).length)) { el.innerHTML = ''; return; }
 
   const keyRow = `<div class="cid-key-row">
     调号：
@@ -1022,30 +1118,73 @@ function fbCidValidInputArr(v) {
 
 const FB_CID_VALID_CHORD_REF = c => c && Number.isInteger(c.rootPc) && c.rootPc >= 0 && c.rootPc < 12 && FB_CHORD_QUALITIES[c.quality];
 
-function fbCidParseChords(rawChords) {
-  if (!Array.isArray(rawChords)) return [];
-  return rawChords.map(c => {
-    if (c && Array.isArray(c.candidates) && c.candidates.every(FB_CID_VALID_CHORD_REF)) {
-      // current per-slot format
-      const chosenIdx = Number.isInteger(c.chosenIdx) && c.candidates[c.chosenIdx] ? c.chosenIdx : null;
-      const input = fbCidValidInputArr(c.input) ? c.input : FB_CID_BLANK_INPUT.slice();
-      return { candidates: c.candidates, chosenIdx, locked: !!c.locked && chosenIdx != null, input };
-    }
-    if (FB_CID_VALID_CHORD_REF(c)) {
-      // migrate pre-"unresolved slot" format: a bare {rootPc,quality} was always
-      // locked, and predates per-slot diagrams — nothing to draw for it.
-      return { candidates: [c], chosenIdx: 0, locked: true, input: FB_CID_BLANK_INPUT.slice() };
-    }
-    return null;
-  }).filter(Boolean);
+// Normalizes one stored slot (or rejects it as null/'occupied'/corrupt).
+// Accepts both the current per-slot format and the pre-measures bare
+// {rootPc,quality} format (which was always locked).
+function fbCidValidSlot(c) {
+  if (!c || c === 'occupied') return null;
+  if (Array.isArray(c.candidates) && c.candidates.every(FB_CID_VALID_CHORD_REF)) {
+    const chosenIdx = Number.isInteger(c.chosenIdx) && c.candidates[c.chosenIdx] ? c.chosenIdx : null;
+    const input = fbCidValidInputArr(c.input) ? c.input : FB_CID_BLANK_INPUT.slice();
+    const span = Number.isInteger(c.span) && c.span >= 1 && c.span <= 4 ? c.span : 1;
+    return { candidates: c.candidates, chosenIdx, locked: !!c.locked && chosenIdx != null, input, span };
+  }
+  if (FB_CID_VALID_CHORD_REF(c)) {
+    return { candidates: [c], chosenIdx: 0, locked: true, input: FB_CID_BLANK_INPUT.slice(), span: 1 };
+  }
+  return null;
 }
 
-function fbCidParseBreaks(rawBreaks, chordsLen) {
-  if (Array.isArray(rawBreaks) && rawBreaks.every(b => typeof b === 'boolean') &&
-      rawBreaks.length === Math.max(0, chordsLen - 1)) {
-    return rawBreaks;
+// A stored measure's real slot objects already sit at their true beat index
+// (everything else is null or a redundant 'occupied' continuation marker we
+// regenerate rather than trust) — so parsing just validates whatever's at
+// each index and re-derives the 'occupied' fill from its span.
+function fbCidParseMeasure(rawMeasure) {
+  const measure = fbCidMakeEmptyMeasure();
+  if (!Array.isArray(rawMeasure)) return measure;
+  for (let i = 0; i < Math.min(4, rawMeasure.length); i++) {
+    if (measure[i] !== null) continue; // already claimed by an earlier slot's span
+    const slot = fbCidValidSlot(rawMeasure[i]);
+    if (!slot) continue;
+    const span = Math.min(slot.span, 4 - i);
+    measure[i] = Object.assign({}, slot, { span });
+    for (let k = 1; k < span; k++) measure[i + k] = 'occupied';
   }
-  return new Array(Math.max(0, chordsLen - 1)).fill(true);
+  return measure;
+}
+
+function fbCidParseMeasures(rawMeasures) {
+  if (!Array.isArray(rawMeasures) || !rawMeasures.length) return [fbCidMakeEmptyMeasure()];
+  return rawMeasures.map(fbCidParseMeasure);
+}
+
+// Migrates the pre-measures bar/break representation (a flat chord list +
+// which boundaries were bar breaks) into measures: each old bar becomes one
+// measure, its chords given the same beat split its own display used to
+// imply — 1 chord = the whole bar, 2 = half each, 3 = 2+1+1 — so a
+// progression saved before this rewrite keeps the same shape rather than
+// silently losing its bar structure.
+function fbCidLegacyChordsToMeasures(rawChords, rawBreaks) {
+  const chords = (Array.isArray(rawChords) ? rawChords : []).map(fbCidValidSlot).filter(Boolean);
+  if (!chords.length) return [fbCidMakeEmptyMeasure()];
+  const breaks = (Array.isArray(rawBreaks) && rawBreaks.every(b => typeof b === 'boolean') && rawBreaks.length === chords.length - 1)
+    ? rawBreaks : new Array(Math.max(0, chords.length - 1)).fill(true);
+  const bars = [];
+  let cur = [];
+  chords.forEach((ch, i) => { cur.push(ch); if (i === chords.length - 1 || breaks[i]) { bars.push(cur); cur = []; } });
+  return bars.map(bar => {
+    const spans = bar.length === 1 ? [4] : bar.length === 2 ? [2, 2] : bar.length === 3 ? [2, 1, 1] : bar.map(() => 1);
+    const measure = fbCidMakeEmptyMeasure();
+    let si = 0;
+    bar.forEach((slot, i) => {
+      if (si >= 4) return;
+      const span = Math.min(spans[i] || 1, 4 - si);
+      measure[si] = Object.assign({}, slot, { span });
+      for (let k = 1; k < span; k++) measure[si + k] = 'occupied';
+      si += span;
+    });
+    return measure;
+  });
 }
 
 function fbCidPrefsLoad() {
@@ -1056,15 +1195,16 @@ function fbCidPrefsLoad() {
 
   if (Array.isArray(saved.lines) && saved.lines.length) {
     s.lines = saved.lines.map(l => {
-      const chords = fbCidParseChords(l && l.chords);
-      return { chords, breaks: fbCidParseBreaks(l && l.breaks, chords.length) };
+      if (l && Array.isArray(l.measures)) {
+        return { measures: fbCidParseMeasures(l.measures), baseline: Array.isArray(l.baseline) ? fbCidParseMeasures(l.baseline) : null };
+      }
+      return { measures: fbCidLegacyChordsToMeasures(l && l.chords, l && l.breaks), baseline: null }; // pre-measures bar/break line
     });
   } else if (Array.isArray(saved.chords)) {
     // migrate pre-multi-line format: the old flat chords/breaks becomes line 0
-    const chords = fbCidParseChords(saved.chords);
-    s.lines = [{ chords, breaks: fbCidParseBreaks(saved.breaks, chords.length) }];
+    s.lines = [{ measures: fbCidLegacyChordsToMeasures(saved.chords, saved.breaks), baseline: null }];
   }
-  if (!s.lines.length) s.lines = [{ chords: [], breaks: [] }];
+  if (!s.lines.length) s.lines = [{ measures: [fbCidMakeEmptyMeasure()], baseline: null }];
 
   if (Number.isInteger(saved.activeLine) && saved.activeLine >= 0 && saved.activeLine < s.lines.length) {
     s.activeLine = saved.activeLine;
@@ -1091,9 +1231,10 @@ function fbCidInit() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity,
-    fbCidBarsFromChords, fbCidCanMergeAt, fbCidBreaksAfterInsert,
-    fbCidInferKey, fbCidScoreKey,
+    fbCidMakeEmptyMeasure, fbCidChordsOfLine, fbCidCanPlaceSpan,
+    fbCidInferKey, fbCidScoreKey, fbCidScoreChordInKey,
     fbCidRepresentativeChord, fbCidResolveProgression,
     fbCidRomanForChord, fbCidDegreeLabel, fbCidDetectCadences, fbCidSuggestAlts,
+    fbCidLegacyChordsToMeasures, fbCidParseMeasures,
   };
 }

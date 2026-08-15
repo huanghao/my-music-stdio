@@ -1281,6 +1281,58 @@ function fbCidInit() {
   fbCidRenderAll();
 }
 
+// ── Agent context (see web/agent-assistant.js) ──
+// A structured snapshot of the current progression for the floating agent
+// assistant — reuses the exact same theory-engine functions the UI itself
+// calls, so the agent reasons over the same roman numerals, cadences and
+// substitution suggestions the page is showing, not a re-derivation of its
+// own. Includes each chord's alternate readings (what it omits, whether the
+// root was actually played) — the "various possibilities" a question like
+// "why is this one more reasonable" needs to be answered concretely instead
+// of with generic theory.
+function fbCidAgentContext() {
+  const s = fbState.chordId;
+  const lineContext = (line, li) => {
+    const chords = fbCidChordsOfLine(line);
+    if (!chords.length) return { line: li + 1, chords: [] };
+    const { key, inferred } = fbCidResolveProgression(chords, s.keyMode, s.manualTonicPc, s.manualIsMinor);
+    const romanByChord = chords.map(slot => {
+      const chord = fbCidRepresentativeChord(slot);
+      return chord ? fbCidRomanForChord(chord.rootPc, chord.quality, key.tonicPc) : null;
+    });
+    const presentRoman = romanByChord.filter(Boolean);
+    const cadences = fbCidDetectCadences(presentRoman);
+    const suggestions = fbCidSuggestAlts(presentRoman);
+    return {
+      line: li + 1,
+      key: `${FB_NOTE_NAMES[key.tonicPc]} ${key.isMinor ? '小调' : '大调'}`,
+      keySource: s.keyMode === 'manual' ? '手动指定' : `自动判断（若无手动覆盖会是 ${FB_NOTE_NAMES[inferred.tonicPc]} ${inferred.isMinor ? '小调' : '大调'}）`,
+      chords: chords.map((slot, idx) => {
+        const chord = fbCidRepresentativeChord(slot);
+        return {
+          name: chord ? fbChordDisplaySymbol(chord.rootPc, chord.quality) : '?',
+          roman: romanByChord[idx] ? romanByChord[idx].label : '?',
+          beats: slot.span,
+          resolved: !!slot.locked, // false = auto-picked from context, not user-confirmed
+          alternates: (slot.candidates || []).slice(0, 5).map(c => ({
+            name: fbChordDisplaySymbol(c.rootPc, c.quality),
+            note: fbCidCandidateNote(c), // "省略根音" / "省略 5th" / "完整" etc.
+          })),
+        };
+      }),
+      cadences: cadences.map(c => c.type),
+      substitutionHints: suggestions.map(sg =>
+        `${fbCidDegreeLabel(sg.anchor)} 同组还有 ${sg.alts.map(fbCidDegreeLabel).join('/')}`),
+    };
+  };
+  return {
+    lines: s.lines.map(lineContext),
+    editing: (s.pending && s.lines[s.pending.lineIdx])
+      ? { line: s.pending.lineIdx + 1, measure: s.pending.mi + 1 }
+      : null,
+  };
+}
+
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {

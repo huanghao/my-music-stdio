@@ -6,3 +6,5 @@ mido>=1.3
 pyfluidsynth>=1.3
 python-multipart>=0.0.9
 httpx>=0.27  # server-side proxy call to NetEase's lyric API (src/server.py api_netease_lyric)
+pyyaml>=6.0  # src/agent_client.py: parses ~/.config/agent-backends.yaml
+claude-agent-sdk>=0.2  # src/agent_client.py: talks to the local claude/kc/mc CLIs for the floating agent assistant

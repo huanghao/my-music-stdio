@@ -8,8 +8,8 @@ from pathlib import Path
 
 import httpx
 import mido
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Optional
@@ -18,6 +18,7 @@ import src.prefs as prefs
 from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
+import src.agent_client as agent_client
 from src.materials_store import LocalFlatMaterialsStore
 
 logging.basicConfig(
@@ -72,6 +73,19 @@ class LickBpmUpdate(BaseModel):
 
 class LickMetronomeLinkUpdate(BaseModel):
     linked: bool
+
+
+class AgentAskRequest(BaseModel):
+    """The floating agent assistant (see web/agent-assistant.js). `context` is
+    a JSON snapshot the frontend already computed from whatever page is open
+    (for Chord ID: the progression, roman-numeral analysis, cadences, and
+    each chord's candidate readings — see fbCidAgentContext) — this endpoint
+    only relays it into the prompt, it never re-derives anything music-theory
+    related server-side."""
+    question: str = Field(min_length=1, max_length=4000)
+    backend: Optional[str] = None
+    history: list[dict] = []
+    context: dict = {}
 
 
 _player = Player()
@@ -632,6 +646,61 @@ def api_soundfonts():
         if f.suffix.lower() in {".sf2", ".sf3"}
     )
     return files
+
+
+# ── Floating agent assistant (web/agent-assistant.js) ──
+# Thin relay over src/agent_client.py's local-CLI backends (kc/mc/claude,
+# see ~/.config/agent-backends.yaml) — this file assembles no context itself,
+# the frontend already did (see AgentAskRequest.context above).
+
+_AGENT_SYSTEM_PROMPT = """你是嵌入在一个吉他练习网页 app 里的助教，飘在页面右下角随时可以被问到。
+
+规则：
+- [页面上下文] 是当前页面已经算好的真实数据（JSON），回答优先基于它，不要假装看到了它没给你的东西；缺什么就说缺什么。
+- 在 Chord ID 页面，页面上下文包含当前和声进行每个和弦的罗马数字分析、检测到的终止式、同功能组替代建议，以及每个位置的备选读法（省略了哪些音、是否根音在贝斯）。回答"为什么这个更合理"时具体引用这些依据（省略了根音 vs 省略了别的音、是否落在调内音级、覆盖度高低），不要只讲泛泛乐理。
+- 不确定的地方直说不确定，不要编。
+- 回答简洁，除非用户明确要求展开讲。
+"""
+
+
+@app.get("/api/agent/backends")
+def api_agent_backends():
+    return [
+        {"name": b.name, "description": b.description, "default": b.default,
+         "unavailable_reason": agent_client.check_available(b)}
+        for b in agent_client.discover_backends()
+    ]
+
+
+@app.post("/api/agent/ask")
+async def api_agent_ask(req: AgentAskRequest, request: Request) -> StreamingResponse:
+    backends = agent_client.discover_backends()
+    backend = next((b for b in backends if b.name == req.backend), None) if req.backend else None
+
+    prompt = ""
+    if req.context:
+        prompt += "[页面上下文]\n" + json.dumps(req.context, ensure_ascii=False, default=str)[:16000] + "\n\n"
+    for msg in req.history[-8:]:
+        role = "用户" if msg.get("role") == "user" else "助教"
+        content = str(msg.get("content", ""))[:2000]
+        prompt += f"[{role}]\n{content}\n\n"
+    prompt += f"[用户问题]\n{req.question}"
+
+    async def stream():
+        try:
+            async for kind, text in agent_client.stream_parts(
+                prompt=prompt, system_prompt=_AGENT_SYSTEM_PROMPT, backend=backend,
+            ):
+                event_type = "thinking" if kind == "thinking" else "delta"
+                yield f"data: {json.dumps({'type': event_type, 'text': text}, ensure_ascii=False)}\n\n"
+                if await request.is_disconnected():
+                    break
+            yield 'data: {"type": "done"}\n\n'
+        except Exception as e:
+            logger.warning("agent ask failed: %s: %s", type(e).__name__, e)
+            yield f"data: {json.dumps({'type': 'error', 'message': f'{type(e).__name__}: {e}'}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(stream(), media_type="text/event-stream")
 
 
 # Serve frontend static files

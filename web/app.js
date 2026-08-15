@@ -133,6 +133,7 @@ async function init() {
   fbRenderDeviceBar(); // global mic/speaker pickers — no server dependency, so this works even if the backend is down
   document.addEventListener('fb-master-volume-change', vampJamApplyVolumeChange);
   ptInit();            // practice timer — page-independent, always available
+  agentInit();         // floating agent assistant — page-independent, always available
   await pingServer();
   setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();

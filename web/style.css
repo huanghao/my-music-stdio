@@ -634,20 +634,37 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 
 /* Chord ID: clickable fretboard grid + candidate list + progression/analysis */
-/* The identify tools (left) change height constantly — clarify prompts and
-   candidate counts come and go as you click around the grid. Keeping the
-   progression (right) in its own column means none of that ever shifts it;
-   stacks to one column on narrow viewports, identify tools first. */
-.cid-layout { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; }
-.cid-input-col { flex: 1 1 360px; min-width: 300px; max-width: 420px; }
-.cid-prog-col { flex: 2 1 480px; min-width: 320px; }
+/* Identify row: grid and its candidates sit side by side, not stacked, so
+   this row's total height stays anchored close to the grid's own fixed
+   height (5 frets, always) regardless of how many candidates or a clarify
+   prompt show up. The progression below gets the *full* page width instead
+   of being squeezed into a side column — that's what was making individual
+   measures and their click targets feel cramped. */
+.cid-identify-row { display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 22px; }
+.cid-grid-col { flex: none; }
+.cid-info-col { flex: 1 1 260px; min-width: 240px; max-width: 380px; }
+.cid-prog-full { width: 100%; }
 
 .cid-grid {
   background: var(--bg-subtle); border: 1px solid var(--border-warm); border-radius: 8px;
-  padding: 10px 14px; margin-bottom: 8px; overflow-x: auto;
+  padding: 10px 14px; margin-bottom: 8px;
 }
-.cid-grid-row { display: grid; grid-template-columns: 32px repeat(13, minmax(22px, 1fr)); align-items: center; gap: 2px; }
-.cid-grid-row + .cid-grid-row { margin-top: 2px; }
+/* A movable 5-fret window rather than cramming frets 0-12 into one row —
+   at any reasonable column width that left cells too narrow to click
+   comfortably. Cells are sized for real tapping (44px), and the window
+   slides via fbCidFretWindowPrev/Next; loading an existing chord's shape
+   (fbCidClickSlot) jumps the window to it automatically. */
+.cid-fret-window-control { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.cid-fret-window-control button {
+  width: 26px; height: 26px; padding: 0; border-radius: 6px; border: 1px solid var(--border-dim);
+  background: var(--bg-card); color: var(--text-dim); cursor: pointer; font-size: 13px; font-weight: 700;
+}
+.cid-fret-window-control button:hover:not(:disabled) { border-color: var(--primary-lt); color: var(--primary); }
+.cid-fret-window-control button:disabled { opacity: 0.4; cursor: default; }
+.cid-fret-window-label { font-family: monospace; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+
+.cid-grid-row { display: grid; grid-template-columns: 34px repeat(5, minmax(44px, 1fr)); align-items: center; gap: 4px; }
+.cid-grid-row + .cid-grid-row { margin-top: 4px; }
 .cid-grid-header { color: var(--text-faint); font-size: 11px; text-align: center; margin-bottom: 4px; }
 .cid-fret-head { text-align: center; }
 /* Standard fretboard inlay frets (5/7/9/12) — a fret-counting landmark,
@@ -660,10 +677,10 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .cid-string-label.muted { color: var(--danger-dark); }
 .cid-fret-cell {
-  height: 24px; border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 3px;
+  height: 40px; border: 1px solid var(--border-dim); background: var(--bg-card); border-radius: 4px;
   cursor: pointer; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
 }
 .cid-fret-cell:hover { border-color: var(--primary-lt); }
 .cid-fret-cell.cid-fret-open { border-left: 2px solid var(--border); }
@@ -720,19 +737,21 @@ input[type="number"] { width: 64px; text-align: center; }
    fbCidBeginResize), dragging the chip itself moves it to any empty slot,
    in this measure, another measure, or another line. Rows of measures wrap
    like a real chord chart's "several bars per line" layout. */
-.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 10px; margin-bottom: 8px; }
+.cid-prog-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 12px; margin-bottom: 8px; }
 .cid-measure {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 5px;
-  display: flex; gap: 3px; min-height: 46px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; padding: 6px;
+  display: flex; gap: 4px; min-height: 54px;
 }
 .cid-measure-add {
-  border: 1px dashed var(--border-dim); border-radius: 6px; min-width: 30px; min-height: 46px;
+  border: 1px dashed var(--border-dim); border-radius: 6px; min-width: 36px; min-height: 54px;
   display: flex; align-items: center; justify-content: center; color: var(--text-faint);
-  cursor: pointer; font-size: 15px; background: none;
+  cursor: pointer; font-size: 16px; background: none;
 }
 .cid-measure-add:hover { border-color: var(--primary-lt); color: var(--primary); }
 
-.cid-slot { width: 34px; border-radius: 4px; border: 1px dashed transparent; position: relative; display: flex; }
+/* Must match FB_CID_SLOT_PX in chord-id.js — that constant drives the same
+   beat width for both the resize-drag math and this layout. */
+.cid-slot { width: 44px; border-radius: 4px; border: 1px dashed transparent; position: relative; display: flex; }
 .cid-slot-empty {
   border-color: var(--border-dim); background: none; cursor: pointer; color: var(--text-faint);
   font-size: 12px; align-items: center; justify-content: center; width: 100%;

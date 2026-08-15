@@ -15,6 +15,7 @@
 // ── State ──
 fbState.chordId = {
   input: ['x', 'x', 'x', 'x', 'x', 'x'],   // per string (low E..high e), 'x' or fret 0-24
+  fretWindowStart: 0, // leftmost fret currently visible on the grid (see fbCidRenderGrid) — 0 = open position
   forceRootPc: null,   // user-clarified root override (cleared whenever input changes)
   forceQuality: null,  // user-clarified quality override
   bassClarifyChoice: null, // null | 'yes' | 'no' — whether the lowest sounding note was confirmed as root
@@ -406,6 +407,7 @@ function fbCidToggleMute(stringIdx) {
 function fbCidClearInput() {
   fbState.chordId.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
+  fbCidSyncFretWindow();
   fbCidRenderAll();
 }
 
@@ -437,6 +439,7 @@ function fbCidClickSlot(lineIdx, mi, si) {
   }
   s.pending = { lineIdx, mi, si };
   s.activeLine = lineIdx;
+  fbCidSyncFretWindow();
   fbCidRenderAll();
   fbCidScrollToGrid();
 }
@@ -446,6 +449,7 @@ function fbCidCancelPending() {
   s.pending = null;
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
+  fbCidSyncFretWindow();
   fbCidRenderAll();
 }
 
@@ -555,6 +559,7 @@ function fbCidAddToProgression() {
   s.pending = null;
   s.input = ['x', 'x', 'x', 'x', 'x', 'x'];
   fbCidResetClarify();
+  fbCidSyncFretWindow();
   fbCidRenderAll();
 }
 fbCidAddToProgression = guarded(fbCidAddToProgression);
@@ -648,7 +653,8 @@ function fbCidMoveChordTo(fromLine, fromMi, fromSi, toLine, toMi, toSi) {
 // gesture as resizing it. Re-renders the progression (not the whole panel —
 // the identify grid isn't involved) on every beat-width crossed for direct
 // visual feedback while dragging.
-const FB_CID_SLOT_PX = 34; // must match .cid-slot's CSS width
+const FB_CID_SLOT_PX = 44; // must match .cid-slot's CSS width
+const FB_CID_MEASURE_GAP_PX = 4; // must match .cid-measure's CSS gap
 function fbCidBeginResize(ev, lineIdx, mi, si) {
   ev.preventDefault();
   ev.stopPropagation();
@@ -765,13 +771,51 @@ function fbCidSetManualMode(v) {
 // on input.
 const FB_CID_INLAY_FRETS = new Set([5, 7, 9, 12]);
 
+// The grid shows a movable 5-fret window (see fbCidRenderGrid) rather than
+// frets 0-12 all at once — at any reasonable column width that crammed
+// cells too narrow to tap comfortably. fbCidSyncFretWindow jumps the window
+// to wherever the current input actually is, same "position" convention
+// fbCidShapeToSvguitarChord already uses for the diagram (nut visible only
+// if some string is open, else the lowest fretted note).
+const FB_CID_WINDOW_ROWS = 5;
+const FB_CID_MAX_FRET_WINDOW_START = 19;
+
+function fbCidSyncFretWindow() {
+  const input = fbState.chordId.input;
+  const fretted = input.filter(v => typeof v === 'number' && v > 0);
+  const hasOpen = input.some(v => v === 0);
+  const position = (!hasOpen && fretted.length) ? Math.min(...fretted) : 1;
+  fbState.chordId.fretWindowStart = position - 1;
+}
+
+function fbCidFretWindowPrev() {
+  fbState.chordId.fretWindowStart = Math.max(0, fbState.chordId.fretWindowStart - 1);
+  fbCidRenderGrid();
+  fbCidPrefsSave();
+}
+
+function fbCidFretWindowNext() {
+  fbState.chordId.fretWindowStart = Math.min(FB_CID_MAX_FRET_WINDOW_START, fbState.chordId.fretWindowStart + 1);
+  fbCidRenderGrid();
+  fbCidPrefsSave();
+}
+
 function fbCidRenderGrid() {
   const s = fbState.chordId;
   const el = document.getElementById('cid-grid');
   if (!el) return;
+  const start = s.fretWindowStart;
   const rowOrder = [5, 4, 3, 2, 1, 0]; // high e at top, low E at bottom — matches standard tab layout
-  let html = '<div class="cid-grid-row cid-grid-header"><span class="cid-string-label"></span>';
-  for (let f = 0; f <= 12; f++) {
+
+  let html = `<div class="cid-fret-window-control">
+      <button type="button" onclick="fbCidFretWindowPrev()" ${start === 0 ? 'disabled' : ''} title="向琴头方向移动">◀</button>
+      <span class="cid-fret-window-label">${start === 0 ? '空弦 – ' + (FB_CID_WINDOW_ROWS - 1) + ' 品' : start + ' – ' + (start + FB_CID_WINDOW_ROWS - 1) + ' 品'}</span>
+      <button type="button" onclick="fbCidFretWindowNext()" title="向琴身方向移动">▶</button>
+    </div>`;
+
+  html += '<div class="cid-grid-row cid-grid-header"><span class="cid-string-label"></span>';
+  for (let c = 0; c < FB_CID_WINDOW_ROWS; c++) {
+    const f = start + c;
     const inlay = FB_CID_INLAY_FRETS.has(f) ? ' cid-fret-inlay' : '';
     html += `<span class="cid-fret-head${inlay}">${f === 0 ? '○' : f}</span>`;
   }
@@ -779,7 +823,8 @@ function fbCidRenderGrid() {
   rowOrder.forEach(i => {
     const muted = s.input[i] === 'x';
     html += `<div class="cid-grid-row"><span class="cid-string-label${muted ? ' muted' : ''}" onclick="fbCidToggleMute(${i})">${FB_STRING_NAMES[i]}${muted ? ' ✕' : ''}</span>`;
-    for (let f = 0; f <= 12; f++) {
+    for (let c = 0; c < FB_CID_WINDOW_ROWS; c++) {
+      const f = start + c;
       const sel = !muted && s.input[i] === f;
       const inlay = FB_CID_INLAY_FRETS.has(f) ? ' cid-fret-inlay' : '';
       // the fretted note's own name, right on the cell — no need to cross-reference the "组成音" line to know what you just clicked
@@ -963,7 +1008,13 @@ function fbCidRenderChordCard(lineIdx, mi, si, slot, baselineCell) {
     diffClass = changed ? ' var-changed' : ' var-unchanged';
   }
 
-  return `<div class="cid-slot chip-slot" style="flex:${slot.span} 0 auto"
+  // Explicit pixel width (span slots + the gaps a real neighboring slot
+  // would've had between them) rather than a flex-grow ratio — .cid-measure
+  // has no fixed width of its own to distribute, so flex-grow alone has
+  // nothing to grow into and every chip would render at the same width
+  // regardless of span.
+  const width = slot.span * FB_CID_SLOT_PX + (slot.span - 1) * FB_CID_MEASURE_GAP_PX;
+  return `<div class="cid-slot chip-slot" style="width:${width}px"
       ondragover="fbCidSlotDragOver(event)" ondragleave="fbCidSlotDragLeave(event)" ondrop="fbCidSlotDrop(event,${lineIdx},${mi},${si})">
     <div class="cid-prog-card${slot.locked ? '' : ' unresolved'}${diffClass}" draggable="true"
         onclick="fbCidClickSlot(${lineIdx},${mi},${si})"
@@ -1192,6 +1243,9 @@ function fbCidPrefsLoad() {
   try { saved = JSON.parse(localStorage.getItem(FB_CID_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
   const s = fbState.chordId;
   if (fbCidValidInputArr(saved.input)) s.input = saved.input;
+  if (Number.isInteger(saved.fretWindowStart) && saved.fretWindowStart >= 0 && saved.fretWindowStart <= FB_CID_MAX_FRET_WINDOW_START) {
+    s.fretWindowStart = saved.fretWindowStart;
+  }
 
   if (Array.isArray(saved.lines) && saved.lines.length) {
     s.lines = saved.lines.map(l => {
@@ -1217,7 +1271,7 @@ function fbCidPrefsLoad() {
 function fbCidPrefsSave() {
   const s = fbState.chordId;
   localStorage.setItem(FB_CID_PREFS_KEY, JSON.stringify({
-    input: s.input, lines: s.lines, activeLine: s.activeLine,
+    input: s.input, fretWindowStart: s.fretWindowStart, lines: s.lines, activeLine: s.activeLine,
     keyMode: s.keyMode, manualTonicPc: s.manualTonicPc, manualIsMinor: s.manualIsMinor,
   }));
 }

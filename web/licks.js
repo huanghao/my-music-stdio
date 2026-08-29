@@ -1348,6 +1348,15 @@ async function practiceLick(id) {
   if (licksState.activeLick && licksState.activeLick.id !== id) {
     await licksAutoLogSession(licksState.activeLick);
   }
+  // Make sure the lick's own record is loaded before picking the resume
+  // tempo: on a cold refresh straight onto a lick page the list hasn't
+  // loaded yet, so licksById is empty and the pick would fall through to the
+  // 60 default — and the stPrefsSave() below would then clobber the globally
+  // persisted tempo with that wrong value. (Same record feeds
+  // metronome_linked below; openLick refetches later for the render anyway.)
+  if (!licksState.licksById[id]) {
+    licksState.licksById[id] = await api(`/api/licks/${id}`);
+  }
   const cached = licksState.licksById[id] || {};
   const bpm = licksPickPracticeBpm(cached);
   const title = cached.title || id;

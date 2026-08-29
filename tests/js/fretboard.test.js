@@ -737,3 +737,10 @@ test('fbPickPreferredDevice never auto-picks virtual loopback cables (BlackHole/
   // Only virtual devices present -> null (OS default), not the void
   assert.equal(fb.fbPickPreferredDevice([qianyan], 'input'), null);
 });
+
+test('fbPickPreferredDevice never picks Zoom\'s virtual meeting driver either', () => {
+  const zoom = d('zoom', 'ZoomAudioDevice');
+  const builtin = d('builtin', 'MacBook Pro Microphone');
+  assert.equal(fb.fbPickPreferredDevice([zoom, builtin], 'input').deviceId, 'builtin');
+  assert.equal(fb.fbPickPreferredDevice([zoom], 'output'), null);
+});

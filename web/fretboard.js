@@ -107,11 +107,11 @@ const FB_INTERFACE_RE = /scarlett|focusrite|clarett|universal audio|\bvolt\b|apo
 const FB_BUILTIN_RE = /built-in|internal|macbook|imac|内置|内建/i;
 const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
 // Virtual loopback cables (BlackHole & co., incl. renamed ones — "qianyan"
-// is a renamed BlackHole, manufacturer Existential Audio). They have no
-// physical I/O, so auto-picking one means recording/playing into the void.
-// Excluded from AUTO-pick only — the dropdowns still list them for anyone
-// who actually routes audio through one on purpose.
-const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan/i;
+// is a renamed BlackHole, manufacturer Existential Audio) and virtual
+// drivers installed by meeting software (Zoom's ZoomAudioDevice). They have
+// no physical I/O, so picking one means recording/playing into the void.
+// Filtered out of the dropdowns entirely, not just the auto-pick.
+const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan|zoom/i;
 
 function fbDeviceScore(d) {
   if (FB_VIRTUAL_RE.test(d.label)) return -1;           // virtual cable — never auto-pick
@@ -1697,7 +1697,7 @@ function fbApplySinkIdToAll() {
 async function fbRefreshOutputDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const outputs = devices.filter(d => d.kind === 'audiooutput');
+    const outputs = devices.filter(d => d.kind === 'audiooutput' && !FB_VIRTUAL_RE.test(d.label));
     if (!outputs.length) return;
     if (!fbOutput.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(outputs, 'output');
@@ -1763,7 +1763,7 @@ function fbMicTick() {
 async function fbMicAutoSelectAndRefreshDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const inputs = devices.filter(d => d.kind === 'audioinput');
+    const inputs = devices.filter(d => d.kind === 'audioinput' && !FB_VIRTUAL_RE.test(d.label));
     if (!inputs.length) return;
     if (!fbMic.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(inputs, 'input');

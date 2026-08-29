@@ -96,11 +96,61 @@ const fbState = {
   },
 };
 
+// ── Device auto-detection ────────────────────────────────────────────────
+// Nothing about device choice is persisted on purpose: what's plugged in
+// changes from session to session (audio interface at home, built-in mic on
+// the go), and a remembered deviceId may not even exist any more. Instead we
+// re-detect on startup and on every 'devicechange' event (event-driven, no
+// polling — costs nothing while nothing changes). A manual pick in the
+// dropdown still wins, but only in-memory for the rest of the tab.
+const FB_INTERFACE_RE = /scarlett|focusrite|clarett|universal audio|\bvolt\b|apogee|motu|m-track|audient|\bevo ?\d|presonus|quantum|steinberg|\bur ?\d\d|behringer|umc ?\d|komplete audio|\bssl ?\d|røde|\brode\b|irig|helix|hx stomp|katana|blackstar|usb audio|usb codec/i;
+const FB_BUILTIN_RE = /built-in|internal|macbook|imac|内置|内建/i;
+const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
+
+function fbDeviceScore(d) {
+  if (FB_INTERFACE_RE.test(d.label)) return 3;          // known audio interface
+  if (FB_BUILTIN_RE.test(d.label)) return 1;            // built-in mic/speakers
+  if (FB_BLUETOOTH_RE.test(d.label)) return 0;          // headset — last resort
+  if (d.deviceId === 'default' || d.deviceId === 'communications') return 1;
+  return 2;                                             // generic external (USB mic/DAC)
+}
+
+// Returns the best device for auto-use, or null to stick with the OS default.
+// Output only overrides the OS default for clearly-better gear (interface/USB
+// DAC) — the OS already routes to headphones on its own when you plug them
+// in. Input explicitly picks even the built-in mic, so a connected bluetooth
+// headset can't silently become the practice mic via the OS default.
+function fbPickPreferredDevice(devices, kind) {
+  let best = null, bestScore = -1;
+  for (const d of devices) {
+    if (!d.deviceId) continue; // pre-permission enumeration hides ids — nothing actionable
+    const s = fbDeviceScore(d);
+    if (s > bestScore) { best = d; bestScore = s; }
+  }
+  const minScore = kind === 'output' ? 2 : 1;
+  return best && bestScore >= minScore ? best : null;
+}
+
+// Re-detect whenever the device set changes (interface plugged/unplugged
+// mid-session). Debounced: hot-plug often fires a burst of devicechange
+// events, and the mic path may re-acquire a stream per run.
+let fbDeviceWatchInited = false;
+function fbWatchDeviceChanges() {
+  if (fbDeviceWatchInited || !navigator.mediaDevices?.addEventListener) return;
+  fbDeviceWatchInited = true;
+  let timer = null;
+  navigator.mediaDevices.addEventListener('devicechange', () => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => { timer = null; fbMicAutoSelectAndRefreshDevices(); }, 300);
+  });
+}
+
 // Global, not scoped to the Fretboard page — every mic-based drill here and
 // Speed Trainer's metronome all share the same fbMic/fbOutput singletons, so
 // this is rendered once at app startup (see init() in app.js), not gated
 // behind visiting any particular page.
 function fbRenderDeviceBar() {
+  fbWatchDeviceChanges();
   fbMasterVolumeLoad();
   fbSoundVolumesLoad();
   document.getElementById('fb-device-bar').innerHTML = `
@@ -1604,7 +1654,9 @@ function fbRegisterAudioContext(ctx) {
 }
 
 async function fbApplySinkId(ctx) {
-  if (!ctx || !FB_SETSINKID_SUPPORTED || !fbOutput.deviceId) return;
+  if (!ctx || !FB_SETSINKID_SUPPORTED) return;
+  // '' is meaningful too: it resets the context to the OS default output,
+  // which is how an unplugged auto-selected interface falls back.
   try { await ctx.setSinkId(fbOutput.deviceId); } catch (_) { /* device gone, or not permitted */ }
 }
 
@@ -1623,7 +1675,7 @@ function fbRegisterMediaElement(el) {
 }
 
 async function fbApplySinkIdToMedia(el) {
-  if (!el || !FB_MEDIA_SETSINKID_SUPPORTED || !fbOutput.deviceId) return;
+  if (!el || !FB_MEDIA_SETSINKID_SUPPORTED) return;
   try { await el.setSinkId(fbOutput.deviceId); } catch (_) { /* device gone, or not permitted */ }
 }
 
@@ -1641,9 +1693,12 @@ async function fbRefreshOutputDevices() {
     const outputs = devices.filter(d => d.kind === 'audiooutput');
     if (!outputs.length) return;
     if (!fbOutput.userSelectedDevice) {
-      const preferred = outputs.find(d => /scarlett|focusrite/i.test(d.label));
-      if (preferred && preferred.deviceId !== fbOutput.deviceId) {
-        fbOutput.deviceId = preferred.deviceId;
+      const preferred = fbPickPreferredDevice(outputs, 'output');
+      const nextId = preferred ? preferred.deviceId : '';
+      if (nextId !== fbOutput.deviceId) {
+        // Also covers the unplugged-interface case: nextId '' drops back to
+        // the OS default via setSinkId('').
+        fbOutput.deviceId = nextId;
         fbApplySinkIdToAll();
       }
     }
@@ -1695,20 +1750,33 @@ function fbMicTick() {
   fbMic.rafId = requestAnimationFrame(fbMicTick);
 }
 
-// After permission is granted, device labels become readable. Auto-pick an
-// audio interface (Focusrite/Scarlett etc.) over the default mic unless the
-// user has explicitly chosen a device themselves.
+// After permission is granted, device labels become readable. Auto-pick the
+// best input (audio interface > USB mic > built-in; see fbPickPreferredDevice)
+// unless the user has explicitly chosen a device themselves this tab.
 async function fbMicAutoSelectAndRefreshDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const inputs = devices.filter(d => d.kind === 'audioinput');
     if (!inputs.length) return;
     if (!fbMic.userSelectedDevice) {
-      const preferred = inputs.find(d => /scarlett|focusrite/i.test(d.label));
-      if (preferred && preferred.deviceId !== fbMic.deviceId) {
-        fbMic.deviceId = preferred.deviceId;
-        if (fbMic.stream) fbMic.stream.getTracks().forEach(t => t.stop());
-        fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: { exact: preferred.deviceId } } });
+      const preferred = fbPickPreferredDevice(inputs, 'input');
+      const nextId = preferred ? preferred.deviceId : '';
+      if (nextId !== fbMic.deviceId) {
+        fbMic.deviceId = nextId;
+        if (fbMic.listening) {
+          // Device set changed mid-listening (e.g. interface just plugged in,
+          // or the current one unplugged) — full stop/start so the analyser
+          // ends up reading the new device, not a dead stream.
+          const owner = fbMic.owner, cb = fbMic.onFrame, fftSize = fbMic.analyser.fftSize;
+          fbMicStop();
+          try { await fbMicStart(owner, cb, fftSize); fbSyncMicButtons(owner); } catch (_) {}
+        } else if (fbMic.stream) {
+          // Mid-startup (called from fbMicStart right after the permission
+          // grant): swap the just-acquired default stream for the preferred
+          // one before the analyser source gets built from it.
+          fbMic.stream.getTracks().forEach(t => t.stop());
+          fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: nextId ? { deviceId: { exact: nextId } } : true });
+        }
       }
     }
     document.querySelectorAll('.fb-device-select').forEach(sel => {
@@ -4004,6 +4072,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbChordFormula, fbChordDisplaySymbol,
     fbFreqToNote, fbAutoCorrelate,
     FB_CAGED_SHAPES, fbShapeDegreeLabels,
+    FB_MOVABLE_SHAPES, FB_SHELL_PATTERNS, FB_SHELL9_PATTERNS,
     FB_EAR_SCALES, fbEarIntervalName, fbEarPossibleIntervals, fbEarAdjacentIntervals, fbEarPickOrder,
     FB_EAR_RANGE_BASE, FB_EAR_INTERVAL_HINTS,
     FB_CHORD_PROGRESSIONS, fbChordBestQualityFor, fbChordEligibleProgressions, fbChordBuildProgressionChords,
@@ -4017,5 +4086,6 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
     fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,
+    fbDeviceScore, fbPickPreferredDevice,
   };
 }

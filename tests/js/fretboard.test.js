@@ -660,13 +660,15 @@ test('fbRegisterMediaElement routes a media element (Song Loop\'s <audio>) throu
   }
 });
 
-test('fbApplySinkIdToMedia is a no-op when no output device is selected yet, and swallows setSinkId rejections', async () => {
+test('fbApplySinkIdToMedia resets to the OS default when deviceId is \'\', and swallows setSinkId rejections', async () => {
   const originalDeviceId = fb.fbOutput.deviceId;
   try {
     fb.fbOutput.deviceId = '';
-    let called = false;
-    await fb.fbApplySinkIdToMedia({ setSinkId: async () => { called = true; } });
-    assert.equal(called, false); // no device selected -> never even tries
+    let calledWith = null;
+    await fb.fbApplySinkIdToMedia({ setSinkId: async (id) => { calledWith = id; } });
+    // '' is applied (not skipped) — it's how an unplugged auto-selected
+    // interface falls back to the OS default output.
+    assert.equal(calledWith, '');
 
     fb.fbOutput.deviceId = 'device-456';
     await assert.doesNotReject(fb.fbApplySinkIdToMedia({
@@ -675,4 +677,50 @@ test('fbApplySinkIdToMedia is a no-op when no output device is selected yet, and
   } finally {
     fb.fbOutput.deviceId = originalDeviceId;
   }
+});
+
+// ── Device auto-detection heuristic ──
+// No persistence by design (what's plugged in changes session to session) —
+// fbPickPreferredDevice re-detects the best device on startup/devicechange.
+
+const d = (deviceId, label) => ({ deviceId, label });
+
+test('fbPickPreferredDevice prefers a known audio interface over built-in and generic USB', () => {
+  const inputs = [
+    d('default', 'Default - MacBook Pro Microphone'),
+    d('builtin', 'MacBook Pro Microphone'),
+    d('usbmic', 'USB Microphone'),
+    d('scarlett', 'Scarlett 2i2 USB'),
+  ];
+  assert.equal(fb.fbPickPreferredDevice(inputs, 'input').deviceId, 'scarlett');
+  // UMC / UR-style interfaces match too, not just Focusrite
+  assert.equal(fb.fbPickPreferredDevice([d('a', 'MacBook Pro Microphone'), d('b', 'UMC22')], 'input').deviceId, 'b');
+  assert.equal(fb.fbPickPreferredDevice([d('a', 'Built-in Microphone'), d('b', 'Steinberg UR22C')], 'input').deviceId, 'b');
+});
+
+test('fbPickPreferredDevice input: generic USB mic beats built-in, built-in beats bluetooth', () => {
+  const builtin = d('builtin', 'MacBook Pro Microphone');
+  const usbmic = d('usb', 'Yeti Stereo Microphone');
+  const airpods = d('bt', "AirPods Pro");
+  assert.equal(fb.fbPickPreferredDevice([builtin, usbmic], 'input').deviceId, 'usb');
+  // Built-in explicitly wins over a bluetooth headset, so connecting AirPods
+  // can't silently make the OS default the practice mic
+  assert.equal(fb.fbPickPreferredDevice([builtin, airpods], 'input').deviceId, 'builtin');
+  // Bluetooth alone -> no actionable pick (null = OS default)
+  assert.equal(fb.fbPickPreferredDevice([airpods], 'input'), null);
+});
+
+test('fbPickPreferredDevice output: only clearly-better gear overrides the OS default', () => {
+  const speakers = d('spk', 'MacBook Pro Speakers');
+  const iface = d('scarlett', 'Focusrite Scarlett 2i2');
+  const airpods = d('bt', 'AirPods Pro');
+  assert.equal(fb.fbPickPreferredDevice([speakers, iface], 'output').deviceId, 'scarlett');
+  // Headphones are left to the OS default (which already follows them)
+  assert.equal(fb.fbPickPreferredDevice([speakers, airpods], 'output'), null);
+  assert.equal(fb.fbPickPreferredDevice([speakers], 'output'), null);
+});
+
+test('fbPickPreferredDevice ignores label-less pre-permission entries', () => {
+  // Before mic permission is granted, enumerateDevices hides ids and labels
+  assert.equal(fb.fbPickPreferredDevice([d('', ''), d('', '')], 'input'), null);
 });

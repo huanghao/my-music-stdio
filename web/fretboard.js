@@ -106,8 +106,15 @@ const fbState = {
 const FB_INTERFACE_RE = /scarlett|focusrite|clarett|universal audio|\bvolt\b|apogee|motu|m-track|audient|\bevo ?\d|presonus|quantum|steinberg|\bur ?\d\d|behringer|umc ?\d|komplete audio|\bssl ?\d|røde|\brode\b|irig|helix|hx stomp|katana|blackstar|usb audio|usb codec/i;
 const FB_BUILTIN_RE = /built-in|internal|macbook|imac|内置|内建/i;
 const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
+// Virtual loopback cables (BlackHole & co., incl. renamed ones — "qianyan"
+// is a renamed BlackHole, manufacturer Existential Audio). They have no
+// physical I/O, so auto-picking one means recording/playing into the void.
+// Excluded from AUTO-pick only — the dropdowns still list them for anyone
+// who actually routes audio through one on purpose.
+const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan/i;
 
 function fbDeviceScore(d) {
+  if (FB_VIRTUAL_RE.test(d.label)) return -1;           // virtual cable — never auto-pick
   if (FB_INTERFACE_RE.test(d.label)) return 3;          // known audio interface
   if (FB_BUILTIN_RE.test(d.label)) return 1;            // built-in mic/speakers
   if (FB_BLUETOOTH_RE.test(d.label)) return 0;          // headset — last resort

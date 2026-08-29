@@ -724,3 +724,16 @@ test('fbPickPreferredDevice ignores label-less pre-permission entries', () => {
   // Before mic permission is granted, enumerateDevices hides ids and labels
   assert.equal(fb.fbPickPreferredDevice([d('', ''), d('', '')], 'input'), null);
 });
+
+test('fbPickPreferredDevice never auto-picks virtual loopback cables (BlackHole/"qianyan")', () => {
+  // "qianyan" is a renamed BlackHole virtual device (manufacturer Existential
+  // Audio) — selecting it means playing into the void
+  const qianyan = d('virt', 'qianyan');
+  const blackhole = d('bh', 'BlackHole 2ch');
+  const builtin = d('builtin', 'MacBook Pro Microphone');
+  const speakers = d('spk', 'MacBook Pro Speakers');
+  assert.equal(fb.fbPickPreferredDevice([qianyan, builtin], 'input').deviceId, 'builtin');
+  assert.equal(fb.fbPickPreferredDevice([blackhole, speakers], 'output'), null);
+  // Only virtual devices present -> null (OS default), not the void
+  assert.equal(fb.fbPickPreferredDevice([qianyan], 'input'), null);
+});

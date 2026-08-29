@@ -308,6 +308,7 @@ function showPage(name) {
   if (name === 'songloop')  initSongLoopPage();
   if (name === 'progressions') initProgressionLabPage();
   if (name === 'keydrill') initKeyDrillPage();
+  if (name === 'domdrill') initDomDrillPage();
   // Move the metronome panel back to its standalone-page home if it was
   // embedded in a Lick detail page we're now navigating away from.
   if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();
@@ -830,6 +831,7 @@ let _transport = null;          // { kind, label, play, stop, pause, resume }
 let _transportState = 'stopped';// 'stopped' | 'playing' | 'paused' | 'listening'
 const TRANSPORT_POS_KEY = 'transport_pos';
 let _transportPos = null;       // { x, y } persisted pill position, or null = default spot
+let _transportDragging = false; // true while a pill drag is in progress — transportApplyPos must not fight it
 
 function registerTransport(t) {
   _transport = t;
@@ -880,6 +882,10 @@ function transportLoadPos() {
 function transportApplyPos() {
   const pill = document.getElementById('transport-pill');
   if (!pill) return;
+  // Mid-drag the pointermove handler owns the position — re-applying the
+  // saved pos here would snap the pill back (e.g. ptRender runs every 500ms
+  // while the practice timer counts down and calls this to re-clamp width).
+  if (_transportDragging) return;
   const w = pill.offsetWidth || 220, h = pill.offsetHeight || 44;
   let x, y;
   if (_transportPos) { x = _transportPos.x; y = _transportPos.y; }
@@ -904,7 +910,7 @@ function initTransportDrag() {
   let sx, sy, ox, oy, dragging = false;
   pill.addEventListener('pointerdown', e => {
     if (onButtons(e)) return;
-    dragging = true; pill.classList.add('dragging');
+    dragging = true; _transportDragging = true; pill.classList.add('dragging');
     const r = pill.getBoundingClientRect();
     ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
     pill.setPointerCapture(e.pointerId); e.preventDefault();
@@ -918,9 +924,12 @@ function initTransportDrag() {
   });
   pill.addEventListener('pointerup', () => {
     if (!dragging) return;
-    dragging = false; pill.classList.remove('dragging');
+    dragging = false; _transportDragging = false; pill.classList.remove('dragging');
     _transportPos = { x: parseInt(pill.style.left), y: parseInt(pill.style.top) };
     localStorage.setItem(TRANSPORT_POS_KEY, JSON.stringify(_transportPos));
+  });
+  pill.addEventListener('pointercancel', () => {
+    dragging = false; _transportDragging = false; pill.classList.remove('dragging');
   });
   pill.addEventListener('dblclick', e => { // reset to the default spot
     if (onButtons(e)) return;

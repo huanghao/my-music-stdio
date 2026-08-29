@@ -113,6 +113,21 @@ const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
 // Filtered out of the dropdowns entirely, not just the auto-pick.
 const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan|zoom/i;
 
+// Browsers list the OS default device twice: once as the real hardware and
+// once as a 'default'/'communications' alias whose label is the real label
+// with a "Default - " prefix. Collapse the alias into the real entry so the
+// dropdown doesn't show the same hardware as two rows. An alias that matches
+// nothing (rare) is kept as-is.
+function fbDedupDevices(devices) {
+  const realLabels = new Set(devices
+    .filter(d => d.deviceId !== 'default' && d.deviceId !== 'communications')
+    .map(d => d.label));
+  return devices.filter(d => {
+    if (d.deviceId !== 'default' && d.deviceId !== 'communications') return true;
+    return !realLabels.has(d.label.replace(/^default\s*-\s*/i, ''));
+  });
+}
+
 function fbDeviceScore(d) {
   if (FB_VIRTUAL_RE.test(d.label)) return -1;           // virtual cable — never auto-pick
   if (FB_INTERFACE_RE.test(d.label)) return 3;          // known audio interface
@@ -1697,7 +1712,7 @@ function fbApplySinkIdToAll() {
 async function fbRefreshOutputDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const outputs = devices.filter(d => d.kind === 'audiooutput' && !FB_VIRTUAL_RE.test(d.label));
+    const outputs = fbDedupDevices(devices.filter(d => d.kind === 'audiooutput' && !FB_VIRTUAL_RE.test(d.label)));
     if (!outputs.length) return;
     if (!fbOutput.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(outputs, 'output');
@@ -1763,7 +1778,7 @@ function fbMicTick() {
 async function fbMicAutoSelectAndRefreshDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const inputs = devices.filter(d => d.kind === 'audioinput' && !FB_VIRTUAL_RE.test(d.label));
+    const inputs = fbDedupDevices(devices.filter(d => d.kind === 'audioinput' && !FB_VIRTUAL_RE.test(d.label)));
     if (!inputs.length) return;
     if (!fbMic.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(inputs, 'input');
@@ -4093,6 +4108,6 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
     fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,
-    fbDeviceScore, fbPickPreferredDevice,
+    fbDeviceScore, fbPickPreferredDevice, fbDedupDevices,
   };
 }

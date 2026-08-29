@@ -744,3 +744,16 @@ test('fbPickPreferredDevice never picks Zoom\'s virtual meeting driver either', 
   assert.equal(fb.fbPickPreferredDevice([zoom, builtin], 'input').deviceId, 'builtin');
   assert.equal(fb.fbPickPreferredDevice([zoom], 'output'), null);
 });
+
+test('fbDedupDevices collapses the "Default - X" alias into the real device', () => {
+  const devices = [
+    d('default', 'Default - MacBook Pro Speakers'),
+    d('real-spk', 'MacBook Pro Speakers'),
+    d('iface', 'Scarlett 2i2 USB'),
+  ];
+  const out = fb.fbDedupDevices(devices);
+  assert.deepEqual(out.map(x => x.deviceId), ['real-spk', 'iface']);
+  // An alias matching no real device is kept (better than an empty list)
+  const orphan = fb.fbDedupDevices([d('default', 'Default - Something Else')]);
+  assert.equal(orphan.length, 1);
+});

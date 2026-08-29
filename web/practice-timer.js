@@ -28,7 +28,7 @@ const ptState = {
   remainingSec: 0,     // frozen remaining seconds — only meaningful while paused
   totalSec: 0,          // duration of the current/last countdown (for the "X min done" label)
   justDone: false,      // true right after a countdown completes, until dismissed or restarted
-  linked: false,        // if true, the metronome's Play/Stop also resumes/pauses this timer — see ptOnMetronomeStart/Stop
+  linked: false,        // if true, metronome and timer start/stop together — either side's Play/Stop drives both (see ptOnMetronomeStart/Stop, ptStart/StopLinkedMetronome)
   context: null,        // { lickId, lickTitle } | null — who this timer is "for"
   blocks: [],           // [{ durationSec, completedAt (ISO), context }]
   intervalId: null,
@@ -111,13 +111,14 @@ function ptStart(minutes) {
   ptSaveState();
   ptRender();
   ptEnsureTicking();
+  ptStartLinkedMetronome(); // "start together" — see its own comment below
 }
 
 // Freezes the countdown without discarding it — unlike ptCancel, ptResume()
-// can pick back up from exactly where this left off. Distinct from
-// "stopping the metronome": pausing the timer is a deliberate break in your
-// own practice, not tied to whether a metronome happens to be playing
-// (see ptOnMetronomeStart/Stop for the optional link between the two).
+// can pick back up from exactly where this left off. When the metronome link
+// is on this also stops the metronome, mirroring how a metronome Stop pauses
+// the timer (ptOnMetronomeStop) — "linked" means either side's stop is both
+// sides' stop.
 function ptPause() {
   if (!ptState.running) return;
   ptState.remainingSec = Math.max(0, ptRemainingSec(ptState.endAt, Date.now()));
@@ -127,6 +128,7 @@ function ptPause() {
   ptStopTicking();
   ptSaveState();
   ptRender();
+  ptStopLinkedMetronome();
 }
 
 function ptResume() {
@@ -138,6 +140,7 @@ function ptResume() {
   ptSaveState();
   ptRender();
   ptEnsureTicking();
+  ptStartLinkedMetronome(); // "start together" — resuming the break is over for the metronome too
 }
 
 function ptCancel() {
@@ -157,13 +160,18 @@ function ptDismissDone() {
   ptRender();
 }
 
-// Optional metronome link: when enabled, the Speed Trainer's Play/Stop
-// (stStart/stStop, speed-trainer.js) also resumes/pauses this timer — so
-// starting the metronome un-pauses your practice clock and stopping it
-// takes a break, without you having to operate two separate controls. Off
-// by default and easy to toggle (see ptToggleLinked / the 🔗 button) — the
-// timer is just as often used on its own (Pomodoro-style, no metronome
-// involved at all) or with a metronome you don't want tied to it.
+// Optional metronome link: when enabled, the two run as one control —
+// "start together, end together" in BOTH directions. Metronome Play/Stop
+// (stStart/stStop, speed-trainer.js) starts/resumes and pauses this timer
+// (ptOnMetronomeStart/Stop below), and this timer's own controls do the same
+// back: ptStart/ptResume start the metronome, ptPause/ptCancel/ptComplete
+// stop it (ptStartLinkedMetronome/ptStopLinkedMetronome below). The bounce
+// back is always a no-op — stStart/stStop early-return when already in the
+// target state, and ptOnMetronomeStart/Stop likewise find this timer already
+// running/paused — so neither direction can recurse. Off by default and easy
+// to toggle (see ptToggleLinked / the 🔗 button) — the timer is just as
+// often used on its own (Pomodoro-style, no metronome involved at all) or
+// with a metronome you don't want tied to it.
 //
 // This is deliberately a per-lick preference, not one global switch — some
 // licks are inherently metronome-paired practice, others aren't. ptState
@@ -198,12 +206,20 @@ function ptOnMetronomeStart() {
 function ptOnMetronomeStop() {
   if (ptState.linked && ptState.running) ptPause();
 }
-// The other half of the link: metronome Stop pauses the timer (above), but
-// the timer can also end on its own (countdown reaches 0, or the user hits
-// ✕) without anyone touching the metronome — "start together, end together"
-// means those need to stop the metronome too, not just the timer. Guarded
-// like every other cross-file call to Speed Trainer, and safe to call
-// unconditionally: stStop() itself no-ops if the metronome isn't running.
+// "Start together", timer side: the timer is as often the control the user
+// actually presses (preset button / ▶ resume) as the metronome's own Play is
+// — linked means that starts the metronome too, not just the reverse
+// (ptOnMetronomeStart). Guarded like every cross-file call into Speed
+// Trainer, and safe to call unconditionally: stStart() no-ops when the
+// metronome is already running.
+function ptStartLinkedMetronome() {
+  if (ptState.linked && typeof stStart === 'function') stStart();
+}
+// "End together", timer side: metronome Stop pauses the timer
+// (ptOnMetronomeStop), and the timer ending on its own — countdown reaching
+// 0, ⏸ pause, or ✕ — stops the metronome too. Guarded like every other
+// cross-file call to Speed Trainer, and safe to call unconditionally:
+// stStop() itself no-ops if the metronome isn't running.
 function ptStopLinkedMetronome() {
   if (ptState.linked && typeof stStop === 'function') stStop();
 }
@@ -283,7 +299,7 @@ function ptPresetButtonsHtml() {
 // might want to flip it mid-countdown too.
 function ptLinkButtonHtml() {
   const title = ptState.linked
-    ? 'Linked to metronome — its Play/Stop also resumes/pauses this timer (click to unlink)'
+    ? 'Linked to metronome — Play/Stop on either side starts/stops both (click to unlink)'
     : 'Not linked to metronome — timer runs independently (click to link)';
   return `<button class="btn btn-ghost btn-sm pt-link-btn${ptState.linked ? ' linked' : ''}" onclick="ptToggleLinked()" title="${title}">🔗</button>`;
 }

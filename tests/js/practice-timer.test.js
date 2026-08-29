@@ -248,3 +248,36 @@ test('ptCancel (✕) also stops a linked metronome — "end together" applies to
     Object.assign(pt.ptState, original);
   }
 });
+
+test('linked is bidirectional: ptStart/ptResume start the metronome, ptPause stops it', () => {
+  const original = { ...pt.ptState };
+  const prevStStart = global.stStart, prevStStop = global.stStop;
+  let stStartCalls = 0, stStopCalls = 0;
+  global.stStart = () => { stStartCalls++; };
+  global.stStop = () => { stStopCalls++; };
+  try {
+    pt.ptCancel();
+    pt.ptState.linked = true;
+    stStartCalls = 0; stStopCalls = 0; // ptCancel above may itself have stopped a linked metronome
+
+    pt.ptStart(5);          // timer preset Start → metronome starts too
+    assert.equal(stStartCalls, 1);
+    pt.ptPause();           // timer ⏸ → metronome stops too
+    assert.equal(stStopCalls, 1);
+    pt.ptResume();          // timer ▶ resume → metronome starts again
+    assert.equal(stStartCalls, 2);
+
+    pt.ptCancel();          // (still linked here — this one SHOULD stop the metronome)
+    pt.ptState.linked = false;
+    stStartCalls = 0; stStopCalls = 0;
+    pt.ptStart(5);          // not linked: timer must not touch the metronome
+    pt.ptPause();
+    assert.equal(stStartCalls, 0);
+    assert.equal(stStopCalls, 0);
+  } finally {
+    global.stStart = prevStStart;
+    global.stStop = prevStStop;
+    pt.ptCancel();
+    Object.assign(pt.ptState, original);
+  }
+});

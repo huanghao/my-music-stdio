@@ -24,6 +24,7 @@
   <button class="nav-btn"        data-page="songloop"   onclick="navGoToPage('songloop')">Song Loop</button>
   <button class="nav-btn"        data-page="progressions" onclick="navGoToPage('progressions')">Progressions</button>
   <button class="nav-btn"        data-page="keydrill"   onclick="navGoToPage('keydrill')">Key Drill</button>
+  <button class="nav-btn"        data-page="domdrill"   onclick="navGoToPage('domdrill')">Dom Drill</button>
   <span class="nav-sep"></span>
   <!-- Settings -->
   <button class="nav-btn"        data-page="prefs"      onclick="navGoToPage('prefs')">Preferences</button>
@@ -240,6 +241,7 @@
       <div id="cid-analysis" class="cid-analysis"></div>
     </div>
   </div>
+
 </div>
 
 <!-- CHORD MATCH PAGE (mic-based chord sight-reading: strum the named chord,
@@ -349,12 +351,16 @@
 
   <div class="st-display">
     <div class="st-bpm-row">
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-stState.stepBpm)">−</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-1)">−</button>
       <input type="number" class="st-bpm-current" id="st-bpm-current" min="20" max="300" value="60"
         onchange="stSetCurrentBpm(this.value)">
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(stState.stepBpm)">+</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(1)">+</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-5)">−5</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
     </div>
-    <div class="st-bpm-label">BPM <span id="st-bpm-target-label">(target 120)</span> — type a number, or use +/− (step size below), to change tempo instantly</div>
+    <div class="st-bpm-label">BPM <span id="st-bpm-target-label">(target 120)</span> — type a number, or use +/−/±5/±10 to change tempo instantly</div>
     <div class="st-beat-row" id="st-beat-row"></div>
     <div class="st-progress" id="st-progress"></div>
   </div>
@@ -403,6 +409,50 @@
 
   <div class="kd-keystats-title">各调正确率（按常用度排序）</div>
   <div class="kd-keystats" id="kd-keystats"></div>
+</div>
+
+<!-- DOM DRILL PAGE: dominant⇄target reflex (V/x and V7→I), key-agnostic —
+     one step on the circle of fifths in either direction. See dom-drill.js.
+     Reuses Key Drill's kd-* card/quiz CSS classes verbatim; only the circle
+     reference below has its own styles. -->
+<div class="page" id="page-domdrill">
+  <div class="page-header"><h2 class="page-title">Dom Drill</h2></div>
+  <div class="kd-intro">看到目标和弦秒答它的属七和弦（V7），看到属七和弦秒答它解决到谁、秒答它的 3 音和 ♭7 音（导音对）——练的就是五度圈上的一格：找属 = 顺时针一格，解决 = 逆时针一格。出题按该根音在流行/摇滚里被当做目标的常见度加权。</div>
+
+  <div class="kd-options">
+    <label>方向
+      <select id="dd-direction">
+        <option value="mixed">混合（三种都练）</option>
+        <option value="targetToDom">看目标找属和弦</option>
+        <option value="domToTarget">看属和弦找解决目标</option>
+        <option value="guideTones">属和弦的 3 音 / ♭7 音（导音对）</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="dd-show-circle"> 显示五度圈参照</label>
+  </div>
+
+  <div class="kd-stats-row">
+    <span>本次正确率 <b id="dd-session-stat">0 / 0</b></span>
+    <span>连对 <b id="dd-streak">0</b></span>
+    <span>反应时限 <b id="dd-time-limit">5s</b></span>
+  </div>
+
+  <div class="kd-card">
+    <div class="kd-key-label" id="dd-dir-label"></div>
+    <div class="kd-timer-bar"><div class="kd-timer-fill" id="dd-timer-fill"></div></div>
+    <div class="kd-prompt" id="dd-prompt"></div>
+    <div class="kd-choices" id="dd-choices"></div>
+    <div class="kd-feedback" id="dd-feedback"></div>
+    <button type="button" class="kd-continue-btn" id="dd-continue-btn" style="display:none">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+  </div>
+
+  <div id="dd-circle-wrap">
+    <svg id="dd-circle" class="dd-circle" viewBox="0 0 240 240" width="240" height="240"></svg>
+    <div class="dd-circle-caption">顺时针一格 = 这个和弦的属（V）· 逆时针一格 = 属和弦的解决目标</div>
+  </div>
+
+  <div class="kd-keystats-title">各目标根音正确率（按五度圈顺序）</div>
+  <div class="kd-keystats" id="dd-rootstats"></div>
 </div>
 
 <!-- SONG LOOP PAGE -->
@@ -736,7 +786,7 @@
      never reflows whatever page it's floating over. Page-independent, like
      the practice timer pill above; a page can optionally feed it richer
      context (see agentPageContext() / fbCidAgentContext() for Chord ID). -->
-<button id="agent-toggle" class="agent-toggle" title="问助教" onclick="agentOpen()">🎓</button>
+<button id="agent-toggle" class="agent-toggle" title="问助教" onclick="agentOpen()">✦ AI 助教</button>
 <div id="agent-panel" class="agent-panel">
   <div class="agent-resize-handle" id="agent-resize-handle" title="拖拽调整大小"></div>
   <div class="agent-head">
@@ -745,6 +795,7 @@
     <button type="button" class="agent-icon-btn" id="agent-new-btn" title="新对话" onclick="agentNewSession()">＋</button>
     <button type="button" class="agent-icon-btn" id="agent-close-btn" title="收起" onclick="agentClose()">✕</button>
   </div>
+  <div id="agent-overview" class="agent-overview"></div>
   <div id="agent-messages" class="agent-messages"></div>
   <div id="agent-status" class="agent-status"></div>
   <div class="agent-input-row">
@@ -766,6 +817,7 @@
 <script src="licks.js"></script>
 <script src="progression-lab.js"></script>
 <script src="key-drill.js"></script>
+<script src="dom-drill.js"></script>
 <script src="materials.js"></script>
 <script src="agent-assistant.js"></script>
 <script src="app.js"></script>

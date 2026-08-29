@@ -39,6 +39,13 @@ function stPrefsLoad() {
   if (Number.isFinite(saved.subdivision))     stState.subdivision     = saved.subdivision;
   if (typeof saved.autoAdvance === 'boolean') stState.autoAdvance     = saved.autoAdvance;
   if (Number.isFinite(saved.autoAdvanceBars)) stState.autoAdvanceBars = saved.autoAdvanceBars;
+  // The live tempo is persisted too, so a revisit picks up where the last
+  // session left off instead of snapping back to Start BPM.
+  if (Number.isFinite(saved.currentBpm)) {
+    stState.currentBpm = Math.max(20, Math.min(300, saved.currentBpm));
+    return true;
+  }
+  return false;
 }
 
 function stApplyStateToUI() {
@@ -56,7 +63,7 @@ function stPrefsSave() {
     startBpm: stState.startBpm, targetBpm: stState.targetBpm,
     stepBpm: stState.stepBpm, beatsPerBar: stState.beatsPerBar,
     subdivision: stState.subdivision, autoAdvance: stState.autoAdvance,
-    autoAdvanceBars: stState.autoAdvanceBars,
+    autoAdvanceBars: stState.autoAdvanceBars, currentBpm: stState.currentBpm,
   }));
 }
 
@@ -71,10 +78,11 @@ function stReadOptionsFromUI() {
 }
 
 function initSpeedPage() {
-  stPrefsLoad();
+  const restoredBpm = stPrefsLoad();
   stApplyStateToUI();
   stReadOptionsFromUI();
-  stState.currentBpm = stState.startBpm;
+  // First visit (nothing persisted yet): start at the configured Start BPM.
+  if (!restoredBpm) stState.currentBpm = stState.startBpm;
 
   // The option inputs live in static HTML (unlike most other panels in this
   // app, which re-render their controls via innerHTML on every visit) — they
@@ -102,8 +110,8 @@ function initSpeedPage() {
 function stOnOptionsChanged() {
   const wasRunning = stState.running;
   stReadOptionsFromUI();
-  stPrefsSave();
   if (!wasRunning) stState.currentBpm = Math.min(stState.currentBpm, stState.targetBpm);
+  stPrefsSave(); // after the currentBpm clamp above, so the persisted tempo matches
   stRenderBeatRow();
   stUpdateDisplay();
 }
@@ -211,6 +219,7 @@ function stStart() {
   }
   if (stState.audioCtx.state === 'suspended') stState.audioCtx.resume();
   stState.currentBpm = Math.min(Math.max(stState.currentBpm, stState.startBpm), stState.targetBpm);
+  stPrefsSave(); // the clamp above may have moved the persisted tempo
   stState.tickIndex = 0;
   stState.barsCompletedAtCurrentBpm = 0;
   stState.nextTickTime = stState.audioCtx.currentTime + 0.05;
@@ -249,6 +258,7 @@ function stNotifyLickBpm() {
 function stBumpUp() {
   stState.currentBpm = Math.min(stState.targetBpm, stState.currentBpm + stState.stepBpm);
   stState.barsCompletedAtCurrentBpm = 0;
+  stPrefsSave();
   stUpdateDisplay();
   stNotifyLickBpm();
 }
@@ -267,6 +277,7 @@ function stSetCurrentBpm(value) {
   if (!Number.isFinite(n)) { stUpdateDisplay(); return; }
   stState.currentBpm = Math.max(20, Math.min(300, n));
   stState.barsCompletedAtCurrentBpm = 0;
+  stPrefsSave();
   stUpdateDisplay();
   stNotifyLickBpm();
 }
@@ -275,6 +286,7 @@ function stReset() {
   stReadOptionsFromUI();
   stState.currentBpm = stState.startBpm;
   stState.barsCompletedAtCurrentBpm = 0;
+  stPrefsSave();
   stUpdateDisplay();
   stNotifyLickBpm();
 }

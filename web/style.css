@@ -859,7 +859,7 @@ input[type="number"] { width: 64px; text-align: center; }
   border: none; background: none; width: 160px; padding: 0;
 }
 .st-bpm-current:focus { outline: none; background: var(--bg-subtle); border-radius: 6px; }
-.st-beat-row { display: flex; justify-content: flex-start; gap: 12px; margin-bottom: 12px; }
+.st-beat-row { display: flex; justify-content: flex-start; gap: 12px; margin: 14px 0 12px; }
 .st-beat-dot {
   width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised);
   border: 1px solid var(--border-dim); transition: background 0.05s, transform 0.05s;

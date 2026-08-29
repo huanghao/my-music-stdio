@@ -16,6 +16,8 @@
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
+| Lick 详情 Sessions 列表展开/收起 | `lick_sessions_open` | `licks.js` `licksSessionsOpen()` / `licksSessionsOnToggle()`（全局布尔，默认收起） |
+| Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` / `dd_stats` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` / `ddStatsLoad()` / `ddStatsSave()` |
 
 ### 实现模式
 

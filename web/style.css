@@ -859,7 +859,6 @@ input[type="number"] { width: 64px; text-align: center; }
   border: none; background: none; width: 160px; padding: 0;
 }
 .st-bpm-current:focus { outline: none; background: var(--bg-subtle); border-radius: 6px; }
-.st-bpm-label { font-size: 13px; color: var(--text-muted); margin-top: 4px; margin-bottom: 16px; max-width: 480px; }
 .st-beat-row { display: flex; justify-content: flex-start; gap: 12px; margin-bottom: 12px; }
 .st-beat-dot {
   width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised);
@@ -925,6 +924,22 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .kd-keystat-row:last-child { border-bottom: none; }
 .kd-keystat-val { font-family: 'IBM Plex Mono', monospace; color: var(--text-muted); }
+
+/* Dom Drill's circle-of-fifths reference (dom-drill.js) — the quiz card
+   reuses kd-* classes; only this ring is new. */
+#dd-circle-wrap { display: flex; flex-direction: column; align-items: center; margin: 18px 0; }
+.dd-circle { display: block; }
+.dd-circle-ring { fill: none; stroke: var(--border-dim); stroke-width: 1; }
+.dd-circle-node circle { fill: var(--bg-card); stroke: var(--border-dim); stroke-width: 1; }
+.dd-circle-node text {
+  text-anchor: middle; dominant-baseline: middle; font-size: 11px;
+  fill: var(--text-muted); font-family: 'IBM Plex Mono', monospace;
+}
+.dd-circle-node.dd-circle-prompt circle { fill: var(--bg-raised); stroke: var(--text-dim); }
+.dd-circle-node.dd-circle-prompt text { fill: var(--text); font-weight: 600; }
+.dd-circle-node.dd-circle-answer circle { fill: var(--primary-bg); stroke: var(--primary); }
+.dd-circle-node.dd-circle-answer text { fill: var(--primary); font-weight: 700; }
+.dd-circle-caption { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 
 .st-mic-level {
   width: 100%; max-width: 640px; height: 8px; background: var(--bg-raised);
@@ -1058,9 +1073,6 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Back-navigation row (e.g. "← Licks" above a detail view) */
 .page-back-row { margin-bottom: 12px; }
 
-/* Speed Trainer: the Start/Stop/Bump/Reset row of controls */
-.st-controls-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-
 /* ── Lick Tracker ────────────────────────────────────────────────────────── */
 
 #licks-list { max-width: 720px; }
@@ -1172,26 +1184,6 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-pdf-collapse { margin-bottom: 4px; }
 .lick-pdf-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 
-/* Dual-page view: primary (editable) and a read-only companion, side by side,
-   scroll-synced in both directions — see licksSetupDualPdfSync in licks.js.
-   Each pane keeps its own .lick-pdf-frame (so the two independently existing
-   iframe sizing/positioning rules above still apply unchanged); what's new is
-   just the row wrapper and the companion's own mini toolbar above its frame. */
-.lick-pdf-dual-row { display: flex; gap: 10px; align-items: flex-start; }
-.lick-pdf-pane { flex: 1 1 0; min-width: 260px; }
-.lick-pdf-companion-toolbar {
-  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
-  font-size: 12px; color: var(--text-dim);
-}
-.lick-pdf-companion-toolbar .btn { padding: 2px 8px; }
-.lick-pdf-companion-label { flex: 1; }
-.lick-pdf-companion-pane .lick-pdf-frame { border-radius: 6px; } /* no collapse button below it to notch a corner for */
-/* Narrow viewport: stack instead of squeezing two PDF panes unreadably. */
-@media (max-width: 900px) {
-  .lick-pdf-dual-row { flex-direction: column; }
-  .lick-pdf-pane { width: 100%; }
-}
-
 /* Audio embeds: an inline mini-player (play/seek/speed) for listen-while-
    reading-the-score, plus a secondary hand-off button into Song Loop's
    A-B-loop tooling. The <audio> element itself is created lazily off-DOM —
@@ -1222,9 +1214,11 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-chart-target { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .lick-chart-empty  { color: var(--text-faint); font-size: 13px; padding: 20px 0; }
 
-/* Session list */
-.lick-sessions-header { margin-bottom: 8px; }
-.lick-sessions-header h3 { font-size: 14px; font-weight: 600; margin: 0; }
+/* Session list (collapsed by default; summary styled like the old h3 header) */
+.lick-sessions-summary {
+  font-size: 14px; font-weight: 600; margin-bottom: 8px;
+  cursor: pointer; user-select: none;
+}
 .lick-session-row {
   display: flex; gap: 16px; padding: 6px 0;
   border-bottom: 1px solid var(--bg-faint); font-size: 13px;
@@ -1759,8 +1753,8 @@ input[type="number"] { width: 64px; text-align: center; }
    open: a resizable panel, both pinned to the same bottom-right corner. */
 .agent-toggle {
   position: fixed; right: 20px; bottom: 20px; z-index: 200;
-  width: 52px; height: 52px; border-radius: 50%; border: none;
-  background: var(--primary); color: var(--text-inverse); font-size: 22px;
+  padding: 10px 16px; border-radius: 999px; border: none;
+  background: var(--primary); color: var(--text-inverse); font-size: 13px; font-weight: 600;
   box-shadow: 0 4px 14px rgba(0,0,0,0.22); cursor: pointer;
 }
 .agent-toggle:hover { background: var(--primary-lt); }
@@ -1798,6 +1792,15 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .agent-icon-btn:hover { background: var(--bg-faint); color: var(--text); }
 
+.agent-overview {
+  border-bottom: 1px solid var(--border);
+  color: var(--text-faint);
+  flex-shrink: 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  min-height: 20px;
+  padding: 3px 12px;
+}
 .agent-messages { flex: 1; overflow-y: auto; padding: 10px 12px; font-size: 13px; }
 .agent-msg { margin-bottom: 10px; }
 .agent-msg-user { text-align: right; }
@@ -1815,6 +1818,17 @@ input[type="number"] { width: 64px; text-align: center; }
 
 .agent-status { padding: 3px 12px; font-size: 11px; color: var(--text-faint); min-height: 16px; flex-shrink: 0; }
 .agent-status.error { color: var(--danger-dark); }
+.agent-retry-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-page);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+.agent-retry-btn:hover { color: var(--text); border-color: var(--primary); }
 .agent-input-row { border-top: 1px solid var(--border); padding: 8px; flex-shrink: 0; }
 .agent-input {
   width: 100%; resize: none; height: 60px; border: 1px solid var(--border-dim); border-radius: 6px;

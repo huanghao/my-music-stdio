@@ -133,7 +133,6 @@ function stFlashBeat(beatIndexInBar, isDownbeat) {
 
 function stUpdateDisplay() {
   document.getElementById('st-bpm-current').value = stState.currentBpm;
-  document.getElementById('st-bpm-target-label').textContent = `(target ${stState.targetBpm})`;
   const progress = document.getElementById('st-progress');
   progress.textContent = stState.running
     ? `${stState.barsCompletedAtCurrentBpm} bar${stState.barsCompletedAtCurrentBpm === 1 ? '' : 's'} at this tempo`
@@ -276,15 +275,6 @@ function stSetCurrentBpm(value) {
   const n = Math.round(parseFloat(value));
   if (!Number.isFinite(n)) { stUpdateDisplay(); return; }
   stState.currentBpm = Math.max(20, Math.min(300, n));
-  stState.barsCompletedAtCurrentBpm = 0;
-  stPrefsSave();
-  stUpdateDisplay();
-  stNotifyLickBpm();
-}
-
-function stReset() {
-  stReadOptionsFromUI();
-  stState.currentBpm = stState.startBpm;
   stState.barsCompletedAtCurrentBpm = 0;
   stPrefsSave();
   stUpdateDisplay();

@@ -679,45 +679,46 @@ test('fbApplySinkIdToMedia resets to the OS default when deviceId is \'\', and s
   }
 });
 
-// ── Device auto-detection heuristic ──
-// No persistence by design (what's plugged in changes session to session) —
-// fbPickPreferredDevice re-detects the best device on startup/devicechange.
+// ── Device auto-detection (whitelist policy) ──
+// Stable machine setup → auto-pick ONLY positively-recognized devices
+// (known interface brands, built-in). Anything unknown — virtual cables,
+// meeting-software drivers, future junk — is never auto-selected, by
+// construction, with no blacklist to maintain.
 
 const d = (deviceId, label) => ({ deviceId, label });
 
-test('fbPickPreferredDevice prefers a known audio interface over built-in and generic USB', () => {
+test('fbPickPreferredDevice auto-picks the audio interface when present', () => {
   const inputs = [
     d('default', 'Default - MacBook Pro Microphone'),
     d('builtin', 'MacBook Pro Microphone'),
-    d('usbmic', 'USB Microphone'),
-    d('scarlett', 'Scarlett 2i2 USB'),
+    d('virt', 'qianyan'),
+    d('solo', 'Scarlett Solo 3rd Gen'),
   ];
-  assert.equal(fb.fbPickPreferredDevice(inputs, 'input').deviceId, 'scarlett');
-  // UMC / UR-style interfaces match too, not just Focusrite
-  assert.equal(fb.fbPickPreferredDevice([d('a', 'MacBook Pro Microphone'), d('b', 'UMC22')], 'input').deviceId, 'b');
-  assert.equal(fb.fbPickPreferredDevice([d('a', 'Built-in Microphone'), d('b', 'Steinberg UR22C')], 'input').deviceId, 'b');
+  assert.equal(fb.fbPickPreferredDevice(inputs, 'input').deviceId, 'solo');
+  assert.equal(fb.fbPickPreferredDevice([d('spk', 'MacBook Pro Speakers'), d('solo', 'Focusrite Scarlett Solo')], 'output').deviceId, 'solo');
 });
 
-test('fbPickPreferredDevice input: generic USB mic beats built-in, built-in beats bluetooth', () => {
-  const builtin = d('builtin', 'MacBook Pro Microphone');
-  const usbmic = d('usb', 'Yeti Stereo Microphone');
-  const airpods = d('bt', "AirPods Pro");
-  assert.equal(fb.fbPickPreferredDevice([builtin, usbmic], 'input').deviceId, 'usb');
-  // Built-in explicitly wins over a bluetooth headset, so connecting AirPods
-  // can't silently make the OS default the practice mic
-  assert.equal(fb.fbPickPreferredDevice([builtin, airpods], 'input').deviceId, 'builtin');
-  // Bluetooth alone -> no actionable pick (null = OS default)
-  assert.equal(fb.fbPickPreferredDevice([airpods], 'input'), null);
+test('fbPickPreferredDevice never auto-picks unknown devices (virtual cables, meeting drivers, anything new)', () => {
+  // The whole qianyan/ZoomAudioDevice failure class: unrecognized labels get
+  // score 0 and lose to built-in — no per-driver blacklist needed
+  for (const junk of ['qianyan', 'ZoomAudioDevice', 'BlackHole 2ch', 'Some Future Driver 3000']) {
+    assert.equal(fb.fbPickPreferredDevice([d('junk', junk), d('builtin', 'MacBook Pro Microphone')], 'input').deviceId, 'builtin', junk);
+    assert.equal(fb.fbPickPreferredDevice([d('junk', junk)], 'input'), null, junk);   // junk alone -> OS default
+    assert.equal(fb.fbPickPreferredDevice([d('junk', junk)], 'output'), null, junk);
+  }
+  // Even a real-but-unknown USB mic isn't auto-picked — manual dropdown pick
+  // or one word added to FB_INTERFACE_RE if it should be
+  assert.equal(fb.fbPickPreferredDevice([d('usb', 'Yeti Stereo Microphone'), d('builtin', 'MacBook Pro Microphone')], 'input').deviceId, 'builtin');
 });
 
-test('fbPickPreferredDevice output: only clearly-better gear overrides the OS default', () => {
-  const speakers = d('spk', 'MacBook Pro Speakers');
-  const iface = d('scarlett', 'Focusrite Scarlett 2i2');
-  const airpods = d('bt', 'AirPods Pro');
-  assert.equal(fb.fbPickPreferredDevice([speakers, iface], 'output').deviceId, 'scarlett');
-  // Headphones are left to the OS default (which already follows them)
-  assert.equal(fb.fbPickPreferredDevice([speakers, airpods], 'output'), null);
-  assert.equal(fb.fbPickPreferredDevice([speakers], 'output'), null);
+test('fbPickPreferredDevice input picks built-in explicitly, so a bluetooth headset can\'t become the practice mic via OS default', () => {
+  assert.equal(fb.fbPickPreferredDevice([d('bt', 'AirPods Pro'), d('builtin', 'MacBook Pro Microphone')], 'input').deviceId, 'builtin');
+});
+
+test('fbPickPreferredDevice output follows the OS default unless an interface is present', () => {
+  // Headphones/AirPods are left to the OS (which already follows them)
+  assert.equal(fb.fbPickPreferredDevice([d('spk', 'MacBook Pro Speakers'), d('bt', 'AirPods Pro')], 'output'), null);
+  assert.equal(fb.fbPickPreferredDevice([d('spk', 'MacBook Pro Speakers')], 'output'), null);
 });
 
 test('fbPickPreferredDevice ignores label-less pre-permission entries', () => {
@@ -725,49 +726,15 @@ test('fbPickPreferredDevice ignores label-less pre-permission entries', () => {
   assert.equal(fb.fbPickPreferredDevice([d('', ''), d('', '')], 'input'), null);
 });
 
-test('fbPickPreferredDevice never auto-picks virtual loopback cables (BlackHole/"qianyan")', () => {
-  // "qianyan" is a renamed BlackHole virtual device (manufacturer Existential
-  // Audio) — selecting it means playing into the void
-  const qianyan = d('virt', 'qianyan');
-  const blackhole = d('bh', 'BlackHole 2ch');
-  const builtin = d('builtin', 'MacBook Pro Microphone');
-  const speakers = d('spk', 'MacBook Pro Speakers');
-  assert.equal(fb.fbPickPreferredDevice([qianyan, builtin], 'input').deviceId, 'builtin');
-  assert.equal(fb.fbPickPreferredDevice([blackhole, speakers], 'output'), null);
-  // Only virtual devices present -> null (OS default), not the void
-  assert.equal(fb.fbPickPreferredDevice([qianyan], 'input'), null);
-});
-
-test('fbPickPreferredDevice never picks Zoom\'s virtual meeting driver either', () => {
-  const zoom = d('zoom', 'ZoomAudioDevice');
-  const builtin = d('builtin', 'MacBook Pro Microphone');
-  assert.equal(fb.fbPickPreferredDevice([zoom, builtin], 'input').deviceId, 'builtin');
-  assert.equal(fb.fbPickPreferredDevice([zoom], 'output'), null);
-});
-
 test('fbDedupDevices collapses the "Default - X" alias into the real device', () => {
   const devices = [
     d('default', 'Default - MacBook Pro Speakers'),
     d('real-spk', 'MacBook Pro Speakers'),
-    d('iface', 'Scarlett 2i2 USB'),
+    d('iface', 'Scarlett Solo 3rd Gen'),
   ];
   const out = fb.fbDedupDevices(devices);
   assert.deepEqual(out.map(x => x.deviceId), ['real-spk', 'iface']);
   // An alias matching no real device is kept (better than an empty list)
   const orphan = fb.fbDedupDevices([d('default', 'Default - Something Else')]);
   assert.equal(orphan.length, 1);
-});
-
-test('FB_VIRTUAL_RE matches meeting/virtual drivers but NOT real hardware from the same vendors', () => {
-  // Zoom's virtual driver is one word; Zoom Corporation also makes real
-  // guitar-friendly interfaces (H4n/H6/LiveTrak) that must NOT be filtered
-  assert.ok(fb.FB_VIRTUAL_RE.test('ZoomAudioDevice'));
-  assert.ok(!fb.FB_VIRTUAL_RE.test('Zoom H4n'));
-  assert.ok(!fb.FB_VIRTUAL_RE.test('ZOOM LiveTrak L-12'));
-  // Hollyland LARK is a real wireless mic — a bare /lark/i would blacklist it
-  assert.ok(!fb.FB_VIRTUAL_RE.test('Hollyland LARK M2'));
-  // Other common virtual drivers
-  for (const label of ['Krisp Microphone (Krisp)', 'NVIDIA Broadcast', 'VooV Meeting Audio Device', 'qianyan']) {
-    assert.ok(fb.FB_VIRTUAL_RE.test(label), label);
-  }
 });

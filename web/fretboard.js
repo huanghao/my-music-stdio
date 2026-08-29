@@ -98,24 +98,21 @@ const fbState = {
 
 // ── Device auto-detection ────────────────────────────────────────────────
 // Nothing about device choice is persisted on purpose: what's plugged in
-// changes from session to session (audio interface at home, built-in mic on
-// the go), and a remembered deviceId may not even exist any more. Instead we
-// re-detect on startup and on every 'devicechange' event (event-driven, no
-// polling — costs nothing while nothing changes). A manual pick in the
-// dropdown still wins, but only in-memory for the rest of the tab.
-const FB_INTERFACE_RE = /scarlett|focusrite|clarett|universal audio|\bvolt\b|apogee|motu|m-track|audient|\bevo ?\d|presonus|quantum|steinberg|\bur ?\d\d|behringer|umc ?\d|komplete audio|\bssl ?\d|røde|\brode\b|irig|helix|hx stomp|katana|blackstar|usb audio|usb codec/i;
+// changes from session to session, and a remembered deviceId may not even
+// exist any more. Instead we re-detect on startup and on every
+// 'devicechange' event (event-driven, no polling — costs nothing while
+// nothing changes). A manual pick in the dropdown still wins, but only
+// in-memory for the rest of the tab.
+//
+// Whitelist, not blacklist: this machine's setup is stable (a Focusrite
+// Scarlett interface + the built-in mic/speakers), so instead of chasing an
+// ever-growing list of virtual junk drivers to exclude (BlackHole, Zoom's
+// driver, ...), we auto-pick ONLY devices we positively recognize. Anything
+// unknown — including virtual cables and meeting-software drivers — is
+// never auto-selected, by construction and with zero maintenance. New gear
+// that should auto-pick gets one word added to FB_INTERFACE_RE.
+const FB_INTERFACE_RE = /scarlett|focusrite/i;
 const FB_BUILTIN_RE = /built-in|internal|macbook|imac|内置|内建/i;
-const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
-// Virtual loopback cables (BlackHole & co., incl. renamed ones — "qianyan"
-// is a renamed BlackHole, manufacturer Existential Audio) and virtual
-// drivers installed by meeting/cleanup software (Zoom's ZoomAudioDevice,
-// Krisp, NVIDIA Broadcast, VooV/Tencent Meeting, ...). They have no
-// physical I/O, so picking one means recording/playing into the void.
-// Filtered out of the dropdowns entirely, not just the auto-pick.
-// NOTE: match the full driver name, never the vendor word alone — Zoom also
-// makes real hardware interfaces (H4n/H6/LiveTrak) and Hollyland's LARK is
-// a real wireless mic; /zoom/i or /lark/i would blacklist actual gear.
-const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan|zoomaudio|krisp|nvidia broadcast|rtx voice|elgato wave|droidcam|iriun|epoccam|\bcamo\b|voov|wemeet|tencentmeeting|dingtalk/i;
 
 // Browsers list the OS default device twice: once as the real hardware and
 // once as a 'default'/'communications' alias whose label is the real label
@@ -133,19 +130,16 @@ function fbDedupDevices(devices) {
 }
 
 function fbDeviceScore(d) {
-  if (FB_VIRTUAL_RE.test(d.label)) return -1;           // virtual cable — never auto-pick
-  if (FB_INTERFACE_RE.test(d.label)) return 3;          // known audio interface
-  if (FB_BUILTIN_RE.test(d.label)) return 1;            // built-in mic/speakers
-  if (FB_BLUETOOTH_RE.test(d.label)) return 0;          // headset — last resort
-  if (d.deviceId === 'default' || d.deviceId === 'communications') return 1;
-  return 2;                                             // generic external (USB mic/DAC)
+  if (FB_INTERFACE_RE.test(d.label)) return 2; // known audio interface
+  if (FB_BUILTIN_RE.test(d.label)) return 1;   // built-in mic/speakers
+  return 0;                                    // unknown/external/virtual — never auto-picked
 }
 
 // Returns the best device for auto-use, or null to stick with the OS default.
-// Output only overrides the OS default for clearly-better gear (interface/USB
-// DAC) — the OS already routes to headphones on its own when you plug them
-// in. Input explicitly picks even the built-in mic, so a connected bluetooth
-// headset can't silently become the practice mic via the OS default.
+// Input explicitly picks even the built-in mic, so a connected bluetooth
+// headset can't silently become the practice mic via the OS default. Output
+// only overrides the OS default for a recognized interface — the OS already
+// routes to headphones on its own when you plug them in.
 function fbPickPreferredDevice(devices, kind) {
   let best = null, bestScore = -1;
   for (const d of devices) {
@@ -1716,7 +1710,7 @@ function fbApplySinkIdToAll() {
 async function fbRefreshOutputDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const outputs = fbDedupDevices(devices.filter(d => d.kind === 'audiooutput' && !FB_VIRTUAL_RE.test(d.label)));
+    const outputs = fbDedupDevices(devices.filter(d => d.kind === 'audiooutput'));
     if (!outputs.length) return;
     // Same gone-check as the input side: a manually picked output that has
     // been unplugged hands control back to auto-detect.
@@ -1799,7 +1793,7 @@ function fbMicTick() {
 async function fbMicAutoSelectAndRefreshDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    const inputs = fbDedupDevices(devices.filter(d => d.kind === 'audioinput' && !FB_VIRTUAL_RE.test(d.label)));
+    const inputs = fbDedupDevices(devices.filter(d => d.kind === 'audioinput'));
     if (!inputs.length) return;
     // A manually picked device that has since been unplugged shouldn't pin
     // the selection forever — once it's gone from the enumeration, hand
@@ -4147,6 +4141,6 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
     fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,
-    fbDeviceScore, fbPickPreferredDevice, fbDedupDevices, FB_VIRTUAL_RE,
+    fbDeviceScore, fbPickPreferredDevice, fbDedupDevices,
   };
 }

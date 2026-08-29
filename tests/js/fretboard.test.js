@@ -757,3 +757,17 @@ test('fbDedupDevices collapses the "Default - X" alias into the real device', ()
   const orphan = fb.fbDedupDevices([d('default', 'Default - Something Else')]);
   assert.equal(orphan.length, 1);
 });
+
+test('FB_VIRTUAL_RE matches meeting/virtual drivers but NOT real hardware from the same vendors', () => {
+  // Zoom's virtual driver is one word; Zoom Corporation also makes real
+  // guitar-friendly interfaces (H4n/H6/LiveTrak) that must NOT be filtered
+  assert.ok(fb.FB_VIRTUAL_RE.test('ZoomAudioDevice'));
+  assert.ok(!fb.FB_VIRTUAL_RE.test('Zoom H4n'));
+  assert.ok(!fb.FB_VIRTUAL_RE.test('ZOOM LiveTrak L-12'));
+  // Hollyland LARK is a real wireless mic — a bare /lark/i would blacklist it
+  assert.ok(!fb.FB_VIRTUAL_RE.test('Hollyland LARK M2'));
+  // Other common virtual drivers
+  for (const label of ['Krisp Microphone (Krisp)', 'NVIDIA Broadcast', 'VooV Meeting Audio Device', 'qianyan']) {
+    assert.ok(fb.FB_VIRTUAL_RE.test(label), label);
+  }
+});

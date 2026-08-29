@@ -108,10 +108,14 @@ const FB_BUILTIN_RE = /built-in|internal|macbook|imac|内置|内建/i;
 const FB_BLUETOOTH_RE = /bluetooth|airpods|\bbuds?\b|beats/i;
 // Virtual loopback cables (BlackHole & co., incl. renamed ones — "qianyan"
 // is a renamed BlackHole, manufacturer Existential Audio) and virtual
-// drivers installed by meeting software (Zoom's ZoomAudioDevice). They have
-// no physical I/O, so picking one means recording/playing into the void.
+// drivers installed by meeting/cleanup software (Zoom's ZoomAudioDevice,
+// Krisp, NVIDIA Broadcast, VooV/Tencent Meeting, ...). They have no
+// physical I/O, so picking one means recording/playing into the void.
 // Filtered out of the dropdowns entirely, not just the auto-pick.
-const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan|zoom/i;
+// NOTE: match the full driver name, never the vendor word alone — Zoom also
+// makes real hardware interfaces (H4n/H6/LiveTrak) and Hollyland's LARK is
+// a real wireless mic; /zoom/i or /lark/i would blacklist actual gear.
+const FB_VIRTUAL_RE = /blackhole|loopback|soundflower|vb-?cable|voicemeeter|virtual audio|qianyan|zoomaudio|krisp|nvidia broadcast|rtx voice|elgato wave|droidcam|iriun|epoccam|\bcamo\b|voov|wemeet|tencentmeeting|dingtalk/i;
 
 // Browsers list the OS default device twice: once as the real hardware and
 // once as a 'default'/'communications' alias whose label is the real label
@@ -1714,6 +1718,12 @@ async function fbRefreshOutputDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const outputs = fbDedupDevices(devices.filter(d => d.kind === 'audiooutput' && !FB_VIRTUAL_RE.test(d.label)));
     if (!outputs.length) return;
+    // Same gone-check as the input side: a manually picked output that has
+    // been unplugged hands control back to auto-detect.
+    if (fbOutput.deviceId && outputs.some(d => d.deviceId) && !outputs.some(d => d.deviceId === fbOutput.deviceId)) {
+      fbOutput.deviceId = '';
+      fbOutput.userSelectedDevice = false;
+    }
     if (!fbOutput.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(outputs, 'output');
       const nextId = preferred ? preferred.deviceId : '';
@@ -1726,7 +1736,7 @@ async function fbRefreshOutputDevices() {
     }
     document.querySelectorAll('.fb-output-select').forEach(sel => {
       sel.innerHTML = outputs.map(d =>
-        `<option value="${d.deviceId}" ${d.deviceId === fbOutput.deviceId ? 'selected' : ''}>${d.label || 'Speaker'}</option>`
+        `<option value="${htmlEsc(d.deviceId)}" ${d.deviceId === fbOutput.deviceId ? 'selected' : ''}>${htmlEsc(d.label || 'Speaker')}</option>`
       ).join('');
     });
   } catch (_) { /* enumeration not available */ }
@@ -1742,7 +1752,18 @@ async function fbOutputDeviceChange(deviceId) {
 async function fbMicStart(owner, onFrame, fftSize = 2048) {
   if (fbMic.listening) fbMicStop();
   const constraints = { audio: fbMic.deviceId ? { deviceId: { exact: fbMic.deviceId } } : true };
-  fbMic.stream = await navigator.mediaDevices.getUserMedia(constraints); // throws if denied — caller handles it
+  try {
+    fbMic.stream = await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (e) {
+    // The remembered/picked device vanished between detection and start
+    // (unplugged interface, stale manual pick) — an exact-match request for
+    // a gone device fails with Overconstrained/NotFound; retry on the OS
+    // default and let auto-select re-pick from what's actually there.
+    if (!fbMic.deviceId || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e;
+    fbMic.deviceId = '';
+    fbMic.userSelectedDevice = false;
+    fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: true }); // throws if denied — caller handles it
+  }
   await fbMicAutoSelectAndRefreshDevices();
   fbMic.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   fbMic.analyser = fbMic.audioCtx.createAnalyser();
@@ -1780,6 +1801,14 @@ async function fbMicAutoSelectAndRefreshDevices() {
     const devices = await navigator.mediaDevices.enumerateDevices();
     const inputs = fbDedupDevices(devices.filter(d => d.kind === 'audioinput' && !FB_VIRTUAL_RE.test(d.label)));
     if (!inputs.length) return;
+    // A manually picked device that has since been unplugged shouldn't pin
+    // the selection forever — once it's gone from the enumeration, hand
+    // control back to auto-detect. (Guard: pre-permission enumerations hide
+    // all ids/labels, so skip the gone-check when nothing is identifiable.)
+    if (fbMic.deviceId && inputs.some(d => d.deviceId) && !inputs.some(d => d.deviceId === fbMic.deviceId)) {
+      fbMic.deviceId = '';
+      fbMic.userSelectedDevice = false;
+    }
     if (!fbMic.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(inputs, 'input');
       const nextId = preferred ? preferred.deviceId : '';
@@ -1791,19 +1820,28 @@ async function fbMicAutoSelectAndRefreshDevices() {
           // ends up reading the new device, not a dead stream.
           const owner = fbMic.owner, cb = fbMic.onFrame, fftSize = fbMic.analyser.fftSize;
           fbMicStop();
-          try { await fbMicStart(owner, cb, fftSize); fbSyncMicButtons(owner); } catch (_) {}
+          try { await fbMicStart(owner, cb, fftSize); } catch (_) {}
+          fbSyncMicButtons(); // refresh the transport bar either way — a failed restart left us stopped
         } else if (fbMic.stream) {
           // Mid-startup (called from fbMicStart right after the permission
           // grant): swap the just-acquired default stream for the preferred
           // one before the analyser source gets built from it.
           fbMic.stream.getTracks().forEach(t => t.stop());
-          fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: nextId ? { deviceId: { exact: nextId } } : true });
+          try {
+            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: nextId ? { deviceId: { exact: nextId } } : true });
+          } catch (_) {
+            // Preferred device refused/vanished mid-swap — re-acquire the
+            // default stream rather than leaving the stopped one behind
+            // (an analyser built on a stopped stream reads silence forever).
+            fbMic.deviceId = '';
+            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          }
         }
       }
     }
     document.querySelectorAll('.fb-device-select').forEach(sel => {
       sel.innerHTML = inputs.map(d =>
-        `<option value="${d.deviceId}" ${d.deviceId === fbMic.deviceId ? 'selected' : ''}>${d.label || 'Microphone'}</option>`
+        `<option value="${htmlEsc(d.deviceId)}" ${d.deviceId === fbMic.deviceId ? 'selected' : ''}>${htmlEsc(d.label || 'Microphone')}</option>`
       ).join('');
     });
     // Granting mic permission is also what unlocks readable output-device
@@ -1819,7 +1857,8 @@ async function fbMicDeviceChange(deviceId) {
   if (fbMic.listening) {
     const owner = fbMic.owner, cb = fbMic.onFrame, fftSize = fbMic.analyser.fftSize;
     fbMicStop();
-    try { await fbMicStart(owner, cb, fftSize); fbSyncMicButtons(owner); } catch (_) {}
+    try { await fbMicStart(owner, cb, fftSize); } catch (_) {}
+    fbSyncMicButtons(); // success or failure, the transport bar must match reality
   }
 }
 
@@ -4108,6 +4147,6 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
     fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,
-    fbDeviceScore, fbPickPreferredDevice, fbDedupDevices,
+    fbDeviceScore, fbPickPreferredDevice, fbDedupDevices, FB_VIRTUAL_RE,
   };
 }

@@ -1,0 +1,165 @@
+/* ── Design Tokens — single source of truth ─────────────────────────────────
+   Two tiers:
+
+     Tier 1 · primitives — the raw palette & scales. Components never use
+              these directly; only Tier 2 may reference them.
+     Tier 2 · semantic — purpose-named tokens (backgrounds, text, borders,
+              domain colors). Component CSS and Tailwind utilities both
+              reference ONLY this tier.
+
+   The Tailwind utilities (bg-card, text-fg-dim, border-line, …) are thin
+   aliases over the Tier 2 names — see the @theme block in index.html. Values
+   live ONLY here; never re-declare a value in the @theme block.
+
+   Loaded before style.css. Never hard-code a color, radius, or font-size in
+   component CSS — add a token here instead.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* ══ Tier 1 · Primitives ═══════════════════════════════════════════════ */
+
+  /* green (primary family) */
+  --g-50:  #eef5ee;
+  --g-100: #e6f0e6;
+  --g-400: #7a9a7a;
+  --g-500: #4a7c4a;
+
+  /* red (danger family) */
+  --r-50:  #fff0f0;
+  --r-300: #d98f84;
+  --r-500: #c04040;
+  --r-700: #8f4a4a;
+
+  /* amber (warning family) */
+  --a-50:  #f5f0e0;
+  --a-500: #b8843a;
+  --a-700: #8a7030;
+
+  /* blue (accent family) */
+  --b-400: #6a8caa;
+  --b-500: #4a7ca0;
+
+  /* warm neutrals — surfaces */
+  --n-0:      #ffffff;
+  --n-page:   #f0efe8;  /* warm-beige page canvas */
+  --n-subtle: #f5f5f0;
+  --n-raised: #e8e4d8;
+  --n-faint:  #eeeeee;
+
+  /* warm neutrals — lines */
+  --n-line:       #dddddd;
+  --n-line-dim:   #cccccc;
+  --n-line-muted: #bbbbbb;
+  --n-line-warm:  #d8d4c8;
+
+  /* warm neutrals — ink (text) */
+  --n-900: #2a2a2a;
+  --n-700: #666666;
+  --n-600: #888888;
+  --n-500: #aaaaaa;
+
+  /* heatmap greens (GitHub-style activity scale, light → dark) */
+  --heat-1: #c6e48b;
+  --heat-2: #7bc96f;
+  --heat-3: #239a3b;
+  --heat-4: #196127;
+
+  /* chord-sheet paper family */
+  --chord-ink:   #2b2621;  /* diagram text/dots, warm near-black */
+  --chord-root:  #a8492f;  /* root-note red-brown */
+  --chord-card:  #f5f1e9;  /* warm card background */
+  --chord-paper: #fdfbf7;  /* manuscript paper background */
+
+  /* fretboard diagram */
+  --fb-string: #999999;
+  --fb-nut:    #444444;
+  --fb-inlay:  #9c8f6a;
+  --fb-quiz:   #c0503f;  /* quiz marker red */
+  --fb-shape:  #cfd8c8;  /* caged-shape / ear-drill dot fill */
+  --fb-chroma: #b8c8b8;  /* chroma "chord tone" bar */
+
+  /* song loop */
+  --sl-teal:    #2f6f68;  /* loop checkbox accent */
+  --sl-wave:    #c9927e;  /* waveform bars */
+  --sl-ruler:   #efe7d8;  /* track ruler label background */
+  --sl-invalid: #c0392b;  /* invalid chord/roman numeral in track grid — close to r-500 but distinct */
+
+  /* misc one-offs */
+  --chart-hover:  #27ae60;  /* lick progress chart dot hover */
+  --screen-dark:  #111111;  /* near-black viewport backdrop */
+
+  /* radius scale (new code uses these; legacy classes converge on migration).
+     Named --rad-* (not --radius-*) so the @theme block in index.html can
+     alias them into Tailwind's --radius-* namespace without self-reference. */
+  --rad-xs:   3px;
+  --rad-sm:   4px;
+  --rad-md:   6px;
+  --rad-lg:   8px;
+  --rad-xl:   12px;
+  --rad-full: 999px;
+
+  /* font-size scale (px; this app runs dense — 13px base).
+     Aliased in @theme as --text-* (Tailwind's font-size namespace). */
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 13px;
+  --fs-md:   14px;
+  --fs-lg:   15px;
+  --fs-xl:   18px;
+  --fs-2xl:  20px;
+
+  /* elevation (named --elev-* so @theme can alias into --shadow-*) */
+  --elev-sm: 0 1px 3px rgba(0,0,0,0.08);
+  --elev-md: 0 4px 16px rgba(0,0,0,0.12);
+  --elev-lg: 0 10px 34px rgba(0,0,0,0.22);
+
+  /* stacking layers */
+  --z-base:    1;    /* in-flow raised elements */
+  --z-sticky:  10;   /* nav bar */
+  --z-panel:   20;   /* floating practice panel */
+  --z-float:   60;   /* floating controls above content */
+  --z-overlay: 100;  /* dropdowns / backdrops */
+  --z-menu:    200;  /* context menus, top-most */
+
+  /* ══ Tier 2 · Semantic ═════════════════════════════════════════════════ */
+
+  /* Backgrounds */
+  --bg-page:   var(--n-page);    /* warm-beige page canvas */
+  --bg-card:   var(--n-0);       /* white card / panel surface */
+  --bg-subtle: var(--n-subtle);  /* nested subtle area, context-menu */
+  --bg-raised: var(--n-raised);  /* nav active pill, status bar, beat dots */
+  --bg-faint:  var(--n-faint);   /* inactive chip, empty dividers */
+
+  /* Borders */
+  --border:       var(--n-line);        /* standard card border */
+  --border-dim:   var(--n-line-dim);    /* ghost button border, some inputs */
+  --border-muted: var(--n-line-muted);  /* chart bar lines, nut, ctx menu */
+  --border-warm:  var(--n-line-warm);   /* chord-chart warm borders */
+
+  /* Text */
+  --text:         var(--n-900);  /* primary text */
+  --text-dim:     var(--n-700);  /* secondary labels, nav */
+  --text-muted:   var(--n-600);  /* metadata, field labels */
+  --text-faint:   var(--n-500);  /* timestamps, unit labels */
+  --text-inverse: var(--n-0);    /* text on coloured buttons */
+
+  /* Primary — green */
+  --primary:      var(--g-500);  /* buttons, active dots, playback progress */
+  --primary-lt:   var(--g-400);  /* lighter green: focus rings, beat dots active */
+  --primary-bg:   var(--g-100);  /* green tint: song ready, banner bg */
+  --primary-bg-lt:var(--g-50);   /* very light green: progression info chip */
+
+  /* Danger — red */
+  --danger:        var(--r-500);  /* delete, error text */
+  --danger-dark:   var(--r-700);  /* stop button background */
+  --danger-bg:     var(--r-50);   /* error feedback background */
+  --danger-border: var(--r-300);  /* error feedback border */
+
+  /* Warning — amber */
+  --warn:      var(--a-500);  /* target-BPM line, streak counter */
+  --warn-dark: var(--a-700);  /* draft status text */
+  --warn-bg:   var(--a-50);   /* draft / warn tint background */
+
+  /* Accent — blue */
+  --accent:    var(--b-500);  /* ear-training explore mode */
+  --accent-dim:var(--b-400);  /* bend-location label */
+}

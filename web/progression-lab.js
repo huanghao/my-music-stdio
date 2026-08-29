@@ -473,7 +473,7 @@ function plRenderCards() {
   const area = document.getElementById('pl-cards-area');
   const emptyMsg = document.getElementById('pl-empty-msg');
   const listMeta = document.getElementById('pl-list-meta');
-  emptyMsg.style.display = plState.cards.length ? 'none' : 'block';
+  emptyMsg.classList.toggle('hidden', plState.cards.length > 0);
   listMeta.textContent = plState.cards.length ? `共 ${plState.cards.length} 条示例 · 当前调：${plState.key}` : '';
   const tonicPc = PL_NOTE_INDEX[plState.key];
   area.innerHTML = plState.cards.map((c, idx) => {

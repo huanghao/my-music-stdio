@@ -177,9 +177,9 @@ function fbRenderDeviceBar() {
     <span>Input device:</span>
     <select class="fb-device-select" onchange="fbMicDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
     ${fbOutputDeviceSelectHtml()}
-    <span style="margin-left:12px">🔊 Volume:</span>
+    <span class="ml-3">🔊 Volume:</span>
     <input type="range" class="fb-master-volume-slider" min="0" max="1" step="0.01" value="${fbMasterVolume}"
-      style="width:100px" oninput="fbMasterVolumeChange(this.value)"
+      class="w-[100px]" oninput="fbMasterVolumeChange(this.value)"
       title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">
   `;
   fbRefreshOutputDevices();
@@ -761,7 +761,7 @@ function fbOutputDeviceSelectHtml() {
     <label>Output device:
       <select class="fb-output-select" onchange="fbOutputDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
     </label>
-    ${FB_SETSINKID_SUPPORTED ? '' : '<span style="color:#888">(this browser can only play through the system default output)</span>'}
+    ${FB_SETSINKID_SUPPORTED ? '' : '<span class="text-fg-muted">(this browser can only play through the system default output)</span>'}
   `;
 }
 
@@ -789,7 +789,7 @@ function fbRenderEarOptions() {
       </select>
     </label>
     <label>Note gap:
-      <input type="number" min="0" max="2" step="0.05" value="${fbState.ear.noteGapSec}" style="width:56px"
+      <input type="number" min="0" max="2" step="0.05" value="${fbState.ear.noteGapSec}" class="w-[56px]!"
         onchange="fbState.ear.noteGapSec=Math.max(0, parseFloat(this.value)||0); fbPrefsSave()"> sec</label>
     <label>Direction:
       <select onchange="fbState.ear.direction=this.value; fbPrefsSave()">
@@ -812,7 +812,7 @@ function fbRenderEarOptions() {
     <label><input type="checkbox" ${fbState.ear.autoAdvance ? 'checked' : ''}
       onchange="fbEarSetAutoAdvance(this.checked)"> Auto-advance</label>
     <label>Pause after wrong answer:
-      <input type="number" min="0.5" max="15" step="0.5" value="${fbState.ear.wrongPauseSec}" style="width:56px"
+      <input type="number" min="0.5" max="15" step="0.5" value="${fbState.ear.wrongPauseSec}" class="w-[56px]!"
         onchange="fbState.ear.wrongPauseSec=parseFloat(this.value)||3; fbPrefsSave()"> sec</label>
     <label><input type="checkbox" ${fbState.ear.showDiagram ? 'checked' : ''}
       onchange="fbState.ear.showDiagram=this.checked; fbPrefsSave(); fbEarRefreshDiagrams()"> Show scale diagram</label>
@@ -1073,22 +1073,22 @@ function fbRenderSeqOptions() {
     <select onchange="fbState.seq.keyRoot=parseInt(this.value); fbPrefsSave(); fbSeqBuild()">
       ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.keyRoot === i ? 'selected' : ''}>${n}</option>`).join('')}
     </select>
-    <span style="margin-left:12px">Scale:</span>
+    <span class="ml-3">Scale:</span>
     <select onchange="fbState.seq.scale=this.value; fbPrefsSave(); fbSeqBuild()">
       ${FB_SEQ_SCALE_KEYS.map(k => `<option value="${k}" ${s.scale === k ? 'selected' : ''}>${FB_EAR_SCALES[k].label}</option>`).join('')}
     </select>
-    <span style="margin-left:12px">Pattern:</span>
+    <span class="ml-3">Pattern:</span>
     <select onchange="fbState.seq.pattern=this.value; fbPrefsSave(); fbSeqBuild()">
       ${Object.keys(FB_SEQ_PATTERNS).map(k => `<option value="${k}" ${s.pattern === k ? 'selected' : ''}>${FB_SEQ_PATTERNS[k].label}</option>`).join('')}
     </select>
-    <span style="margin-left:12px">Direction:</span>
+    <span class="ml-3">Direction:</span>
     <select onchange="fbState.seq.direction=this.value; fbPrefsSave(); fbSeqBuild()">
       <option value="asc"  ${s.direction === 'asc'  ? 'selected' : ''}>Ascending</option>
       <option value="desc" ${s.direction === 'desc' ? 'selected' : ''}>Descending</option>
       <option value="both" ${s.direction === 'both' ? 'selected' : ''}>Both</option>
     </select>
-    <span style="margin-left:12px">Start near fret:</span>
-    <input type="number" min="0" max="12" value="${s.startFret}" style="width:56px"
+    <span class="ml-3">Start near fret:</span>
+    <input type="number" min="0" max="12" value="${s.startFret}" class="w-[56px]!"
       onchange="fbState.seq.startFret=Math.max(0, Math.min(12, parseInt(this.value) || 0)); fbPrefsSave(); fbSeqBuild()">
   `;
 }
@@ -1186,8 +1186,8 @@ function fbSeqSetMode(mode) {
   fbState.seq.mode = mode;
   fbPrefsSave();
   document.querySelectorAll('#fb-seq-mode-tabs .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.seqmode === mode));
-  document.getElementById('fb-seq-reference-panel').style.display = mode === 'reference' ? '' : 'none';
-  document.getElementById('fb-seq-verify-panel').style.display = mode === 'verify' ? '' : 'none';
+  document.getElementById('fb-seq-reference-panel').classList.toggle('hidden', mode !== 'reference');
+  document.getElementById('fb-seq-verify-panel').classList.toggle('hidden', mode !== 'verify');
   fbRenderSeqReference();
   fbRenderSeqVerify();
   fbRenderControlAction();
@@ -1308,8 +1308,8 @@ function fbEarSetMode(mode) {
   fbState.ear.mode = mode;
   fbPrefsSave();
   document.querySelectorAll('#fb-ear-mode-tabs .fb-subtab').forEach(b => b.classList.toggle('active', b.dataset.earmode === mode));
-  document.getElementById('fb-ear-two-panel').style.display = mode === 'two' ? '' : 'none';
-  document.getElementById('fb-ear-three-panel').style.display = mode === 'three' ? '' : 'none';
+  document.getElementById('fb-ear-two-panel').classList.toggle('hidden', mode !== 'two');
+  document.getElementById('fb-ear-three-panel').classList.toggle('hidden', mode !== 'three');
 }
 
 function fbRenderEarStats(subMode) {
@@ -1325,7 +1325,7 @@ function fbRenderEarStats(subMode) {
       return `<span style="color:${col}">${name} ${pct}%</span>`;
     });
   const weakLine = weakList.length
-    ? `<span style="flex-basis:100%;font-size:11px;color:var(--text-faint)">Weak: ${weakList.join(' · ')}</span>`
+    ? `<span class="basis-full text-xs text-fg-faint">Weak: ${weakList.join(' · ')}</span>`
     : '';
   document.getElementById(`fb-ear-${subMode}-stats`).innerHTML = `
     <span class="fb-stat-ok">Correct <b>${s.correct}/${s.total}</b></span>
@@ -1948,14 +1948,14 @@ function fbRenderPitchOptions() {
     ${FB_STRING_NAMES.map((n, i) => `
       <label><input type="checkbox" ${s.strings[i] ? 'checked' : ''} onchange="fbPitchToggleString(${i})"> ${n}${i===0?'(low)':i===5?'(high)':''}</label>
     `).join('')}
-    <span style="margin-left:12px">Practice:</span>
+    <span class="ml-3">Practice:</span>
     <select onchange="fbState.pitch.practiceMode=this.value; fbPrefsSave()">
       <option value="all" ${s.practiceMode==='all'?'selected':''}>All notes</option>
       <option value="weak" ${s.practiceMode==='weak'?'selected':''}>Focus on weak notes</option>
     </select>
-    <label style="margin-left:12px"><input type="checkbox" ${s.showBoard ? 'checked' : ''}
+    <label class="ml-3"><input type="checkbox" ${s.showBoard ? 'checked' : ''}
       onchange="fbState.pitch.showBoard=this.checked; fbPrefsSave(); fbRenderPitchBoard()"> Show fretboard diagram</label>
-    <label style="margin-left:12px"><input type="checkbox" ${s.naturalsOnly ? 'checked' : ''}
+    <label class="ml-3"><input type="checkbox" ${s.naturalsOnly ? 'checked' : ''}
       onchange="fbState.pitch.naturalsOnly=this.checked; fbPrefsSave()"> Naturals only (A-G, no #/b)</label>
   `;
 }
@@ -2072,7 +2072,7 @@ function fbRenderPitchStatsTable() {
   }).filter(r => r.presented > 0)
     .sort((a, b) => (a.acc ?? 999) - (b.acc ?? 999) || (b.avg ?? 0) - (a.avg ?? 0));
   if (!rows.length) {
-    el.innerHTML = '<span style="color:#aaa;font-size:12px">No attempts yet — start listening and play some notes.</span>';
+    el.innerHTML = '<span class="text-fg-faint text-sm">No attempts yet — start listening and play some notes.</span>';
     return;
   }
   el.innerHTML = fbStatsTableHead('Per-note accuracy', 'fbPitchResetStats') + `
@@ -2710,27 +2710,27 @@ function fbRenderChordOptions() {
     <select onchange="fbState.chord.notationStyle=this.value; fbPrefsSave(); fbChordRefreshLabels()">
       ${Object.keys(FB_CHORD_NOTATION_STYLES).map(k => `<option value="${k}" ${s.notationStyle===k?'selected':''}>${FB_CHORD_NOTATION_STYLES[k].label}</option>`).join('')}
     </select>
-    <span style="margin-left:12px">Chord source:</span>
+    <span class="ml-3">Chord source:</span>
     <select onchange="fbChordSetSource(this.value)">
       <option value="random"      ${s.source==='random'     ?'selected':''}>Random</option>
       <option value="fixed_root"  ${s.source==='fixed_root' ?'selected':''}>Fixed root — same root, random quality</option>
       <option value="progression" ${s.source==='progression'?'selected':''}>Progressions (I-V-vi-IV, ii-V-I, etc.)</option>
     </select>
     ${s.source === 'fixed_root' ? `
-    <label style="margin-left:8px">Root:
+    <label class="ml-2">Root:
       <select onchange="fbState.chord.fixedRoot=parseInt(this.value); fbPrefsSave(); fbChordNewChord()">
         ${FB_NOTE_NAMES.map((n, i) => `<option value="${i}" ${s.fixedRoot===i?'selected':''}>${n}</option>`).join('')}
       </select>
     </label>` : ''}
     ${s.source === 'random' ? `
-    <label style="margin-left:8px">Practice:
+    <label class="ml-2">Practice:
       <select onchange="fbState.chord.practiceMode=this.value; fbPrefsSave(); fbChordNewChord()">
         <option value="all"  ${s.practiceMode==='all' ?'selected':''}>All</option>
         <option value="weak" ${s.practiceMode==='weak'?'selected':''}>Focus on weak</option>
       </select>
     </label>` : ''}
     ${s.source === 'progression' ? `
-    <label style="margin-left:8px">Pattern:
+    <label class="ml-2">Pattern:
       <select onchange="fbState.chord.progression.categoryFilter=this.value; fbState.chord.progression.chords=null; fbPrefsSave()">
         <option value="all"        ${s.progression.categoryFilter==='all'       ?'selected':''}>All</option>
         <option value="functional" ${s.progression.categoryFilter==='functional'?'selected':''}>Functional (T-S-D-T)</option>
@@ -2739,11 +2739,11 @@ function fbRenderChordOptions() {
         <option value="blues"      ${s.progression.categoryFilter==='blues'     ?'selected':''}>12-bar blues</option>
       </select>
     </label>
-    <label style="margin-left:8px">Repeat each progression:
-      <input type="number" min="1" max="8" value="${s.progression.repeatCount}" style="width:48px"
+    <label class="ml-2">Repeat each progression:
+      <input type="number" min="1" max="8" value="${s.progression.repeatCount}" class="w-[48px]!"
         onchange="fbState.chord.progression.repeatCount=Math.max(1, parseInt(this.value)||1); fbPrefsSave()"> ×
     </label>
-    <label style="margin-left:8px"><input type="checkbox" ${s.progression.lockKey ? 'checked' : ''}
+    <label class="ml-2"><input type="checkbox" ${s.progression.lockKey ? 'checked' : ''}
       onchange="fbState.chord.progression.lockKey=this.checked; fbState.chord.progression.chords=null; fbPrefsSave(); fbRenderChordOptions()"> Lock key</label>
     ${s.progression.lockKey ? `
     <select onchange="fbState.chord.progression.lockedKeyRoot=parseInt(this.value); fbState.chord.progression.chords=null; fbPrefsSave()">
@@ -2764,7 +2764,7 @@ function fbRenderChordOptions() {
         <label><input type="checkbox" ${s.showFormula ? 'checked' : ''} onchange="fbState.chord.showFormula=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show chord formula (e.g. 1 b3 5 b7)</label>
         <label><input type="checkbox" ${s.showChordDiagram ? 'checked' : ''} onchange="fbState.chord.showChordDiagram=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show chord shape diagrams (E/A/D-shape)</label>
         <label><input type="checkbox" ${s.showDegreesOnDiagram ? 'checked' : ''} onchange="fbState.chord.showDegreesOnDiagram=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show degree labels on shape diagrams</label>
-        <label style="display:flex;align-items:center;gap:6px;flex-wrap:nowrap">
+        <label class="flex items-center gap-1.5">
           📐 Diagram size:
           <input type="range" min="100" max="300" step="10" value="${s.diagramSize || 200}"
             oninput="fbState.chord.diagramSize=parseInt(this.value); fbPrefsSave(); fbApplyDiagramSize(); fbChordRefreshLabels(); document.getElementById('fb-diagram-size-val').textContent=this.value+'px'">
@@ -3037,7 +3037,7 @@ function fbRenderChordStatsTable() {
   }).filter(r => r.presented > 0)
     .sort((a, b) => (a.acc ?? 999) - (b.acc ?? 999) || (b.avg ?? 0) - (a.avg ?? 0));
   if (!rows.length) {
-    el.innerHTML = '<span style="color:#aaa;font-size:12px">No attempts yet — start listening and strum some chords.</span>';
+    el.innerHTML = '<span class="text-fg-faint text-sm">No attempts yet — start listening and strum some chords.</span>';
     return;
   }
   el.innerHTML = fbStatsTableHead('Per-chord accuracy', 'fbChordResetStats') + `
@@ -3098,7 +3098,7 @@ function fbChordRenderProgressionInfo() {
   const s = fbState.chord;
   const p = s.progression;
   const active = s.source === 'progression' && p.def && p.chords;
-  if (previewBtn) previewBtn.style.display = active ? '' : 'none';
+  if (previewBtn) previewBtn.classList.toggle('hidden', !active);
   if (!active) { el.textContent = ''; return; }
   const currentLoop = p.repeatCount - p.repeatsLeft;
   const loopSuffix = p.repeatCount > 1 ? ` (loop ${currentLoop}/${p.repeatCount})` : '';
@@ -3435,16 +3435,16 @@ function fbBendRenderOptions() {
         <label class="fb-chord-group-label">String:</label>
         <span class="fb-chord-type-children">
           <label><input type="checkbox" ${s.strings[3]?'checked':''} onchange="fbBendToggleString(3,this.checked)"> G</label>
-          <label><input type="checkbox" ${s.strings[4]?'checked':''} onchange="fbBendToggleString(4,this.checked)"> B <small style="color:#888">(most common)</small></label>
+          <label><input type="checkbox" ${s.strings[4]?'checked':''} onchange="fbBendToggleString(4,this.checked)"> B <small class="text-fg-muted">(most common)</small></label>
           <label><input type="checkbox" ${s.strings[5]?'checked':''} onchange="fbBendToggleString(5,this.checked)"> high E</label>
         </span>
       </div>
       <div class="fb-chord-type-group">
         <label class="fb-chord-group-label">Interval:</label>
         <span class="fb-chord-type-children">
-          <label><input type="checkbox" ${s.intervals.quarter?'checked':''} onchange="fbBendToggleInterval('quarter',this.checked)"> ¼ step <small style="color:#888">(blues touch)</small></label>
+          <label><input type="checkbox" ${s.intervals.quarter?'checked':''} onchange="fbBendToggleInterval('quarter',this.checked)"> ¼ step <small class="text-fg-muted">(blues touch)</small></label>
           <label><input type="checkbox" ${s.intervals.half?'checked':''} onchange="fbBendToggleInterval('half',this.checked)"> ½ step</label>
-          <label><input type="checkbox" ${s.intervals.full?'checked':''} onchange="fbBendToggleInterval('full',this.checked)"> 1 full step <small style="color:#888">(most common)</small></label>
+          <label><input type="checkbox" ${s.intervals.full?'checked':''} onchange="fbBendToggleInterval('full',this.checked)"> 1 full step <small class="text-fg-muted">(most common)</small></label>
           <label><input type="checkbox" ${s.intervals.full_half?'checked':''} onchange="fbBendToggleInterval('full_half',this.checked)"> 1½ steps</label>
         </span>
       </div>
@@ -3659,8 +3659,8 @@ function fbBendSetSubMode(mode, save = true) {
   if (save) fbPrefsSave();
   document.querySelectorAll('#fb-bend .fb-subtab').forEach(b =>
     b.classList.toggle('active', b.dataset.bendmode === mode));
-  document.getElementById('fb-bend-bend-panel').style.display    = mode === 'bend'    ? '' : 'none';
-  document.getElementById('fb-bend-vibrato-panel').style.display  = mode === 'vibrato' ? '' : 'none';
+  document.getElementById('fb-bend-bend-panel').classList.toggle('hidden', mode !== 'bend');
+  document.getElementById('fb-bend-vibrato-panel').classList.toggle('hidden', mode !== 'vibrato');
   if (fbMic.listening && fbMic.owner === 'bend') fbBendMicStop();
   fbBendRenderOptions();
   fbVibratoRenderOptions();
@@ -4082,7 +4082,7 @@ function fbVibratoRenderReadout(speed, depth) {
     el.innerHTML = `<span class="fb-vib-stat">Speed: <strong>${speed} Hz</strong></span>
       &nbsp;·&nbsp; <span class="fb-vib-stat">Depth: <strong>±${depth}¢</strong></span>`;
   } else {
-    el.innerHTML = '<span style="color:#aaa">listening…</span>';
+    el.innerHTML = '<span class="text-fg-faint">listening…</span>';
   }
 }
 

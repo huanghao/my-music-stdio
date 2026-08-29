@@ -656,11 +656,11 @@ function renderVampControls() {
             oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" style="width:60px"
+          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" class="w-[60px]!"
             oninput="state.vamp.loops=parseInt(this.value)||1; syncFromLoops('vamp'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
-          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" style="width:68px"
+          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" class="w-[68px]!"
             oninput="syncFromDuration('vamp'); state.vamp.loops=getLoops('vamp'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
@@ -738,11 +738,11 @@ function renderJamControls() {
             oninput="state.jam.bpm=parseInt(this.value)||120; syncFromDuration('jam'); liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
-          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" style="width:60px"
+          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" class="w-[60px]!"
             oninput="state.jam.loops=parseInt(this.value)||1; syncFromLoops('jam'); saveLastSelection()">
         </div>
         <div class="field"><label>Duration</label>
-          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" style="width:68px"
+          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" class="w-[68px]!"
             oninput="syncFromDuration('jam'); state.jam.loops=getLoops('jam'); saveLastSelection()">
           <span class="duration-hint">min</span>
         </div>
@@ -1123,15 +1123,15 @@ async function renderPrefsForm() {
       </div>
       <div class="field">
         <label>SoundFont</label>
-        <select id="pref-sf" style="flex:1" onchange="applyPrefs()">${sfOptions}</select>
+        <select id="pref-sf" class="flex-1" onchange="applyPrefs()">${sfOptions}</select>
       </div>
       <div class="field">
         <label>Accompaniments directory</label>
-        <input type="text" id="pref-accompaniments-dir" value="${p.accompaniments_dir}" style="flex:1">
+        <input type="text" id="pref-accompaniments-dir" value="${p.accompaniments_dir}" class="flex-1">
       </div>
       <div>
         <button class="btn btn-primary" onclick="savePrefs()">Save</button>
-        <span id="prefs-saved-msg" class="saved-msg">Saved</span>
+        <span id="prefs-saved-msg" class="saved-msg hidden">Saved</span>
       </div>
     </div>
   `;
@@ -1153,7 +1153,7 @@ async function savePrefs() {
   await api('/api/prefs', 'PUT', updates);
   state.prefs = { ...state.prefs, ...updates };
   const msg = document.getElementById('prefs-saved-msg');
-  if (msg) { msg.style.display = ''; setTimeout(() => msg.style.display = 'none', 1500); }
+  if (msg) { msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 1500); }
   document.getElementById('status-sf').textContent = updates.soundfont_path.split('/').pop();
   setStatus('Preferences saved');
   renderJamChart();

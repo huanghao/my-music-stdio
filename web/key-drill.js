@@ -208,7 +208,7 @@ function kdRenderQuestion() {
   choicesEl.querySelectorAll('.kd-choice-btn').forEach((btn) => {
     btn.addEventListener('click', () => kdAnswer(btn, btn.textContent));
   });
-  document.getElementById('kd-continue-btn').style.display = 'none';
+  document.getElementById('kd-continue-btn').classList.add('hidden');
   const fill = document.getElementById('kd-timer-fill');
   fill.style.transition = 'none';
   fill.style.width = '100%';
@@ -271,7 +271,7 @@ function kdAnswer(btnEl, chosenText) {
   if (wasCorrect) {
     setTimeout(kdNextQuestion, KD_FEEDBACK_DELAY_MS);
   } else {
-    document.getElementById('kd-continue-btn').style.display = '';
+    document.getElementById('kd-continue-btn').classList.remove('hidden');
   }
 }
 
@@ -299,7 +299,7 @@ function initKeyDrillPage() {
     document.addEventListener('keydown', (e) => {
       if (e.key !== ' ' && e.key !== 'Enter') return;
       const btn = document.getElementById('kd-continue-btn');
-      if (btn && btn.style.display !== 'none' && document.getElementById('page-keydrill').classList.contains('active')) {
+      if (btn && !btn.classList.contains('hidden') && document.getElementById('page-keydrill').classList.contains('active')) {
         e.preventDefault();
         kdNextQuestion();
       }

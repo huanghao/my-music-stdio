@@ -874,12 +874,12 @@ async function renderLickHeatmap() {
       <div class="lick-heatmap-legend">
         <span>${activeDays} active day${activeDays !== 1 ? 's' : ''} · ${totalMin} min total</span>
         <span class="heat-scale">
-          <span class="heat-cell-empty" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
-          <span class="heat-l1" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
-          <span class="heat-l2" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
-          <span class="heat-l3" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
-          <span class="heat-l4" style="display:inline-block;width:11px;height:11px;border-radius:2px;vertical-align:middle"></span>
-          <span style="margin-left:4px">more</span>
+          <span class="size-[11px] rounded-[2px] bg-faint border-[0.5px] border-line-dim"></span>
+          <span class="size-[11px] rounded-[2px] bg-heat-1"></span>
+          <span class="size-[11px] rounded-[2px] bg-heat-2"></span>
+          <span class="size-[11px] rounded-[2px] bg-heat-3"></span>
+          <span class="size-[11px] rounded-[2px] bg-heat-4"></span>
+          <span class="ml-1">more</span>
         </span>
       </div>
     </div>
@@ -982,7 +982,7 @@ function renderLickDetail(lick) {
                   <span class="lick-session-date">${fmtDate(s.date)}</span>
                 </div>`).join('');
               const more = sessions.length > MAX
-                ? `<p class="empty-state" style="padding:8px 0">… and ${sessions.length - MAX} earlier sessions</p>`
+                ? `<p class="empty-state py-2!">… and ${sessions.length - MAX} earlier sessions</p>`
                 : '';
               return rows + more;
             })()}
@@ -1119,9 +1119,9 @@ function licksEditorSetMode(mode) {
   licksState.editorMode = mode;
   lickEditorPrefsSave();
   const isPreview = mode === 'preview';
-  document.getElementById('lick-editor-edit-pane').style.display = isPreview ? 'none' : '';
+  document.getElementById('lick-editor-edit-pane').classList.toggle('hidden', isPreview);
   const prev = document.getElementById('lick-editor-preview');
-  prev.style.display = isPreview ? '' : 'none';
+  prev.classList.toggle('hidden', !isPreview);
   document.getElementById('lick-editor-mode-edit').classList.toggle('active', !isPreview);
   document.getElementById('lick-editor-mode-preview').classList.toggle('active', isPreview);
   if (isPreview) {
@@ -1495,8 +1495,8 @@ function renderActiveLickBanner() {
   // title it would name is the page's own <h2> right above. Only the
   // standalone Speed Trainer page lacks that context, so only there is the
   // banner shown.
-  if (!a || el.closest('#lick-practice-slot')) { el.style.display = 'none'; return; }
-  el.style.display = '';
+  if (!a || el.closest('#lick-practice-slot')) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
   el.innerHTML = `
     <span class="st-lick-banner-text">🎯 Practicing: <strong>${htmlEsc(a.title)}</strong></span>
   `;

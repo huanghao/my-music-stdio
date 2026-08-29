@@ -109,3 +109,16 @@ fbEarPlayCurrent = guarded(fbEarPlayCurrent);
 - 前端：Vanilla JS，无构建工具，保持和现有代码一致的风格
 - 后端：Python 3.12，FastAPI，ruff lint（`just lint`）
 - 所有 `innerHTML` 拼接必须用 `htmlEsc()` 转义用户数据，防止 XSS
+
+### Tailwind 与设计 Token
+
+项目接入了 **Tailwind v4 浏览器版**（vendored 在 `web/vendor/tailwind/`，零构建，运行时编译），并有一套两层的统一设计 token。**新写 UI 一律用 Tailwind utility + token，不要再手写内联 style，也不要新造色值。**
+
+- **Token 唯一来源是 `web/tokens.css`**：Tier 1 primitive（原始色板/scale）→ Tier 2 semantic（`--bg-card`、`--text-dim`、`--primary`…）。组件 CSS 和 Tailwind utility 都只引用 semantic 层。`index.html` 里的 `@theme` 块是纯别名层（`--color-card: var(--bg-card)` → `bg-card`），**不要在 @theme 里写具体值**。
+- **完整 token 速查表见 `docs/design-tokens.md`**。写代码前先看一眼有没有现成 token，没有就在 tokens.css 里加，别硬编。
+- **可见性切换一律用 `hidden` class**：`el.classList.toggle('hidden', cond)` / `add` / `remove`，初始隐藏就在 HTML 写 `class="hidden"`。**不要再用 `el.style.display`**——`hidden` 在 style.css 里是 `display:none !important`，内联 `style.display=''` 盖不掉它（反之 class 方案两边都兼容）。判断元素是否隐藏用 `el.classList.contains('hidden')`。
+- **层级陷阱**：Tailwind utility 编译进 `@layer utilities`，**优先级低于 style.css 里的无层规则**（与选择器特异性无关）。当 utility 要覆盖一条 legacy CSS 规则时（如 `input[type=number]` 的 64px 宽、`.modal` 的 300px 宽、`.empty-state` 的 padding），必须加 `!` 后缀：`class="w-[72px]!"`。新元素没有冲突规则时用普通 utility 即可。
+- **运行时拼接的 HTML 里的 utility 同样生效**（浏览器版用 MutationObserver 监听），innerHTML 模板里放心用。
+- **Tailwind 管不到的例外**：canvas/SVG 的 JS API 颜色（`fillStyle`、svguitar 选项等）无法引用 CSS 变量，保留字面值即可，但尽量从 token 取值注释说明来源。
+- 未引入 preflight（会冲掉 legacy CSS 依赖的 button/input 默认样式），只有 theme + utilities。
+- 旧组件 class 不强制迁移——**碰到才迁**：改到某块旧 UI 时顺手把它的色值换成 token；新 UI 直接 utility。

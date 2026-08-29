@@ -1010,9 +1010,9 @@ function initSongLoopPage() {
     els.lyricSongIdInput.value = id || '';
     if (id) {
       els.lyricNeteaseLink.href = `https://music.163.com/#/song?id=${encodeURIComponent(id)}`;
-      els.lyricNeteaseLink.style.display = '';
+      els.lyricNeteaseLink.classList.remove('hidden');
     } else {
-      els.lyricNeteaseLink.style.display = 'none';
+      els.lyricNeteaseLink.classList.add('hidden');
     }
   }
 
@@ -1285,9 +1285,9 @@ function initSongLoopPage() {
       const widthPct = ((slState.loopToBar - slState.loopFromBar) / total) * 100;
       els.waveLoop.style.left = leftPct + '%';
       els.waveLoop.style.width = widthPct + '%';
-      els.waveLoop.style.display = 'block';
+      els.waveLoop.classList.remove('hidden');
     } else {
-      els.waveLoop.style.display = 'none';
+      els.waveLoop.classList.add('hidden');
     }
     const pct = Math.min(100, (els.audioEl.currentTime / slState.duration) * 100);
     els.wavePlayhead.style.left = pct + '%';
@@ -1303,12 +1303,12 @@ function initSongLoopPage() {
   // Shows, as a box on the always-full-song overview waveform, which slice
   // of the (independently zoomable/scrollable) bar grid below is visible.
   function updateWaveViewportBox() {
-    if (slState.duration <= 0) { els.waveViewport.style.display = 'none'; return; }
+    if (slState.duration <= 0) { els.waveViewport.classList.add('hidden'); return; }
     const { leftPct, widthPct } = slComputeViewportBox(
       els.barGrid.scrollLeft, els.barGrid.clientWidth, slState.zoomPxPerBar, 92, slTotalBars()
     );
-    if (widthPct >= 100) { els.waveViewport.style.display = 'none'; return; }
-    els.waveViewport.style.display = 'block';
+    if (widthPct >= 100) { els.waveViewport.classList.add('hidden'); return; }
+    els.waveViewport.classList.remove('hidden');
     els.waveViewport.style.left = leftPct + '%';
     els.waveViewport.style.width = widthPct + '%';
   }
@@ -1353,7 +1353,7 @@ function initSongLoopPage() {
   // anything else parses fine but has no shape, shown as "not supported".
   function updateChordDiagramPanel() {
     const on = slState.showChordDiagram;
-    els.chordDiagramBox.style.display = on ? '' : 'none';
+    els.chordDiagramBox.classList.toggle('hidden', !on);
     if (!on || slState.duration <= 0) { els.chordDiagramBox.innerHTML = ''; return; }
     const chords = slSongChordList(slState.annotations, slState.startBarNumber, slTotalBars());
     if (!chords.length) {
@@ -1408,12 +1408,12 @@ function initSongLoopPage() {
     rowsByBar = new Map();
     lastHighlightedBar = null;
     if (slState.duration <= 0) {
-      els.barGridEmpty.style.display = 'block'; els.barFooter.textContent = '';
+      els.barGridEmpty.classList.remove('hidden'); els.barFooter.textContent = '';
       renderWaveLabelMarkers();
       renderWaveBarTicks();
       return;
     }
-    els.barGridEmpty.style.display = 'none';
+    els.barGridEmpty.classList.add('hidden');
 
     const total = slTotalBars();
     els.barGrid.style.setProperty('--sl-bar-count', total);
@@ -1813,7 +1813,7 @@ function initSongLoopPage() {
     slState.tapTimes = [];
     slState.bar1TimeSec = 0;
 
-    els.dropzoneRow.style.display = 'none';
+    els.dropzoneRow.classList.add('hidden');
     els.tapBtn.disabled = false;
 
     els.bpmInput.value = slState.bpm;

@@ -6,6 +6,109 @@
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="tokens.css">
+  <!-- Tailwind v4 browser build (vendored, see vendor/tailwind/README.md).
+       theme + utilities only — NO preflight: style.css below has its own
+       reset, and preflight would strip the button/input defaults the legacy
+       classes rely on. -->
+  <script src="vendor/tailwind/browser.js"></script>
+  <style type="text/tailwindcss" id="tw-theme">
+    /* theme + utilities ONLY — no preflight: it strips the default
+       button/input borders the legacy classes in style.css rely on. The two
+       @import lines are prepended by the script below at runtime instead of
+       being written here literally, because Chrome's preload scanner fetches
+       a literal @import URL at parse time (→ 404 noise) even though this
+       block's type keeps it from ever being applied as CSS. */
+    /* Utility names → semantic tokens. Values live ONLY in tokens.css; this
+       block is a pure alias layer so e.g. `bg-card` resolves to
+       var(--bg-card). Text colors use the fg- prefix (text-text would read
+       terribly), border colors use line- (border-border likewise). */
+    @theme {
+      /* surfaces → bg-* */
+      --color-page: var(--bg-page);
+      --color-card: var(--bg-card);
+      --color-subtle: var(--bg-subtle);
+      --color-raised: var(--bg-raised);
+      --color-faint: var(--bg-faint);
+
+      /* text → text-fg* */
+      --color-fg: var(--text);
+      --color-fg-dim: var(--text-dim);
+      --color-fg-muted: var(--text-muted);
+      --color-fg-faint: var(--text-faint);
+      --color-fg-inverse: var(--text-inverse);
+
+      /* borders → border-line* */
+      --color-line: var(--border);
+      --color-line-dim: var(--border-dim);
+      --color-line-muted: var(--border-muted);
+      --color-line-warm: var(--border-warm);
+
+      /* brand families → bg/text/border-{primary,danger,warn,accent}* */
+      --color-primary: var(--primary);
+      --color-primary-lt: var(--primary-lt);
+      --color-primary-bg: var(--primary-bg);
+      --color-primary-bg-lt: var(--primary-bg-lt);
+      --color-danger: var(--danger);
+      --color-danger-dark: var(--danger-dark);
+      --color-danger-bg: var(--danger-bg);
+      --color-danger-border: var(--danger-border);
+      --color-warn: var(--warn);
+      --color-warn-dark: var(--warn-dark);
+      --color-warn-bg: var(--warn-bg);
+      --color-accent: var(--accent);
+      --color-accent-dim: var(--accent-dim);
+
+      /* domain colors */
+      --color-chord-ink: var(--chord-ink);
+      --color-chord-root: var(--chord-root);
+      --color-chord-card: var(--chord-card);
+      --color-chord-paper: var(--chord-paper);
+      --color-fb-string: var(--fb-string);
+      --color-fb-nut: var(--fb-nut);
+      --color-fb-inlay: var(--fb-inlay);
+      --color-fb-quiz: var(--fb-quiz);
+      --color-fb-shape: var(--fb-shape);
+      --color-fb-chroma: var(--fb-chroma);
+      --color-sl-teal: var(--sl-teal);
+      --color-sl-wave: var(--sl-wave);
+      --color-sl-ruler: var(--sl-ruler);
+      --color-sl-invalid: var(--sl-invalid);
+      --color-heat-1: var(--heat-1);
+      --color-heat-2: var(--heat-2);
+      --color-heat-3: var(--heat-3);
+      --color-heat-4: var(--heat-4);
+      --color-chart-hover: var(--chart-hover);
+      --color-screen-dark: var(--screen-dark);
+
+      /* scales → rounded-*, text-*, shadow-* */
+      --radius-xs: var(--rad-xs);
+      --radius-sm: var(--rad-sm);
+      --radius-md: var(--rad-md);
+      --radius-lg: var(--rad-lg);
+      --radius-xl: var(--rad-xl);
+      --radius-full: var(--rad-full);
+      --text-xs: var(--fs-xs);
+      --text-sm: var(--fs-sm);
+      --text-base: var(--fs-base);
+      --text-md: var(--fs-md);
+      --text-lg: var(--fs-lg);
+      --text-xl: var(--fs-xl);
+      --text-2xl: var(--fs-2xl);
+      --shadow-sm: var(--elev-sm);
+      --shadow-md: var(--elev-md);
+      --shadow-lg: var(--elev-lg);
+    }
+  </style>
+  <script>
+    // See the comment in #tw-theme above: prepend the imports at runtime so
+    // the preload scanner never sees them. The MutationObserver in
+    // vendor/tailwind/browser.js picks up this textContent change and
+    // recompiles with the imports included.
+    document.getElementById('tw-theme').textContent =
+      '@import "tailwindcss/theme.css";\n@import "tailwindcss/utilities.css";\n' +
+      document.getElementById('tw-theme').textContent;
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -127,7 +230,7 @@
       <div class="fb-feedback" id="fb-ear-two-feedback"></div>
     </div>
 
-    <div id="fb-ear-three-panel" style="display:none">
+    <div id="fb-ear-three-panel" class="hidden">
       <div class="fb-stats" id="fb-ear-three-stats"></div>
       <div class="fb-prompt" id="fb-ear-three-prompt"></div>
       <div id="fb-ear-three-diagram"></div>
@@ -162,7 +265,7 @@
     </div>
 
     <!-- Vibrato panel -->
-    <div id="fb-bend-vibrato-panel" style="display:none">
+    <div id="fb-bend-vibrato-panel" class="hidden">
       <div id="fb-vibrato-options"></div>
       <div class="fb-stats" id="fb-vibrato-stats"></div>
       <canvas id="fb-vibrato-canvas" class="fb-vibrato-canvas" width="480" height="140"></canvas>
@@ -187,11 +290,11 @@
     </div>
 
     <!-- Play & Verify: mic listens as you play the sequence, advancing note-by-note -->
-    <div id="fb-seq-verify-panel" style="display:none">
+    <div id="fb-seq-verify-panel" class="hidden">
       <div class="fb-stats" id="fb-seq-verify-stats"></div>
       <div class="fb-pitch-target" id="fb-seq-verify-target"></div>
       <div class="fb-pitch-meter" id="fb-seq-verify-meter"></div>
-      <label style="display:block;margin:4px 0"><input type="checkbox" id="fb-seq-hint-cb"
+      <label class="block my-1"><input type="checkbox" id="fb-seq-hint-cb"
         onchange="fbState.seq.showPositionHint=this.checked; fbPrefsSave(); fbRenderSeqVerify()"> Show fretboard position hint</label>
       <div id="fb-seq-verify-board"></div>
       <div class="fb-caged-answer">
@@ -224,8 +327,8 @@
         <div id="cid-candidate-list" class="cid-candidate-list"></div>
         <div class="cid-input-actions">
           <button class="btn btn-primary btn-sm" id="cid-add-btn" onclick="fbCidAddToProgression()" disabled>+ 加入进行</button>
-          <button class="btn btn-ghost btn-sm" id="cid-remove-btn" onclick="fbCidRemoveEditing()" style="display:none">🗑 从进行中删除</button>
-          <button class="btn btn-ghost btn-sm" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()" style="display:none">✕ 取消</button>
+          <button class="btn btn-ghost btn-sm hidden" id="cid-remove-btn" onclick="fbCidRemoveEditing()">🗑 从进行中删除</button>
+          <button class="btn btn-ghost btn-sm hidden" id="cid-cancel-edit-btn" onclick="fbCidCancelPending()">✕ 取消</button>
         </div>
       </div>
     </div>
@@ -262,7 +365,7 @@
     <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
     <div class="fb-caged-answer">
       <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
-      <button class="btn btn-ghost btn-sm" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()" style="display:none">🔊 Preview progression</button>
+      <button class="btn btn-ghost btn-sm hidden" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()">🔊 Preview progression</button>
     </div>
     <div class="fb-feedback" id="fb-chord-feedback"></div>
     <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
@@ -297,8 +400,8 @@
 <div class="page" id="page-lick-edit">
   <div class="lick-editor-topbar">
     <button class="btn btn-ghost btn-sm" onclick="cancelLickEdit()">← 取消</button>
-    <input type="text" id="lick-edit-title" autocomplete="off" placeholder="Lick 标题" style="flex:1">
-    <label class="lick-editor-bpm-label">Target BPM <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" style="width:72px"></label>
+    <input type="text" id="lick-edit-title" autocomplete="off" placeholder="Lick 标题" class="flex-1">
+    <label class="lick-editor-bpm-label">Target BPM <input type="number" id="lick-edit-target-bpm" min="20" max="300" placeholder="—" class="w-[72px]!"></label>
     <div class="lick-editor-mode-toggle">
       <button id="lick-editor-mode-edit" class="btn btn-ghost btn-sm" onclick="licksEditorSetMode('edit')">编辑</button>
       <button id="lick-editor-mode-preview" class="btn btn-ghost btn-sm" onclick="licksEditorSetMode('preview')">预览</button>
@@ -306,7 +409,7 @@
     <button class="btn btn-primary btn-sm" onclick="saveLickEdit()">Save</button>
   </div>
   <div class="lick-edit-attach-row">
-    <input type="file" id="lick-edit-image-input" accept="image/*" style="display:none" onchange="lickUploadImage(this)">
+    <input type="file" id="lick-edit-image-input" accept="image/*" class="hidden" onchange="lickUploadImage(this)">
     <button type="button" class="btn btn-ghost btn-sm" title="仅这个 Lick 私有，不能被别的 Lick 复用" onclick="document.getElementById('lick-edit-image-input').click()">📷 Attach image</button>
     <button type="button" class="btn btn-ghost btn-sm" title="共享材料库，多个 Lick 可以引用同一份文件" onclick="openMaterialPicker()">📎 Attach material (PDF/Audio)</button>
     <span id="lick-edit-image-status" class="lick-edit-image-status"></span>
@@ -316,7 +419,7 @@
       <textarea id="lick-edit-notes" placeholder="Markdown 笔记 —— 右侧点一下即插入资源写法，不用背语法"></textarea>
       <aside class="lick-editor-cheatsheet" id="lick-editor-cheatsheet"></aside>
     </div>
-    <div id="lick-editor-preview" class="lick-notes-md lick-editor-preview" style="display:none"></div>
+    <div id="lick-editor-preview" class="lick-notes-md lick-editor-preview hidden"></div>
   </div>
 </div>
 
@@ -331,13 +434,13 @@
        relocation contract. -->
   <div id="st-panel-home">
   <div id="st-panel">
-  <div class="st-active-lick-banner" id="st-active-lick-banner" style="display:none"></div>
+  <div class="st-active-lick-banner hidden" id="st-active-lick-banner"></div>
 
   <div class="st-options">
-    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" style="width:72px"></label>
-    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" style="width:72px"></label>
-    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" style="width:64px"> BPM</label>
-    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" style="width:64px"></label>
+    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" class="w-[72px]!"></label>
+    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" class="w-[72px]!"></label>
+    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" class="w-[64px]!"> BPM</label>
+    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
     <label>Subdivision:
       <select id="st-subdivision">
         <option value="1" selected>Quarter notes</option>
@@ -346,7 +449,7 @@
       </select>
     </label>
     <label><input type="checkbox" id="st-auto-advance"> Auto-advance every
-      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" style="width:56px"> bars</label>
+      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" class="w-[56px]!"> bars</label>
   </div>
 
   <div class="st-display">
@@ -398,7 +501,7 @@
     <div class="kd-prompt" id="kd-prompt"></div>
     <div class="kd-choices" id="kd-choices"></div>
     <div class="kd-feedback" id="kd-feedback"></div>
-    <button type="button" class="kd-continue-btn" id="kd-continue-btn" style="display:none">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+    <button type="button" class="kd-continue-btn hidden" id="kd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
   </div>
 
   <div class="kd-keystats-title">各调正确率（按常用度排序）</div>
@@ -437,7 +540,7 @@
     <div class="kd-prompt" id="dd-prompt"></div>
     <div class="kd-choices" id="dd-choices"></div>
     <div class="kd-feedback" id="dd-feedback"></div>
-    <button type="button" class="kd-continue-btn" id="dd-continue-btn" style="display:none">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+    <button type="button" class="kd-continue-btn hidden" id="dd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
   </div>
 
   <div id="dd-circle-wrap">
@@ -589,9 +692,9 @@
 
       <div class="gp-lyric-import-panel" id="sl-lyric-import-panel">
         <span class="gp-ctl-lbl">网易云歌词</span>
-        <input type="text" id="sl-lyric-song-id" class="gp-num-sm" style="width:9ch" placeholder="歌曲ID" inputmode="numeric">
+        <input type="text" id="sl-lyric-song-id" class="gp-num-sm w-[9ch]!" placeholder="歌曲ID" inputmode="numeric">
         <button class="gp-sidecar-btn" id="sl-lyric-import-btn">拉取并导入</button>
-        <a href="#" target="_blank" rel="noopener" id="sl-lyric-netease-link" class="gp-sidecar-btn" style="display:none">在网易云打开 ↗</a>
+        <a href="#" target="_blank" rel="noopener" id="sl-lyric-netease-link" class="gp-sidecar-btn hidden">在网易云打开 ↗</a>
         <span class="gp-sidecar-hint" id="sl-lyric-import-hint">歌曲ID 是网易云网页/APP 分享链接里 id= 后面那串数字 · 按时间戳分配到最近的小节，会覆盖已有歌词</span>
       </div>
     </div>
@@ -599,8 +702,8 @@
     <!-- waveform -->
     <div class="gp-wave" id="sl-wave">
       <div class="gp-wave-meta" id="sl-wave-meta">加载音频后显示文件信息</div>
-      <div class="gp-wave-loop" id="sl-wave-loop"></div>
-      <div class="gp-wave-viewport" id="sl-wave-viewport"></div>
+      <div class="gp-wave-loop hidden" id="sl-wave-loop"></div>
+      <div class="gp-wave-viewport hidden" id="sl-wave-viewport"></div>
       <div class="gp-wave-bars" id="sl-wave-bars"></div>
       <div class="gp-wave-labels" id="sl-wave-labels"></div>
       <div class="gp-wave-playhead" id="sl-wave-playhead"></div>
@@ -631,7 +734,7 @@
       <label class="gp-ctl-lbl">
         <input type="checkbox" id="sl-chord-diagram-toggle"> 显示全曲和弦指型图
       </label>
-      <div class="gp-chord-diagram-box" id="sl-chord-diagram-box" style="display:none"></div>
+      <div class="gp-chord-diagram-box hidden" id="sl-chord-diagram-box"></div>
     </div>
 
     <!-- bar grid -->
@@ -651,8 +754,8 @@
 
   <div class="pl-toolbar">
     <select id="pl-key-select" onchange="plOnKeyChange()"></select>
-    <label>BPM <input type="number" id="pl-bpm-input" min="20" max="300" step="1" style="width:72px;" onchange="plOnBpmChange()"></label>
-    <label>每小节拍数 <input type="number" id="pl-beats-per-bar-input" min="1" max="12" step="1" style="width:56px;" onchange="plOnBeatsPerBarChange()"></label>
+    <label>BPM <input type="number" id="pl-bpm-input" min="20" max="300" step="1" class="w-[72px]!" onchange="plOnBpmChange()"></label>
+    <label>每小节拍数 <input type="number" id="pl-beats-per-bar-input" min="1" max="12" step="1" class="w-[56px]!" onchange="plOnBeatsPerBarChange()"></label>
     <input type="text" id="pl-roman-input" placeholder="输入级数序列，例如 ii7 V7 | Imaj7 |"
            onkeydown="if(event.key==='Enter') plAddFromInput()">
     <button class="btn btn-primary btn-sm" onclick="plAddFromInput()">＋ 生成示例</button>
@@ -713,7 +816,7 @@
     <span id="status-sf"></span>
   </div>
 
-  <input type="file" id="sl-sidecar-input" accept=".json,application/json" style="display:none">
+  <input type="file" id="sl-sidecar-input" accept=".json,application/json" class="hidden">
 
 <!-- modal (song title, and chord entry from the chart's right-click menu) -->
 <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
@@ -732,10 +835,10 @@
      existing one; either way, a Markdown link gets inserted into the Lick
      notes textarea above, which must already be open). -->
 <div id="material-picker-modal" class="modal-overlay" onclick="if(event.target===this)closeMaterialPicker()">
-  <div class="modal" style="width:420px">
+  <div class="modal w-[420px]!">
     <h3 class="modal-subtitle">Attach Material</h3>
     <div class="material-picker-upload-row">
-      <input type="file" id="material-upload-input" accept=".pdf,audio/*" style="display:none" onchange="materialUploadAndInsert(this)">
+      <input type="file" id="material-upload-input" accept=".pdf,audio/*" class="hidden" onchange="materialUploadAndInsert(this)">
       <button type="button" class="btn btn-primary btn-sm" onclick="document.getElementById('material-upload-input').click()">⬆️ Upload new</button>
       <span id="material-upload-status" class="lick-edit-image-status"></span>
     </div>
@@ -751,7 +854,7 @@
      picked one directly via slLoadFromUrl, same entry point Licks' "🎧
      Practice with Song Loop" button uses. -->
 <div id="sl-library-modal" class="modal-overlay">
-  <div class="modal" style="width:420px">
+  <div class="modal w-[420px]!">
     <h3 class="modal-subtitle">从资料库选择</h3>
     <div id="sl-library-list" class="material-picker-list"></div>
     <div class="modal-actions">
@@ -795,7 +898,7 @@
   <div class="agent-input-row">
     <textarea id="agent-input" class="agent-input" placeholder="问问题…⌘/Ctrl+Enter 发送"></textarea>
     <div class="agent-input-actions">
-      <button type="button" class="btn btn-ghost btn-sm" id="agent-cancel-btn" onclick="agentCancel()" style="display:none">■ 取消</button>
+      <button type="button" class="btn btn-ghost btn-sm hidden" id="agent-cancel-btn" onclick="agentCancel()">■ 取消</button>
       <button type="button" class="btn btn-primary btn-sm" id="agent-send-btn" onclick="agentSend()">发送</button>
     </div>
   </div>

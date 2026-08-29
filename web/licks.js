@@ -1367,6 +1367,11 @@ async function practiceLick(id) {
   stState.startBpm = bpm;
   stState.currentBpm = bpm;
   stApplyStateToUI();
+  // stApplyStateToUI only syncs the option inputs (start/target/step/...) —
+  // the big current-BPM box is written by stUpdateDisplay(), whose last call
+  // inside initSpeedPage() ran *before* the override above, so without this
+  // it would keep showing the stale global tempo until Start is pressed.
+  stUpdateDisplay();
   stPrefsSave();
   if (typeof ptSetContext === 'function') ptSetContext({ lickId: id, lickTitle: title });
   // Seed the timer's metronome-link toggle from this lick's own remembered

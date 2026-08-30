@@ -183,14 +183,9 @@ function fbRenderDeviceBar() {
     <span>Input device:</span>
     <select class="fb-device-select" onchange="fbMicDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
     ${fbOutputDeviceSelectHtml()}
-    <span class="ml-3">🔊 Volume:</span>
-    <input type="range" class="fb-master-volume-slider" min="0" max="1" step="0.01" value="${fbMasterVolume}"
-      class="w-[100px]" oninput="fbMasterVolumeChange(this.value)"
-      title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">
   `;
-  // Push the loaded value into every master-volume slider — the device bar's
-  // own slider above renders with it baked in, but the transport pill's
-  // slider is static markup (index.html) and needs the value set here.
+  // The one master-volume slider lives in the transport pill now (static
+  // markup in index.html) — push the loaded value into it here.
   document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
   fbRefreshOutputDevices();
 }

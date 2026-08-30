@@ -857,8 +857,8 @@
      not just ones with a registered transport). app.js fills
      #transport-body; practice-timer.js fills #pt-row. The volume slider is
      static markup so transport re-renders never recreate it mid-drag; its
-     fb-master-volume-slider class keeps it in sync with the device bar's
-     slider (fretboard.js fbMasterVolumeChange). -->
+     value is seeded from localStorage at startup and persisted on change
+     (fretboard.js fbRenderDeviceBar / fbMasterVolumeChange). -->
 <div id="transport-pill" class="transport-pill">
   <div class="transport-row">
     <span class="transport-grip" id="transport-grip" title="拖动到任意位置（双击复位）">⠿</span>
@@ -866,7 +866,7 @@
   </div>
   <div class="transport-row transport-volume-row">
     <span title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">🔊</span>
-    <input type="range" class="fb-master-volume-slider w-[80px]" min="0" max="1" step="0.01" value="1"
+    <input type="range" class="fb-master-volume-slider flex-1 min-w-[120px]" min="0" max="1" step="0.01" value="1"
       oninput="fbMasterVolumeChange(this.value)">
   </div>
   <div class="transport-row pt-row" id="pt-row"></div>

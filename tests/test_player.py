@@ -69,6 +69,19 @@ def test_pause_and_resume(player, tmp_path):
     player.stop()
 
 
+def test_pause_silences_sounding_notes(player, tmp_path):
+    # Sustained notes (a chord holding a whole bar) must be cut on pause,
+    # or they keep ringing and Pause feels like it did nothing.
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(f)
+    time.sleep(0.05)
+    player._fs.cc.reset_mock()
+    player.pause()
+    calls = [c for c in player._fs.cc.call_args_list if c.args[1] == 123]
+    assert len(calls) == 16  # CC123 All Notes Off on every channel
+    player.stop()
+
+
 def test_play_replaces_previous(player, tmp_path):
     f1 = _make_mid(tmp_path / "a.mid", duration_ticks=96000)
     f2 = _make_mid(tmp_path / "b.mid", duration_ticks=96000)

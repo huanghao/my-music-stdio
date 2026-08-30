@@ -231,6 +231,10 @@ class Player:
 
     def pause(self) -> None:
         self._pause_event.clear()
+        # Silence notes that are already sounding — otherwise a sustained
+        # chord (piano holds a whole bar, ambient pads hold several) keeps
+        # ringing through the pause and Pause feels like it did nothing.
+        self._all_notes_off()
         with self._lock:
             self._paused_at = _time.monotonic()
 

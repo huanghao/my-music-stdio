@@ -690,24 +690,15 @@ function renderVampControls() {
         </div>
         <div class="field"><label>BPM</label>
           <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
-            oninput="state.vamp.bpm=parseInt(this.value)||120; syncFromDuration('vamp'); liveSetBpm(this.value); saveLastSelection()">
+            oninput="state.vamp.bpm=parseInt(this.value)||120; liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" class="w-[60px]!"
-            oninput="state.vamp.loops=parseInt(this.value)||1; syncFromLoops('vamp'); saveLastSelection()">
-        </div>
-        <div class="field"><label>Duration</label>
-          <input type="number" id="vamp-dur-min" value="5.0" min="0.5" max="120" step="0.5" class="w-[68px]!"
-            oninput="syncFromDuration('vamp'); state.vamp.loops=getLoops('vamp'); saveLastSelection()">
-          <span class="duration-hint">min</span>
+            oninput="state.vamp.loops=parseInt(this.value)||1; saveLastSelection()">
         </div>
       </div>
     </div>
   `;
-  // Duration-as-source-of-truth would clobber a restored `state.vamp.loops`
-  // with whatever the hardcoded "5.0" duration default computes to — use
-  // loops-as-source-of-truth instead, same as Jam/Editor controls do.
-  syncFromLoops('vamp');
 }
 
 // 4/4 = 4 bars per phrase
@@ -772,21 +763,15 @@ function renderJamControls() {
         </div>
         <div class="field"><label>BPM</label>
           <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240"
-            oninput="state.jam.bpm=parseInt(this.value)||120; syncFromDuration('jam'); liveSetBpm(this.value); saveLastSelection()">
+            oninput="state.jam.bpm=parseInt(this.value)||120; liveSetBpm(this.value); saveLastSelection()">
         </div>
         <div class="field"><label>Loops</label>
           <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" class="w-[60px]!"
-            oninput="state.jam.loops=parseInt(this.value)||1; syncFromLoops('jam'); saveLastSelection()">
-        </div>
-        <div class="field"><label>Duration</label>
-          <input type="number" id="jam-dur-min" value="3.0" min="0.5" max="120" step="0.5" class="w-[68px]!"
-            oninput="syncFromDuration('jam'); state.jam.loops=getLoops('jam'); saveLastSelection()">
-          <span class="duration-hint">min</span>
+            oninput="state.jam.loops=parseInt(this.value)||1; saveLastSelection()">
         </div>
       </div>
     </div>
   `;
-  syncFromLoops('jam');
 }
 
 function applyStyle(styleId, context) {
@@ -801,47 +786,19 @@ function applyStyle(styleId, context) {
     const keyEl = document.getElementById('jam-key');
     if (bpmEl) bpmEl.value = s.bpm_default;
     if (keyEl) keyEl.value = s.default_key;
-    updateJamDuration();
     renderJamChart();
     saveLastSelection();
   }
 }
 
-// ── Loops / Duration shared helpers ──
-
-function secPerLoop(prefix) {
-  const bpmId = { jam: 'jam-bpm', vamp: 'vamp-bpm' }[prefix] || `${prefix}-bpm`;
-  const bpm = parseInt(document.getElementById(bpmId)?.value) || 120;
-  let bars;
-  if (prefix === 'vamp') bars = 1;
-  else bars = state.jam.bars.length;
-  return Math.max(1, bars) * 4 * 60 / bpm;
-}
-
-function syncFromLoops(prefix) {
-  const loops = parseInt(document.getElementById(`${prefix}-loops`)?.value) || 1;
-  const sec = Math.round(loops * secPerLoop(prefix));
-  const durEl = document.getElementById(`${prefix}-dur-min`);
-  if (durEl) durEl.value = (sec / 60).toFixed(1);
-}
-
-function syncFromDuration(prefix) {
-  const min = parseFloat(document.getElementById(`${prefix}-dur-min`)?.value) || 1;
-  const spl = secPerLoop(prefix);
-  const loops = Math.max(1, Math.round((min * 60) / spl));
-  const loopsEl = document.getElementById(`${prefix}-loops`);
-  if (loopsEl) loopsEl.value = loops;
-}
+// ── Loops helper ──
 
 function getLoops(prefix) {
   return parseInt(document.getElementById(`${prefix}-loops`)?.value) || 1;
 }
 
-function updateJamDuration() { syncFromLoops('jam'); }
-function updateEditorDuration() { syncFromLoops('ed'); }
-
 function renderJamChart() {
-  const rerender = () => { renderJamChart(); updateJamDuration(); saveLastSelection(); };
+  const rerender = () => { renderJamChart(); saveLastSelection(); };
   const h = makeChordHandlers(() => state.jam.bars, rerender);
   renderChart(document.getElementById('jam-chart'), state.jam.bars,
     h.onChordClick, h.onChordCtx, h.onBarCtx, h.onAddBar, h.onDeleteChord, rerender);
@@ -890,9 +847,13 @@ function renderTransportBar() {
   // timer, which works on every page) — an unregistered transport just
   // means this row renders empty, not that the whole pill hides.
   if (!_transport) { bodyEl.innerHTML = ''; return; }
-  // Button order is fixed so the bar doesn't jump on state changes: the
-  // primary slot (Play ↔ Stop) always comes first and never moves; the
-  // Pause/Resume secondary and the progress text trail behind it.
+  // Button slots are fixed so the bar never changes width on state changes:
+  // the primary slot (Play ↔ Stop) always comes first and never moves; a
+  // pause-capable transport always renders the secondary slot too — as an
+  // invisible placeholder while stopped — so Pause appearing can't shift the
+  // progress text; both buttons have min-widths so Pause/Resume swap without
+  // resizing. Progress text likewise stays mounted (visibility-hidden when
+  // there's nothing to show) to keep the row's width constant.
   let primary, secondary = '';
   if (_transport.kind === 'listen') {
     primary = _transportState === 'listening'
@@ -900,18 +861,21 @@ function renderTransportBar() {
       : `<button class="btn btn-listen transport-primary" onclick="transportPlay()">Start Listening</button>`;
   } else if (_transportState === 'playing') {
     primary = `<button class="btn btn-stop transport-primary" onclick="transportStop()">Stop</button>`;
-    secondary = _transport.pause ? `<button class="btn btn-ghost" onclick="transportPause()">⏸ Pause</button>` : '';
+    if (_transport.pause) secondary = `<button class="btn btn-ghost transport-secondary" onclick="transportPause()">⏸ Pause</button>`;
   } else if (_transportState === 'paused') {
     primary = `<button class="btn btn-stop transport-primary" onclick="transportStop()">Stop</button>`;
-    secondary = `<button class="btn btn-play" onclick="transportResume()">Resume</button>`;
+    secondary = `<button class="btn btn-play transport-secondary" onclick="transportResume()">Resume</button>`;
   } else {
     primary = `<button class="btn btn-play transport-primary" onclick="transportPlay()">Play</button>`;
+    if (_transport.kind === 'playback' && _transport.pause) {
+      secondary = '<button class="btn btn-ghost transport-secondary invisible" tabindex="-1">⏸ Pause</button>';
+    }
   }
   const label = _transport.label ? `<span class="transport-label">${htmlEsc(_transport.label)}</span>` : '';
-  // Playback progress (elapsed + loop) lives here — the single time display
-  // for playback, filled by startPolling; per-page playback panels are gone.
+  // Loop counter lives here — filled by startPolling. The practice timer's
+  // countdown (row below) is the one time display; no separate elapsed clock.
   const progress = _transport.kind === 'playback'
-    ? '<span class="transport-progress hidden" id="transport-progress"></span>' : '';
+    ? '<span class="transport-progress invisible" id="transport-progress"></span>' : '';
   bodyEl.innerHTML = `${label}<span class="transport-actions">${primary}${secondary}</span>${progress}`;
   transportApplyPos(); // content width just changed — re-clamp so it can't drift off-screen
 }
@@ -1023,14 +987,9 @@ function setPlaybackUI(prefix, state_) {
 
   if (state_ === 'stopped') {
     const progress = document.getElementById('transport-progress');
-    if (progress) { progress.textContent = ''; progress.classList.add('hidden'); }
+    if (progress) { progress.textContent = ''; progress.classList.add('invisible'); }
     clearBarHighlight();
   }
-}
-
-function fmt(sec) {
-  const s = Math.floor(sec);
-  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
 }
 
 function clearBarHighlight() {
@@ -1062,17 +1021,15 @@ function startPolling(prefix) {
         return;
       }
 
-      // playback progress in the floating transport bar — the single time
-      // display (elapsed freezes server-side while paused, so keep showing it)
+      // loop counter in the floating transport bar (the pill's countdown row
+      // is the time display; keep it visible while paused too)
       const progress = document.getElementById('transport-progress');
       if (progress) {
-        if (s.elapsed_sec != null) {
-          let text = fmt(s.elapsed_sec);
-          if (s.loops) text += ` · loop ${s.current_loop} / ${s.loops}`;
-          progress.textContent = text;
-          progress.classList.remove('hidden');
+        if (s.elapsed_sec != null && s.loops) {
+          progress.textContent = `loop ${s.current_loop} / ${s.loops}`;
+          progress.classList.remove('invisible');
         } else {
-          progress.classList.add('hidden');
+          progress.classList.add('invisible');
         }
       }
 

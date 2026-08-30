@@ -105,12 +105,17 @@ body {
 .transport-grip { color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 2px; }
 .transport-body { display: flex; align-items: center; gap: 10px; }
 .transport-label { font-size: 12.5px; color: var(--text-dim); font-weight: 500; }
-/* Playback elapsed + loop counter in the transport bar (filled by startPolling) */
-.transport-progress { font-size: 12.5px; font-family: monospace; color: var(--text); letter-spacing: 0.5px; white-space: nowrap; }
+/* Loop counter in the transport bar (filled by startPolling); min-width so
+   its width doesn't vary with the digit count */
+.transport-progress { font-size: 12.5px; font-family: monospace; color: var(--text); letter-spacing: 0.5px; white-space: nowrap; min-width: 84px; display: inline-block; }
 .transport-actions { display: flex; align-items: center; gap: 8px; cursor: auto; }
 /* Keep the primary button's footprint identical across Play/Stop so its
    position never shifts when playback starts/stops */
 .transport-primary { min-width: 64px; }
+/* Same for Pause ↔ Resume — different-length labels, identical footprint.
+   The slot stays mounted (invisible) even while stopped so its appearance
+   can't widen the bar mid-session */
+.transport-secondary { min-width: 86px; }
 
 /* Master volume row (second row of the panel) — static markup in index.html;
    cursor:auto so the slider doesn't show the pill's grab cursor */
@@ -165,7 +170,6 @@ input[type="number"] { width: 64px; text-align: center; }
   display: flex; align-items: center; gap: 10px;
 }
 .controls-row + .controls-row { margin-top: 8px; border-top: 1px solid var(--bg-faint); padding-top: 8px; }
-.duration-hint { font-size: 12px; color: var(--primary-lt); white-space: nowrap; }
 
 /* Vamp phrase grid */
 .vamp-phrase {

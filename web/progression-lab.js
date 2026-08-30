@@ -495,7 +495,6 @@ function plSendToJam(id) {
   const keyEl = document.getElementById('jam-key');
   if (bpmEl) bpmEl.value = plState.bpm;
   if (keyEl) keyEl.value = plState.key;
-  updateJamDuration();
   renderJamChart();
   saveLastSelection();
   showPage('jam');

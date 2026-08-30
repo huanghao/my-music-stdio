@@ -92,23 +92,32 @@ class Player:
             messages.append((tick, msg))
 
         first_note = True
+        # Drift-free scheduling: accumulate musical time and sleep to an absolute
+        # deadline anchored at t0, instead of re-anchoring every message (which
+        # adds per-message dispatch overhead to every gap and lags the audio
+        # behind the wall clock the UI uses to track bar position).
+        t0 = _time.monotonic()
+        musical_sec = 0.0
         for i, (abs_tick, msg) in enumerate(messages):
             # --- sleep for delta ticks using current BPM ---
             if i > 0:
                 delta_ticks = abs_tick - messages[i - 1][0]
                 if delta_ticks > 0:
-                    # split sleep into small chunks so BPM changes take effect quickly
                     with self._lock:
                         bpm = self._bpm
-                    sec_per_tick = 60.0 / (bpm * ppq)
-                    sleep_sec = delta_ticks * sec_per_tick
-                    deadline = _time.monotonic() + sleep_sec
+                        paused_acc = self._total_paused
+                    musical_sec += delta_ticks * (60.0 / (bpm * ppq))
+                    deadline = t0 + musical_sec + paused_acc
+                    # split sleep into small chunks so pause/stop stay responsive
                     chunk = 0.02  # 20ms chunks
-                    while _time.monotonic() < deadline:
+                    while True:
                         self._pause_event.wait()
                         if self._stop_event.is_set():
                             break
-                        _time.sleep(max(0.0, min(chunk, deadline - _time.monotonic())))
+                        remaining = deadline - _time.monotonic()
+                        if remaining <= 0:
+                            break
+                        _time.sleep(min(chunk, remaining))
                     if self._stop_event.is_set():
                         break
 
@@ -170,6 +179,14 @@ class Player:
             self._bpm = max(20.0, min(300.0, float(bpm)))
             if self._session_meta:
                 self._session_meta["bpm"] = self._bpm
+                # duration_sec feeds the UI's bar-position math; keep it in
+                # sync with the live tempo or the bar highlight drifts.
+                bars = self._session_meta.get("bars")
+                loops = self._session_meta.get("loops")
+                if bars and loops:
+                    self._session_meta["duration_sec"] = round(
+                        bars * loops * 4 * 60.0 / self._bpm, 2
+                    )
 
     def play(
         self,

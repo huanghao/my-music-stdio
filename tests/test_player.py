@@ -140,3 +140,20 @@ def test_set_bpm_updates_session_metadata(player, tmp_path):
 
     assert player.status()["bpm"] == 144
     player.stop()
+
+
+def test_set_bpm_recomputes_duration_sec(player, tmp_path):
+    # duration_sec feeds the UI's bar-highlight math; a live tempo change
+    # must rescale it or the highlight drifts from the audio.
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(
+        f,
+        bpm=120,
+        session_meta={"duration_sec": 16, "loops": 2, "bars": 4, "bpm": 120},
+    )
+    time.sleep(0.05)
+
+    player.set_bpm(240)  # twice as fast → half the duration
+
+    assert player.status()["duration_sec"] == 8
+    player.stop()

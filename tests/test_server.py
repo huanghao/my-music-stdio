@@ -170,7 +170,7 @@ def test_create_and_list_lick(client):
 
     r = client.get("/api/licks")
     assert r.status_code == 200
-    ids = [l["id"] for l in r.json()]
+    ids = [lick["id"] for lick in r.json()]
     assert lick_id in ids
 
 
@@ -249,7 +249,7 @@ def test_update_lick_bpm_saves_live_practice_tempo_separately_from_sessions(clie
 def test_update_lick_bpm_shows_up_in_list_summary(client):
     lick_id = client.post("/api/licks", json={"title": "L"}).json()["id"]
     client.post(f"/api/licks/{lick_id}/bpm", json={"bpm": 88})
-    listed = next(l for l in client.get("/api/licks").json() if l["id"] == lick_id)
+    listed = next(lick for lick in client.get("/api/licks").json() if lick["id"] == lick_id)
     assert listed["last_practiced_bpm"] == 88
 
 

@@ -929,8 +929,8 @@ function fbCidRenderCandidates() {
     : placing ? `将加入第 ${s.pending.lineIdx + 1} 行第 ${s.pending.mi + 1} 小节 — 点指板后点"加入到此处"`
     : '';
   addBtn.textContent = editingSlot ? '✔ 更新' : placing ? '✔ 加入到此处' : '+ 加入进行';
-  cancelBtn.style.display = s.pending ? '' : 'none';
-  removeBtn.style.display = editingSlot ? '' : 'none';
+  cancelBtn.classList.toggle('hidden', !s.pending);
+  removeBtn.classList.toggle('hidden', !editingSlot);
 
   const { pcSet, bassPc } = fbCidPitchClasses(s.input);
   s._lastBassPc = bassPc;
@@ -1336,7 +1336,7 @@ function fbCidAgentContext() {
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity,
+    fbCidPitchClasses, fbCidCandidates, fbCidMissingLabels, fbCidComputeAmbiguity, fbCidCandidateNote,
     fbCidMakeEmptyMeasure, fbCidChordsOfLine, fbCidCanPlaceSpan,
     fbCidInferKey, fbCidScoreKey, fbCidScoreChordInKey,
     fbCidRepresentativeChord, fbCidResolveProgression,

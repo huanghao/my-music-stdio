@@ -212,7 +212,11 @@ if (typeof marked !== 'undefined') {
         // the timestamp-prefixed on-disk filename, not the clean original.
         if (isAudio) return link + licksAudioEmbedHtml(href, text.replace(/<[^>]*>/g, ''));
 
-        const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : '';
+        // width, not max-width: .lick-video-embed's default box is a fixed
+        // 480px (see style.css), so a max-width override can only ever
+        // shrink it — a saved size from dragging wider than 480 would be a
+        // silent no-op on the next render/reload.
+        const styleAttr = dir.w ? ` style="width:${dir.w}px"` : '';
         const embedSrc = ytId
           ? `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1`
           : bili.bvid

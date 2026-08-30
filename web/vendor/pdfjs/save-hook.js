@@ -18,14 +18,13 @@
 // pdf.js remembers the last-viewed page/scroll/zoom per PDF (ViewHistory,
 // keyed by the file's content fingerprint) in localStorage — shared across
 // *every* same-origin iframe showing that file, not just tabs. That's
-// invisible with one viewer open, but it means our own #page=N in the src
-// URL gets silently overridden by whatever page some OTHER iframe of the
-// same file last landed on — exactly what happens with a dual-page view's
-// two panes, which are two iframes of the identical file by construction.
+// invisible with one viewer open, but it means our own #page=N in the src URL
+// gets silently overridden by whatever page some OTHER iframe of the same file
+// last landed on.
 // AppOptions.set is synchronous and runs here before webViewerLoad's own
 // DOMContentLoaded-time setup reads it, so this reliably wins for every
-// embed (single or dual) — #page=N in the URL is always authoritative,
-// never silently resumed from a stale shared position.
+// embed — #page=N in the URL is always authoritative, never silently resumed
+// from a stale shared position.
 window.PDFViewerApplicationOptions?.set('viewOnLoad', 1); // ViewOnLoad.INITIAL (see viewer.mjs)
 
 const materialId = new URLSearchParams(location.search).get('saveMaterialId');
@@ -55,8 +54,7 @@ if (materialId) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         showBanner('已保存标注，可以安全刷新/离开', { autoHideMs: 2500 });
-        // Any other iframe showing this same file (a dual-page-view companion,
-        // or just another independent embed of it elsewhere in the note) now
+        // Any other iframe showing this same file elsewhere in the note now
         // has stale bytes in memory — same-origin, so a direct call up through
         // the embedding page beats round-tripping postMessage. Optional
         // chaining: a no-op when opened standalone (no such parent function).
@@ -66,25 +64,6 @@ if (materialId) {
         showBanner('保存标注失败，请勿刷新，重新点击保存：' + e.message, { isError: true });
       }
     };
-  });
-}
-
-// Read-only mode (?readonly=1): the passive companion pane of a dual-page
-// view (see licksSetupDualPdfSync in licks.js) — a view-only mirror of
-// whatever page the editable primary pane is on. Disables annotation editing
-// at the pdfViewer level, not just the toolbar buttons — AnnotationEditorType
-// .DISABLE blocks every entry point (keyboard shortcuts included), and the
-// buttons are hidden too so nothing on screen invites a click that won't do
-// anything.
-if (new URLSearchParams(location.search).get('readonly') === '1') {
-  window.addEventListener('load', async () => {
-    const app = window.PDFViewerApplication;
-    await app.initializedPromise;
-    const DISABLE = window.pdfjsLib?.AnnotationEditorType?.DISABLE ?? -1;
-    try { app.pdfViewer.annotationEditorMode = { mode: DISABLE }; } catch (_) { /* no document yet, or already disabled */ }
-    const style = document.createElement('style');
-    style.textContent = '#editorModeButtons, #editorModeSeparator { display: none !important; }';
-    document.head.appendChild(style);
   });
 }
 

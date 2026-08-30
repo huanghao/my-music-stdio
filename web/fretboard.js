@@ -393,7 +393,7 @@ function fbPrefsSave() {
 // ── Shared SVG board drawing ──
 
 function fbBuildBoard(numFrets, startFret) {
-  const FRET_W = 78, STRING_H = 42, PAD_L = 58, PAD_T = 26, PAD_R = 26, PAD_B = 34;
+  const FRET_W = 78, STRING_H = 42, PAD_L = 58, PAD_T = 34, PAD_R = 26, PAD_B = 42;
   const width = PAD_L + numFrets * FRET_W + PAD_R;
   const height = PAD_T + 5 * STRING_H + PAD_B;
   const xFret = i => PAD_L + i * FRET_W;             // i = 0..numFrets (fret line index)
@@ -434,6 +434,21 @@ function fbBuildBoard(numFrets, startFret) {
     return el;
   };
 
+  // 12th-fret (and 24th, same octave-marker rule as the double inlay dot
+  // below) gets a very faint background tint — drawn first so strings/frets/
+  // markers all paint on top of it. It's the one fret every player anchors
+  // on, worth a subtle visual landmark.
+  for (let i = 1; i <= numFrets; i++) {
+    const absFret = startFret + i;
+    if (absFret > 0 && absFret % 12 === 0) {
+      const rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', xFret(i - 1)); rect.setAttribute('y', yString(5));
+      rect.setAttribute('width', xFret(i) - xFret(i - 1)); rect.setAttribute('height', yString(0) - yString(5));
+      rect.setAttribute('class', 'fb-octave-bg');
+      svg.appendChild(rect);
+    }
+  }
+
   // strings (horizontal)
   for (let j = 0; j < 6; j++) {
     line(xFret(0), yString(j), xFret(numFrets), yString(j), 'fb-string');
@@ -446,18 +461,20 @@ function fbBuildBoard(numFrets, startFret) {
   // inlay dots + fret numbers. Standard guitar convention: single dot at
   // 3/5/7/9 (and again an octave up at 15/17/19/21), double dot at the
   // octave marker itself (12, 24, ...) — not every marked fret gets the
-  // same single dot.
+  // same single dot. Both are pushed further from the string rows than
+  // their own size would need, so a note marker (r=15) sitting on the top
+  // or bottom string doesn't cover them.
   const SINGLE_DOT_FRET_MODS = [3, 5, 7, 9];
   for (let i = 1; i <= numFrets; i++) {
     const absFret = startFret + i;
     const cx = (xFret(i - 1) + xFret(i)) / 2;
     if (absFret > 0 && absFret % 12 === 0) {
-      circle(cx, yString(0) + 16 - 6, 4, 'fb-inlay');
-      circle(cx, yString(0) + 16 + 6, 4, 'fb-inlay');
+      circle(cx, yString(0) + 26 - 6, 4, 'fb-inlay');
+      circle(cx, yString(0) + 26 + 6, 4, 'fb-inlay');
     } else if (SINGLE_DOT_FRET_MODS.includes(absFret % 12)) {
-      circle(cx, yString(0) + 16, 4, 'fb-inlay'); // below the visually-bottom row (string index 0, low E)
+      circle(cx, yString(0) + 26, 4, 'fb-inlay'); // below the visually-bottom row (string index 0, low E)
     }
-    text(cx, yString(5) - 10, String(absFret), 'fb-fret-num'); // above the top (high e) row
+    text(cx, yString(5) - 20, String(absFret), 'fb-fret-num'); // above the top (high e) row
   }
   if (startFret > 0) {
     text(xFret(0) - 14, (yString(0) + yString(5)) / 2, startFret + 'fr', 'fb-fret-num', 'end');

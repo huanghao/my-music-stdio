@@ -76,6 +76,7 @@
   --fb-quiz:   #c0503f;  /* quiz marker red */
   --fb-shape:  #cfd8c8;  /* caged-shape / ear-drill dot fill */
   --fb-chroma: #b8c8b8;  /* chroma "chord tone" bar */
+  --fb-octave-bg: #f5f0e0;  /* very faint tint on the 12th/24th-fret column */
 
   /* song loop */
   --sl-teal:    #2f6f68;  /* loop checkbox accent */

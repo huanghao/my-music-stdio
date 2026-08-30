@@ -429,6 +429,7 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Override the .fb-board padding so the SVG fills the card properly. */
 .fb-svguitar-box { width: 100%; margin: 0 auto; padding: 4px !important; }
 .fb-svguitar-box svg { width: 100%; height: auto; display: block; }
+.fb-octave-bg { fill: var(--fb-octave-bg); }
 .fb-string { stroke: var(--fb-string); stroke-width: 2; }
 .fb-fretline { stroke: var(--text-faint); stroke-width: 2; }
 .fb-nut { stroke: var(--fb-nut); stroke-width: 5; }

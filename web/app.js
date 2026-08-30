@@ -905,7 +905,11 @@ function renderTransportBar() {
     btns = `<button class="btn btn-play" onclick="transportPlay()">Play</button>`;
   }
   const label = _transport.label ? `<span class="transport-label">${htmlEsc(_transport.label)}</span>` : '';
-  bodyEl.innerHTML = `${label}<span class="transport-actions">${btns}</span>`;
+  // Playback progress (elapsed + loop) lives here — the single time display
+  // for playback, filled by startPolling; per-page playback panels are gone.
+  const progress = _transport.kind === 'playback'
+    ? '<span class="transport-progress hidden" id="transport-progress"></span>' : '';
+  bodyEl.innerHTML = `${label}${progress}<span class="transport-actions">${btns}</span>`;
   transportApplyPos(); // content width just changed — re-clamp so it can't drift off-screen
 }
 
@@ -1008,22 +1012,14 @@ function updateTransportForPage(name) {
 }
 
 function setPlaybackUI(prefix, state_) {
-  // The transport buttons themselves now live in the shared bottom bar; mirror
-  // the state to it (this prefix is always the active page's, hence the active
-  // transport).
+  // The transport buttons and the playback progress display both live in the
+  // shared floating bar; mirror the state to it (this prefix is always the
+  // active page's, hence the active transport).
   setTransportState(state_);
 
-  // playback panel state
-  const panel = document.getElementById(`${prefix}-playback`);
-  const stateEl = document.getElementById(`${prefix}-state`);
-  if (panel) panel.className = 'playback-panel' + (state_ === 'playing' ? ' playing' : '');
-  if (stateEl) { stateEl.textContent = state_; stateEl.className = 'playback-state ' + state_; }
-
   if (state_ === 'stopped') {
-    const elapsed = document.getElementById(`${prefix}-elapsed`);
-    const loopVal = document.getElementById(`${prefix}-loop-val`);
-    if (elapsed) elapsed.textContent = '—';
-    if (loopVal) loopVal.textContent = '—';
+    const progress = document.getElementById('transport-progress');
+    if (progress) { progress.textContent = ''; progress.classList.add('hidden'); }
     clearBarHighlight();
   }
 }
@@ -1050,7 +1046,6 @@ function highlightBar(barIndex) {
 
 function startPolling(prefix) {
   stopPolling();
-  const panelPrefix = prefix;
   let failCount = 0;
   state.playback.polling = setInterval(async () => {
     try {
@@ -1063,18 +1058,21 @@ function startPolling(prefix) {
         return;
       }
 
-      const elapsed = document.getElementById(`${panelPrefix}-elapsed`);
-      const loopVal = document.getElementById(`${panelPrefix}-loop-val`);
-      const stateEl = document.getElementById(`${panelPrefix}-state`);
-
-      if (s.paused) {
-        if (stateEl) { stateEl.textContent = 'paused'; stateEl.className = 'playback-state paused'; }
-        return;
+      // playback progress in the floating transport bar — the single time
+      // display (elapsed freezes server-side while paused, so keep showing it)
+      const progress = document.getElementById('transport-progress');
+      if (progress) {
+        if (s.elapsed_sec != null) {
+          let text = fmt(s.elapsed_sec);
+          if (s.loops) text += ` · loop ${s.current_loop} / ${s.loops}`;
+          progress.textContent = text;
+          progress.classList.remove('hidden');
+        } else {
+          progress.classList.add('hidden');
+        }
       }
 
-      if (elapsed) elapsed.textContent = fmt(s.elapsed_sec || 0);
-      if (loopVal && s.loops) loopVal.textContent = `${s.current_loop} / ${s.loops}`;
-      if (stateEl) { stateEl.textContent = 'playing'; stateEl.className = 'playback-state playing'; }
+      if (s.paused) return;
 
       // highlight current bar (chord chart) or phrase cell (vamp)
       if (s.elapsed_sec != null && s.duration_sec && s.bars && s.loops) {

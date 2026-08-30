@@ -105,6 +105,8 @@ body {
 .transport-grip { color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 2px; }
 .transport-body { display: flex; align-items: center; gap: 10px; }
 .transport-label { font-size: 12.5px; color: var(--text-dim); font-weight: 500; }
+/* Playback elapsed + loop counter in the transport bar (filled by startPolling) */
+.transport-progress { font-size: 12.5px; font-family: monospace; color: var(--text); letter-spacing: 0.5px; white-space: nowrap; }
 .transport-actions { display: flex; align-items: center; gap: 8px; cursor: auto; }
 
 /* Practice timer row (bottom row of the panel above) — see
@@ -157,27 +159,6 @@ input[type="number"] { width: 64px; text-align: center; }
 }
 .controls-row + .controls-row { margin-top: 8px; border-top: 1px solid var(--bg-faint); padding-top: 8px; }
 .duration-hint { font-size: 12px; color: var(--primary-lt); white-space: nowrap; }
-
-/* Playback progress panel */
-.playback-panel {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 20px; display: flex; align-items: center; max-width: 480px;
-  gap: 32px; margin-bottom: 16px; min-height: 56px;
-}
-.playback-panel.playing { border-color: var(--primary-lt); }
-.playback-elapsed {
-  font-size: 28px; font-weight: 600; font-family: monospace;
-  color: var(--text); min-width: 72px; letter-spacing: 1px;
-}
-.playback-meta { display: flex; flex-direction: column; align-items: center; }
-.playback-meta-val { font-size: 22px; font-weight: 600; color: var(--text); line-height: 1; }
-.playback-meta-lbl { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
-.playback-state {
-  font-size: 11px; color: var(--text-faint); text-transform: uppercase;
-  letter-spacing: 0.8px; margin-left: auto;
-}
-.playback-state.playing { color: var(--primary); }
-.playback-state.paused  { color: var(--warn); }
 
 /* Vamp phrase grid */
 .vamp-phrase {

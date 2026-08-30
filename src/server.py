@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 
 import src.prefs as prefs
+import src.audio_devices as audio_devices
 from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
@@ -52,6 +53,9 @@ class AccompanimentBody(BaseModel):
     bars: list[BarEntry] = Field(default_factory=list)
     fill_every: int = Field(default=4, ge=1, le=32)
     volume: float = Field(default=1.0, ge=0.0, le=1.0)
+    # CoreAudio output device name from the web UI's output-device picker
+    # (browser deviceIds don't map to CoreAudio, but labels do); None = system default.
+    output_device: Optional[str] = None
     id: Optional[str] = None
 
 
@@ -259,7 +263,13 @@ def api_play(accompaniment: AccompanimentBody):
     p = prefs.load()
     soundfont = str(Path(p["soundfont_path"]).expanduser())
 
-    progression = [chord.name for bar in accompaniment.bars for chord in bar.chords]
+    # Empty bars (chords=[] — e.g. a trailing "+ Add Bar" cell the user never
+    # filled in, persisted in their saved selection) contribute nothing to the
+    # generated MIDI; they must not count toward bars_per_loop either, or the
+    # UI's bar-highlight math (duration_sec / bars / loops) drifts one bar per
+    # loop behind the audio.
+    sounding_bars = [bar for bar in accompaniment.bars if bar.chords]
+    progression = [chord.name for bar in sounding_bars for chord in bar.chords]
 
     if not progression:
         raise HTTPException(status_code=400, detail="No chords in song")
@@ -286,7 +296,7 @@ def api_play(accompaniment: AccompanimentBody):
     mid.save(midi_path)
 
     # compute total duration
-    bars_per_loop = len(accompaniment.bars)
+    bars_per_loop = len(sounding_bars)
     sec_per_bar = 4 * 60 / bpm
     duration_sec = round(bars_per_loop * loops * sec_per_bar, 2)
 
@@ -296,8 +306,9 @@ def api_play(accompaniment: AccompanimentBody):
         "bars": bars_per_loop,
         "bpm": bpm,
     }
-    logger.info("play: %s bars, bpm=%s, style=%s, loops=%s → %s", len(accompaniment.bars), bpm, style, loops, midi_path)
+    logger.info("play: %s bars, bpm=%s, style=%s, loops=%s → %s", bars_per_loop, bpm, style, loops, midi_path)
     _player.set_soundfont(soundfont)
+    _player.set_output_device(audio_devices.resolve_output_device(accompaniment.output_device))
     _player.set_volume(accompaniment.volume)
     _player.play(midi_path, bpm=bpm, session_meta=session_meta)
 

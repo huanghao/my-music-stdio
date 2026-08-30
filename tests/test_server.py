@@ -137,6 +137,26 @@ def test_play_empty_bars_returns_400(client):
     assert "No chords" in r.json()["detail"]
 
 
+def test_play_ignores_empty_bars_in_duration(client):
+    """A trailing empty bar (chords=[]) generates no MIDI bars, so it must not
+    count toward duration_sec either — otherwise the UI's bar-highlight math
+    (duration / bars / loops) drifts one bar per loop behind the audio."""
+    r = client.post("/api/play", json={
+        "bars": [
+            {"chords": [{"name": "C", "beats": 4}]},
+            {"chords": [{"name": "G", "beats": 4}]},
+            {"chords": []},  # trailing "+ Add Bar" cell never filled in
+        ],
+        "bpm": 120, "style": "pop", "loops": 2,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["loops"] == 2
+    # 2 sounding bars * 2 loops * 2s/bar at 120bpm — not 3 bars
+    assert body["duration_sec"] == 8.0
+    client.post("/api/stop")
+
+
 def test_play_bpm_validated(client):
     """POST /api/play also validates bpm through AccompanimentBody."""
     r = client.post("/api/play", json={

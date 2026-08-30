@@ -42,6 +42,7 @@
 - [独奏爵士吉他（Chord Melody）全景：门类背景、谱系必知乐手，以及 Joe Pass、Ted Greene 深度介绍](joe-pass-ted-greene-intro.md)：Chord Melody 是什么、为什么存在，从 Django Reinhardt、George Van Eps、Wes Montgomery 到 Martin Taylor 的完整谱系，以及 Joe Pass、Ted Greene 两人的生平、风格、代表作品和教材深度介绍。
 - [Shell Chord（壳和弦）完全指南：从基础到精通](shell-chords-guide.md)：根音+3音+7音三音和弦的理论、指板上的两组基础指型家族、ii-V-I 与全 12 调练习法、进阶到 drop voicing 和 chord melody 的路径，以及推荐练习材料。
 - [《Take the A Train》的历史，以及《猫和老鼠》为什么听起来是这个味儿](take-the-a-train-and-cartoon-jazz.md)：Billy Strayhorn 怎么写出这首曲子、ASCAP/BMI 版权纠纷意外让它成为 Ellington 乐团团歌的经过，以及黄金时代动画配乐（Mickey Mousing、Scott Bradley）为什么天生该用摇摆爵士的语汇。
+- [用《Take the A Train》练 Two-Notes Solo：为什么练这三个调、怎么练](two-notes-solo-practice-take-the-a-train.md)：guide-tone line/两音旋律这套经典即兴入门练法的原理、"先看调性+曲式再补细节"的曲子分析方法、逐和弦拆解 Jens Larsen 实际用的两音组合（含共用音连接的设计思路）、C→G→F 的练习顺序节奏安排，以及库里对应的伴奏 mp3、教材 PDF 和课程字幕原文。
 
 ## 建议阅读顺序
 

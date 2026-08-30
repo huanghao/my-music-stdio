@@ -1,0 +1,135 @@
+Take the A Train — Jens Larsen 课程字幕原文（用户粘贴，自动语音转写，保留原样未做修正）
+来源：与 docs/two-notes-solo-practice-take-the-a-train.md 配套的课程视频字幕
+
+===================================================================
+片段 1：Chapter 2 概述 —— 怎么把音阶练习和曲子连起来
+===================================================================
+
+with this chapter, I think you can really see where this is going and you can also
+see how I'm starting to connect the different exercises to the song and of course
+this is centered around learning a song because that's really the process I want
+to teach you. that's what I want to help you be able to do. it's not so much that
+you have to be able to play the song you have to be able to teach yourself songs
+and figure out how to get through them and how to find the right material and
+figure out how to solo on them, but here so from chapter one, you're still working
+on the scales and the exercises in C major and depending on how far you are with
+that, then you're already working with all of them the scale, the thirds, triads
+and also the diatonic seventh chords and now you can start adding in the F major
+and the G major scale now first just do build it up in the same way you do with
+a C major scale, so just start with a scale then at the thirds and then at in the
+triads and the seventh chords, and I'm pretty sure that everything gets easier
+every time you have to do it for a new scale, so don't start to do it with the F
+and the G major, just take one of them for that, probably the G major is the one
+you need the most. start with that one and then build it there so that you first
+do that one, and then then the thirds in that one, and then the seventh chords,
+and if you do that, then you will find that it's already gonna be easier. it's
+probably already easier when I'm doing G major, and it will be even easier when
+you get to F major and do the same there. that's sort of goes from just getting
+it a little bit in your fingers and in your ears and the positions are anyway
+quite similar. if you're pressed for time, you can of course also work with the
+scales so that you don't do all the scales every day. you could also just say
+I'm going to do C major's day, F major's tomorrow, G major the next day and then
+cycle it like that — that will work as well. but I think in the beginning focus
+on the Cmaj7 so that that gets really comfortable and then start adding the
+exercises in the other scales. the other two topics that I think are essential
+to take away and work on in this chapter are of course learning the melody —
+that can in herself technically be a little bit of a challenge, but I think the
+tempo here is pretty friendly, so it should be quite doable. the last thing is
+to work on soloing with the two-note groups of the two-note melodies that I have
+given you — in fact, yeah, this is of course just playing the exercise, you can
+try and play my solo examples as well, and then spend a lot of time just
+improvising trying to hear phrases that are swinging, that are groovy, and try
+and see what you come up with, and give yourself space to just ease into it. so
+the first few times it can sound mechanical and you just have to think a lot
+about where you are and stuff, but gradually that's going to disappear, and it's
+going to be a lot easier. and of course this will really also be sort of helped
+by you learning the melody at the same time.
+
+===================================================================
+片段 2：两音练习具体音符 —— 每个和弦用哪两个音
+===================================================================
+
+now you're practicing the scales and the arpeggios you can play the chords of the
+song and you're working on the melody and we can start working on also
+improvising on the form. and as I already talked about earlier in this chapter,
+the way we're going to do that is that we're going to really just boil it down to
+the essence of each of the chords and scale it down to just two notes per chord
+so that you don't have to think too much about what notes go where, but that you
+also have time to think about where you are in this song, and you can still
+really work on just playing some interesting melodies with those two notes and
+especially focusing on some interesting rhythms and so forth.
+
+for Cmajor7 I have the third and the fifth, so the E and the G. D is also third
+and fifth, so that means F# and A. for the D I'm actually using the same two
+notes, so that means that I'm kinda seeing that as one thing. and I'm using the
+D in the F — first the D and the F, that's the root and the third on the D minor,
+and for the G that of course becomes the fifth and the seventh. and then I move
+back to Cmajor7, that's still just E and G, and I'm going back to D and F for the
+final G in the first A, so the notes are really close to each other, and that's
+of course important if you want to play melodies that make sense — if it's
+skipping around, it gets very difficult to play some sort of logical or natural
+sounding melody.
+
+in the second A the chords are completely the same except for the last chord,
+which is the C7 that takes us to the Fmajor7 and the bridge, and for the C7 I'm
+using the fifth and the seventh, so the G and the Bb.
+
+in the bridge, on the Fmajor7, I'm essentially using the same as what I'm using
+on the Cmajor7, because I'm using the third, the A, and the fifth, the C, and
+then from there it moves through D7 and Dm7, and here I'm using the same as what
+I'm using in the A part — F# and A for the D7, and D and F for the Dminor7.
+
+the next video will show you how these notes sound if you play them through the
+form, just playing each of them once every bar, and that's of course going to
+give you a starting point of what you can expect to get, what kind of sounds you
+have to work with, and from here you can move on to my solo example, which is
+also only using these two notes for each chord, and start working on playing
+your own solos as well using the backing track or a metronome.
+
+===================================================================
+片段 3：曲子分析 —— key、form、和弦功能
+===================================================================
+
+Take the A Train is a fairly simple song to analyze, as you will see in this
+video. whenever you start analyzing a song or especially something like a
+standard, then it's important that you start with the big picture and then you
+add details while you're zooming in. so the two things you wanna ask yourself
+will probably be: what is the key, and what is the form? so in this case the
+form is a thirty-two bar AABA, and the key is C major. so since we know that
+it's a thirty-two bar AABA, that means that we also really only need to analyze
+an A part and a B part, and then we have the whole thing pretty much figured
+out.
+
+if we start with the A part, most of the chords are actually just in the key —
+so of course this is in the key of C major, and the first chord is just the
+tonic chord, the Cmajor7, and then a few bars later we have two other chords
+that are also in the key, namely the two-chord Dminor7 and the G, the five-chord.
+and now we've already covered most of what is there. the only chord that we need
+to think a little bit about is the D — so in this case D is not in C major, but
+it's a chord, it's dominant, and it's resolving to the fifth, the other dominant
+in C major, so it's a D resolving to a G. so that's called the dominant of the
+dominant — that's a very common chord to come across in a major key, or actually
+also in a minor key, so you want to be able to recognize that quite quickly, and
+in this case since it's a D resolving to a G, which is a major chord, then we
+can just treat that as a D in that key, so in G major — that means that we need
+a G major scale to improvise over this.
+
+in the second A, before moving to the bridge, we have one chord that's different
+from the first A, and that's a C7. but again, the C is here a secondary
+dominant that's there to take us to the Fmajor7, which is the four-chord in the
+key, and we really just — since it's resolving to a major chord — we're just
+going to treat it as a C in the key of F major, and use the F major scale when
+we're improvising over it.
+
+in the bridge, there's actually only one chord that we need to analyze because
+we've covered most of it already, and that's the first one, the Fmajor7, and
+that's just the four-chord in the key, so we're just going to the subdominant.
+and then we're going from there to the D7, that's a five-of-five, we already had
+that in the A part, and we have a two-five back to the tonic, which is Dminor7
+G7, and that's also already been covered. I'm sure you'll agree that this is not
+a very complicated song. in fact, we can play most of it just using the C major
+scale, and then we have a few spots where we need a G major and an F major
+scale, and in the next two videos I'm going to show you — since we need those
+two scales, we also need to figure out how to play them in the position that
+I'm using in this whole course, and that's what I'm gonna do in the next two
+videos.

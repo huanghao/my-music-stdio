@@ -153,12 +153,26 @@ function agentPageContext() {
   if (chordIdActive && typeof fbCidAgentContext === 'function') {
     return { page: 'chord-id', title: 'Chord ID — 和弦识别与和声进行', selectedText, data: fbCidAgentContext() };
   }
-  // Generic fallback for every other page: whichever top-level page is
-  // showing, its visible text — same shape mnl-workers-portal's assistant
-  // uses when a route has no richer structured context wired up yet.
   const activePage = document.querySelector('.page.active');
   const visibleText = (activePage?.innerText || document.body.innerText || '')
     .replace(/\n{3,}/g, '\n\n').trim().slice(0, AGENT_CONTEXT_TEXT_LIMIT);
+  // Lick detail: the score PDFs render in pdf.js iframes, so their content
+  // never reaches visibleText — hand the model their material ids instead,
+  // which the backend's read_pdf tool can open.
+  const lickDetailActive = document.getElementById('page-lick-detail')?.classList.contains('active');
+  if (lickDetailActive && typeof licksAgentContext === 'function'
+      && typeof licksState !== 'undefined' && licksState.currentLick) {
+    return {
+      page: 'lick-detail',
+      title: `Lick — ${licksState.currentLick.title}`,
+      selectedText,
+      data: licksAgentContext(licksState.currentLick),
+      visibleText,
+    };
+  }
+  // Generic fallback for every other page: whichever top-level page is
+  // showing, its visible text — same shape mnl-workers-portal's assistant
+  // uses when a route has no richer structured context wired up yet.
   return { page: activePage?.id?.replace('page-', '') || '', title: document.title, selectedText, data: {}, visibleText };
 }
 

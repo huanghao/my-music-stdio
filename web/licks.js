@@ -17,6 +17,25 @@ const licksState = {
   editorMode: 'edit', // 'edit' | 'preview' — persisted (see lick_editor_prefs)
 };
 
+// Agent context for the detail page (agent-assistant.js agentPageContext):
+// which score PDFs this lick's notes reference, as material ids the backend's
+// read_pdf tool can open. Ids come straight from the notes' markdown links —
+// material ids keep the original extension (materials_store _safe_filename),
+// so `.pdf` in the id is what marks a score link. Filename shown to the model
+// is the id minus its upload-timestamp prefix.
+function licksAgentContext(lick) {
+  const pdfMaterials = [];
+  const seen = new Set();
+  const re = /\/api\/materials\/([\w.-]+\.pdf)\b/gi;
+  let m;
+  while ((m = re.exec(lick?.notes || '')) !== null) {
+    if (seen.has(m[1])) continue;
+    seen.add(m[1]);
+    pdfMaterials.push({ material_id: m[1], filename: m[1].replace(/^\d+_/, '') });
+  }
+  return { lick_title: lick?.title || '', target_bpm: lick?.target_bpm ?? null, pdfMaterials };
+}
+
 // ── Notes rendering (Markdown, with video/PDF/audio links previewed inline) ──
 // Notes are the user's own local content (this is a single-user local app,
 // not a shared/multi-user surface), so rendering them as raw HTML via marked
@@ -1640,5 +1659,6 @@ if (typeof module !== 'undefined' && module.exports) {
     licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,
+    licksAgentContext,
   };
 }

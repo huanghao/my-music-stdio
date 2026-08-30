@@ -8,4 +8,5 @@ python-multipart>=0.0.9
 httpx>=0.27  # server-side proxy call to NetEase's lyric API (src/server.py api_netease_lyric)
 pyyaml>=6.0  # src/agent_client.py: parses ~/.config/my-music-stdio/agent-backends.yaml
 pydantic-ai-slim[anthropic,openai]>=2.36.0  # src/agent_client.py: direct Anthropic-protocol + codex (Responses API) calls for the floating agent assistant
+pypdf>=5.0  # src/pdf_text.py: text extraction behind the agent's read_pdf tool (Lick score PDFs)
 socksio  # httpx SOCKS proxy support — needed when the shell environment sets an ALL_PROXY=socks5h:// var

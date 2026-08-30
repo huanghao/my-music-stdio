@@ -47,6 +47,10 @@ from pydantic_ai.providers.anthropic import AnthropicProvider
 from pydantic_ai.providers.openai import OpenAIProvider
 from pydantic_ai.tools import Tool
 
+import src.prefs as prefs
+from src.materials_store import LocalFlatMaterialsStore
+from src.pdf_text import read_material_pdf
+
 logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path.home() / ".config" / "my-music-stdio" / "agent-backends.yaml"
@@ -297,6 +301,34 @@ _READ_TOOL = Tool(
 )
 
 
+# read_pdf 工具的作用域：materials 库（Lick 笔记里引用的谱面 PDF），按
+# material id 解析。store 本身无状态、根目录每次调用现读 prefs，所以这里
+# 自建一个实例和 server.py 的那份互不干扰；解析/抽取/错误协议都在
+# src/pdf_text.py（不带 pydantic_ai 依赖，可独立单测）。
+def _materials_dir() -> Path:
+    return Path(prefs.load()["materials_dir"]).expanduser()
+
+
+_MATERIALS_STORE = LocalFlatMaterialsStore(_materials_dir)
+
+
+def _read_pdf_tool(material_id: str, start_page: int = 1, end_page: int = 0) -> str:
+    return read_material_pdf(
+        material_id, start_page, end_page, path_for=_MATERIALS_STORE.path_for
+    )
+
+
+_READ_PDF_TOOL = Tool(
+    _read_pdf_tool,
+    name="read_pdf",
+    description=(
+        "Extract text from a PDF in the materials library (scores referenced from Lick notes), "
+        "by material id — the <id> in /api/materials/<id>. Returns page-numbered text; for long "
+        "PDFs pass start_page/end_page (1-based, inclusive). A scanned image PDF yields no text."
+    ),
+)
+
+
 async def stream_parts(
     prompt: str,
     system_prompt: str,
@@ -367,7 +399,7 @@ async def stream_parts(
         agent = Agent(
             model,
             system_prompt=system_prompt,
-            tools=[_READ_TOOL],
+            tools=[_READ_TOOL, _READ_PDF_TOOL],
             capabilities=[NativeTool(WebSearchTool())],
             model_settings=settings,
         )

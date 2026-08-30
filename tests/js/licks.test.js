@@ -292,3 +292,28 @@ test('licksRewriteLinkSize returns null for a single-quote title instead of mang
 test('licksRewriteLinkSize returns null when no size is given', () => {
   assert.equal(licks.licksRewriteLinkSize('[demo](https://youtu.be/keQUk4VQCi4)', 0, {}), null);
 });
+
+test('licksAgentContext extracts unique PDF material ids from notes, strips the timestamp prefix', () => {
+  const lick = {
+    title: 'II-V-I bebop',
+    target_bpm: 140,
+    notes: [
+      'Score: [train.pdf](/api/materials/20260801090000000000_take-the-a-train.pdf)',
+      'Audio: [demo.mp3](/api/materials/20260801090100000000_demo.mp3)',
+      'Same score again: [dup](/api/materials/20260801090000000000_take-the-a-train.pdf){w=80%}',
+    ].join('\n'),
+  };
+  assert.deepEqual(licks.licksAgentContext(lick), {
+    lick_title: 'II-V-I bebop',
+    target_bpm: 140,
+    pdfMaterials: [{
+      material_id: '20260801090000000000_take-the-a-train.pdf',
+      filename: 'take-the-a-train.pdf',
+    }],
+  });
+});
+
+test('licksAgentContext tolerates empty/missing notes', () => {
+  assert.deepEqual(licks.licksAgentContext({ title: 'x' }).pdfMaterials, []);
+  assert.deepEqual(licks.licksAgentContext(null).pdfMaterials, []);
+});

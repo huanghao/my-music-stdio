@@ -879,29 +879,42 @@
 </div>
 
 <!-- Floating agent assistant (agent-assistant.js): a TA-style helper that
-     overlays the page — position:fixed, never docked into a sidebar, so it
-     never reflows whatever page it's floating over. Page-independent, like
-     the practice timer pill above; a page can optionally feed it richer
-     context (see agentPageContext() / fbCidAgentContext() for Chord ID). -->
+     defaults to overlaying the page (position:fixed float mode) but can also
+     dock as a right sidebar (agentState.mode) — a page can optionally feed
+     it richer context (see agentPageContext() / fbCidAgentContext() for
+     Chord ID). -->
 <button id="agent-toggle" class="agent-toggle" title="问助教" onclick="agentOpen()">✦ AI 助教</button>
 <div id="agent-panel" class="agent-panel">
   <div class="agent-resize-handle" id="agent-resize-handle" title="拖拽调整大小"></div>
+  <div class="agent-sidebar-resize-handle" id="agent-sidebar-resize-handle" title="拖拽调整宽度"></div>
   <div class="agent-head">
-    <select id="agent-session-select" class="agent-session-select" onchange="agentSwitchSession(this.value)"></select>
-    <select id="agent-backend-select" class="agent-backend-select" onchange="agentSetBackend(this.value)"></select>
+    <div class="agent-sessions-wrap">
+      <button type="button" class="agent-icon-btn" id="agent-sessions-btn" title="历史对话" onclick="agentToggleSessionsMenu()">☰</button>
+      <div id="agent-sessions-menu" class="agent-sessions-menu hidden"></div>
+    </div>
     <button type="button" class="agent-icon-btn" id="agent-new-btn" title="新对话" onclick="agentNewSession()">＋</button>
+    <button type="button" class="agent-icon-btn" id="agent-mode-btn" title="切换悬浮/侧边栏" onclick="agentToggleMode()">⇋</button>
+    <button type="button" class="agent-icon-btn" id="agent-collapse-btn" title="收起" onclick="agentToggleSidebarCollapsed()">»</button>
     <button type="button" class="agent-icon-btn" id="agent-close-btn" title="收起" onclick="agentClose()">✕</button>
   </div>
-  <div id="agent-overview" class="agent-overview"></div>
   <div id="agent-messages" class="agent-messages"></div>
   <div id="agent-status" class="agent-status"></div>
   <div class="agent-input-row">
+    <div class="agent-input-resize-handle" id="agent-input-resize-handle" title="拖拽调整输入框高度"></div>
     <textarea id="agent-input" class="agent-input" placeholder="问问题…⌘/Ctrl+Enter 发送"></textarea>
     <div class="agent-input-actions">
-      <button type="button" class="btn btn-ghost btn-sm hidden" id="agent-cancel-btn" onclick="agentCancel()">■ 取消</button>
-      <button type="button" class="btn btn-primary btn-sm" id="agent-send-btn" onclick="agentSend()">发送</button>
+      <div class="agent-model-row">
+        <select id="agent-provider-select" class="agent-model-select" onchange="agentSetProvider(this.value)"></select>
+        <select id="agent-model-select" class="agent-model-select" onchange="agentSetModel(this.value)"></select>
+        <select id="agent-thinking-select" class="agent-model-select" onchange="agentSetThinking(this.value)"></select>
+      </div>
+      <div class="agent-send-group">
+        <button type="button" class="btn btn-ghost btn-sm hidden" id="agent-cancel-btn" onclick="agentCancel()">■ 取消</button>
+        <button type="button" class="btn btn-primary btn-sm" id="agent-send-btn" onclick="agentSend()">发送</button>
+      </div>
     </div>
   </div>
+  <div class="agent-sidebar-rail" id="agent-sidebar-rail" onclick="agentToggleSidebarCollapsed()" title="展开助教">✦</div>
 </div>
 
 <script src="vendor/svguitar.umd.js"></script>

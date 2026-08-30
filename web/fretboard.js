@@ -94,6 +94,12 @@ const fbState = {
     sequence: [], idx: 0, completed: 0,
     _holdCount: 0, _wrongNote: null, _wrongHoldCount: 0, _lastWrongMsgAt: -Infinity, _lastReading: null,
   },
+  iv: {
+    rootString: 0, rootFret: 3,   // stringIdx 0 = low E .. 5 = high e (FB_STRING_OPEN convention)
+    degrees: { 4: true, 7: true, 11: true },   // semitone offset from root -> shown; root (0) is always shown
+    // Floating-panel chrome (page-independent — see fbIvInit/fbIvOpen/fbIvClose):
+    open: false, pos: null, width: 520, height: 460,
+  },
 };
 
 // ── Device auto-detection ────────────────────────────────────────────────
@@ -352,10 +358,25 @@ function fbPrefsLoad() {
     if (saved.seq.mode === 'reference' || saved.seq.mode === 'verify') fbState.seq.mode = saved.seq.mode;
     if (typeof saved.seq.showPositionHint === 'boolean') fbState.seq.showPositionHint = saved.seq.showPositionHint;
   }
+  if (saved.iv) {
+    if (Number.isInteger(saved.iv.rootString) && saved.iv.rootString >= 0 && saved.iv.rootString < 6) fbState.iv.rootString = saved.iv.rootString;
+    if (Number.isInteger(saved.iv.rootFret) && saved.iv.rootFret >= 0 && saved.iv.rootFret <= 15) fbState.iv.rootFret = saved.iv.rootFret;
+    if (saved.iv.degrees && typeof saved.iv.degrees === 'object') {
+      const degrees = {};
+      FB_IV_DEGREES.forEach(d => { degrees[d.offset] = !!saved.iv.degrees[d.offset]; });
+      fbState.iv.degrees = degrees;
+    }
+    if (typeof saved.iv.open === 'boolean') fbState.iv.open = saved.iv.open;
+    if (saved.iv.pos && Number.isFinite(saved.iv.pos.x) && Number.isFinite(saved.iv.pos.y)) fbState.iv.pos = saved.iv.pos;
+    if (Number.isFinite(saved.iv.width)) fbState.iv.width = saved.iv.width;
+    if (Number.isFinite(saved.iv.height)) fbState.iv.height = saved.iv.height;
+  }
   // 'chord' deliberately excluded — Chord Match moved off the Fretboard tab
   // strip onto its own page, so a stale saved 'chord' (from before that
   // change) must fall through to the default 'pitch' rather than restore a
-  // mode fbShowMode can no longer find a tab/panel for.
+  // mode fbShowMode can no longer find a tab/panel for. 'iv' is excluded for
+  // the same reason — Interval Shapes moved off the tab strip entirely, onto
+  // its own page-independent floating panel (see fbIvInit).
   if (['pitch', 'tuner', 'ear', 'bend', 'seq', 'chordid'].includes(saved.activeMode)) {
     fbState.activeMode = saved.activeMode;
   }
@@ -386,6 +407,8 @@ function fbPrefsSave() {
     seq: { keyRoot: fbState.seq.keyRoot, scale: fbState.seq.scale, pattern: fbState.seq.pattern,
            direction: fbState.seq.direction, startFret: fbState.seq.startFret, mode: fbState.seq.mode,
            showPositionHint: fbState.seq.showPositionHint },
+    iv: { rootString: fbState.iv.rootString, rootFret: fbState.iv.rootFret, degrees: fbState.iv.degrees,
+          open: fbState.iv.open, pos: fbState.iv.pos, width: fbState.iv.width, height: fbState.iv.height },
     activeMode: fbState.activeMode,
   }));
 }
@@ -1308,6 +1331,287 @@ function fbSeqOnStepMatch() {
     fb.textContent = '';
     fb.className = 'fb-feedback';
   }
+}
+
+// ── Interval Shapes (method-3 reference): pick a root note anywhere on the
+// neck, tick which degrees you want to see (3/5/7 etc.), and get every
+// occurrence of the root + those degrees within a few frets either side —
+// pure fretboard geometry, no key/scale involved. This is the "从根音出发,
+// 记37音相对根音的指板形状" practice path from the take-the-a-train chat
+// (see docs/voice-leading-guide-tone-lines.md).
+const FB_IV_DEGREES = [
+  { offset: 1,  label: 'b9' }, { offset: 2,  label: '9' },
+  { offset: 3,  label: 'b3' }, { offset: 4,  label: '3' },
+  { offset: 5,  label: '11' }, { offset: 6,  label: 'b5' },
+  { offset: 7,  label: '5' },  { offset: 8,  label: '#5' },
+  { offset: 9,  label: '13' }, { offset: 10, label: 'b7' },
+  { offset: 11, label: '7' },
+];
+const FB_IV_DEGREE_LABEL = Object.fromEntries(FB_IV_DEGREES.map(d => [d.offset, d.label]));
+
+// Row grouping for the degrees dropdown — one scale-step (2nd/3rd/4th/5th/
+// 6th/7th) per row, so alterations of the same step (b5/5/#5) read as one
+// group instead of flowing together with everything else.
+const FB_IV_DEGREE_ROWS = [[1, 2], [3, 4], [5], [6, 7, 8], [9], [10, 11]];
+
+// Color is reserved for the flats that actually redefine chord quality
+// (b3 = minor, b5 = diminished, b7 = dominant/minor7) — everything else
+// (natural 3/5/7, 9/11/13, #5) renders as the plain neutral fb-shape-dot
+// used everywhere else in the app, so a color always means "pay attention
+// to this alteration" instead of just decorating every dot on the board.
+const FB_IV_SPECIAL_DEGREE = { 3: '3', 6: '5', 10: '7' };
+
+// Quick presets matching the chord qualities discussed in that chat — click
+// one to set the degree checkboxes in one go instead of ticking them by hand.
+const FB_IV_PRESETS = {
+  maj7: { label: 'maj7', offsets: [4, 7, 11] },
+  dom7: { label: '7',    offsets: [4, 7, 10] },
+  m7:   { label: 'm7',   offsets: [3, 7, 10] },
+  m7b5: { label: 'm7b5', offsets: [3, 6, 10] },
+  six:  { label: '6',    offsets: [4, 7, 9] },
+};
+
+// Every fretted position within `halfWindow` frets either side of the root
+// (clamped at fret 0) whose pitch class is the root itself or one of the
+// selected degree offsets. `degrees` is a Set of semitone offsets (1-11).
+function fbIvPositionsForRoot(rootString, rootFret, degrees, halfWindow = 5) {
+  const rootPc = ((FB_STRING_OPEN[rootString] + rootFret) % 12 + 12) % 12;
+  const startFret = Math.max(0, rootFret - halfWindow);
+  const endFret = rootFret + halfWindow + 2;
+  const positions = [];
+  for (let s = 0; s < 6; s++) {
+    for (let fret = startFret; fret <= endFret; fret++) {
+      const offset = ((FB_STRING_OPEN[s] + fret - rootPc) % 12 + 12) % 12;
+      const noteName = FB_NOTE_NAMES[((FB_STRING_OPEN[s] + fret) % 12 + 12) % 12];
+      if (offset === 0) {
+        positions.push({ stringIdx: s, fret, degree: 'R', noteName, isRoot: true, special: null });
+      } else if (degrees.has(offset)) {
+        positions.push({ stringIdx: s, fret, degree: FB_IV_DEGREE_LABEL[offset], noteName, isRoot: false,
+                         special: FB_IV_SPECIAL_DEGREE[offset] || null });
+      }
+    }
+  }
+  return positions;
+}
+
+function fbRenderIvOptions() {
+  const s = fbState.iv;
+  document.getElementById('fb-iv-options').innerHTML = `
+    <select onchange="fbState.iv.rootString=parseInt(this.value); fbPrefsSave(); fbIvBuild()">
+      ${FB_STRING_NAMES.map((n, i) => `<option value="${i}" ${s.rootString === i ? 'selected' : ''}>${6 - i} (${n})</option>`).join('')}
+    </select>
+    <input type="number" min="0" max="15" value="${s.rootFret}" class="w-[48px]!" title="Root fret"
+      onchange="fbState.iv.rootFret=Math.max(0, Math.min(15, parseInt(this.value) || 0)); fbPrefsSave(); fbIvBuild()">
+    <div class="fb-iv-degrees-dropdown">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="fbIvToggleDegreesMenu(event)">Degrees ▾</button>
+      <div class="fb-iv-degrees-menu" id="fb-iv-degrees-menu" onclick="event.stopPropagation()">
+        ${FB_IV_DEGREE_ROWS.map(row => `
+          <div class="fb-iv-degrees-row">
+            ${row.map(offset => `
+              <label><span class="fb-deg-swatch${FB_IV_SPECIAL_DEGREE[offset] ? ' fb-deg-' + FB_IV_SPECIAL_DEGREE[offset] : ' fb-deg-swatch-plain'}"></span>
+                <input type="checkbox" ${s.degrees[offset] ? 'checked' : ''}
+                onchange="fbState.iv.degrees[${offset}]=this.checked; fbPrefsSave(); fbIvBuild()"> ${FB_IV_DEGREE_LABEL[offset]}</label>
+            `).join('')}
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ${Object.keys(FB_IV_PRESETS).map(k => `<button type="button" class="btn btn-ghost btn-sm" onclick="fbIvApplyPreset('${k}')">${FB_IV_PRESETS[k].label}</button>`).join('')}
+  `;
+}
+
+// Degrees checkbox list lives in a click-to-open dropdown (11 boxes no
+// longer eat a full row of the options bar). Closes on the next click
+// anywhere outside it; clicks inside the menu (event.stopPropagation() in
+// the markup above) don't count as "outside", so ticking several boxes in a
+// row keeps it open.
+function fbIvToggleDegreesMenu(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('fb-iv-degrees-menu');
+  if (menu.classList.contains('open')) { menu.classList.remove('open'); return; }
+  menu.classList.add('open');
+  document.addEventListener('click', () => menu.classList.remove('open'), { once: true });
+}
+
+function fbIvApplyPreset(key) {
+  const preset = FB_IV_PRESETS[key];
+  if (!preset) return;
+  const offsets = new Set(preset.offsets);
+  FB_IV_DEGREES.forEach(d => { fbState.iv.degrees[d.offset] = offsets.has(d.offset); });
+  fbPrefsSave();
+  fbRenderIvOptions();
+  fbIvBuild();
+}
+
+// Like fbRenderShapeDegreeBoard, but each dot needs two lines of text (note
+// name + degree) instead of one, so it builds its own board/dots rather than
+// reusing that shared single-line renderer.
+function fbIvRenderBoard(containerEl, positions) {
+  const frets = positions.map(p => p.fret);
+  const startFret = Math.max(0, Math.min(...frets) - 1);
+  const numFrets = Math.max(5, Math.max(...frets) - startFret + 1);
+  const b = fbBuildBoard(numFrets, startFret);
+
+  positions.forEach(p => {
+    const cx = fbMarkerX(b, p.fret - startFret);
+    const cy = b.yString(p.stringIdx);
+    const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circ.setAttribute('cx', cx); circ.setAttribute('cy', cy); circ.setAttribute('r', 15);
+    circ.setAttribute('class', p.isRoot ? 'fb-quiz-dot' : (p.special ? `fb-deg-dot fb-deg-${p.special}` : 'fb-shape-dot'));
+    b.svg.appendChild(circ);
+
+    // Note name on the left half, degree on the right — side by side reads
+    // cleaner than stacking them, since each line is short (1-2 chars). Only
+    // the root dot is solid-filled (dark), so only it needs the light/inverse
+    // text variant; the hollow degree rings keep dark text on their
+    // board-colored fill.
+    const rootMod = p.isRoot ? ' fb-iv-label-on-root' : '';
+    const noteLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    noteLabel.setAttribute('x', cx - 7); noteLabel.setAttribute('y', cy + 4);
+    noteLabel.setAttribute('text-anchor', 'middle');
+    noteLabel.setAttribute('class', 'fb-iv-note-label' + rootMod);
+    noteLabel.textContent = p.noteName;
+    b.svg.appendChild(noteLabel);
+
+    const degreeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    degreeLabel.setAttribute('x', cx + 8); degreeLabel.setAttribute('y', cy + 4);
+    degreeLabel.setAttribute('text-anchor', 'middle');
+    degreeLabel.setAttribute('class', 'fb-iv-degree-label' + rootMod);
+    degreeLabel.textContent = p.degree;
+    b.svg.appendChild(degreeLabel);
+  });
+
+  containerEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'fb-board';
+  wrap.appendChild(b.svg);
+  containerEl.appendChild(wrap);
+}
+
+function fbIvBuild() {
+  const s = fbState.iv;
+  const degrees = new Set(Object.keys(s.degrees).map(Number).filter(k => s.degrees[k]));
+  const positions = fbIvPositionsForRoot(s.rootString, s.rootFret, degrees);
+  fbIvRenderBoard(document.getElementById('fb-iv-board'), positions);
+}
+
+// ── Interval Shapes: floating-panel chrome ──────────────────────────────
+// Page-independent (like the practice timer pill and the agent panel) — the
+// panel lives outside any .page div in index.html, so this tool works from
+// any page without navigating to Fretboard. Opened from the tools menu
+// (app.js toolsMenu*), not its own fixed toggle button. The panel is both
+// draggable (like the transport pill) and resizable (like the agent panel,
+// dragging its top-left handle while keeping the opposite corner fixed).
+
+function fbIvSetOpenUI(open) {
+  document.getElementById('fbiv-panel')?.classList.toggle('open', open);
+}
+
+function fbIvOpen() {
+  fbState.iv.open = true;
+  fbIvSetOpenUI(true);
+  fbPrefsSave();
+}
+
+function fbIvClose() {
+  fbState.iv.open = false;
+  fbIvSetOpenUI(false);
+  fbPrefsSave();
+}
+
+function fbIvApplyPos() {
+  const panel = document.getElementById('fbiv-panel');
+  if (!panel || fbState.iv._dragging) return;
+  const w = fbState.iv.width, h = fbState.iv.height;
+  let x, y;
+  if (fbState.iv.pos) { x = fbState.iv.pos.x; y = fbState.iv.pos.y; }
+  // Default: bottom-left, above the tools-menu launcher that opens it —
+  // deliberately the opposite corner from AI 助教, so an open panel never
+  // covers the agent panel.
+  else { x = 20; y = window.innerHeight - h - 20; }
+  x = Math.max(4, Math.min(window.innerWidth  - w - 4, x));
+  y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
+  panel.style.left = x + 'px'; panel.style.top = y + 'px';
+  panel.style.right = 'auto'; panel.style.bottom = 'auto';
+  panel.style.width = w + 'px'; panel.style.height = h + 'px';
+}
+
+function fbIvInitDrag() {
+  const panel = document.getElementById('fbiv-panel');
+  const head = document.getElementById('fbiv-head');
+  if (!panel || !head) return;
+  const onButtons = e => e.target.closest('button');
+  let sx, sy, ox, oy, dragging = false;
+  head.addEventListener('pointerdown', e => {
+    if (onButtons(e)) return;
+    dragging = true; fbState.iv._dragging = true; panel.classList.add('dragging');
+    const r = panel.getBoundingClientRect();
+    ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
+    head.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  head.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    let x = ox + (e.clientX - sx), y = oy + (e.clientY - sy);
+    x = Math.max(4, Math.min(window.innerWidth  - panel.offsetWidth  - 4, x));
+    y = Math.max(4, Math.min(window.innerHeight - panel.offsetHeight - 4, y));
+    panel.style.left = x + 'px'; panel.style.top = y + 'px'; panel.style.right = 'auto'; panel.style.bottom = 'auto';
+  });
+  head.addEventListener('pointerup', () => {
+    if (!dragging) return;
+    dragging = false; fbState.iv._dragging = false; panel.classList.remove('dragging');
+    fbState.iv.pos = { x: parseInt(panel.style.left), y: parseInt(panel.style.top) };
+    fbPrefsSave();
+  });
+  head.addEventListener('pointercancel', () => {
+    dragging = false; fbState.iv._dragging = false; panel.classList.remove('dragging');
+  });
+  head.addEventListener('dblclick', e => { // reset to the default spot
+    if (onButtons(e)) return;
+    fbState.iv.pos = null; fbPrefsSave(); fbIvApplyPos();
+  });
+  window.addEventListener('resize', () => fbIvApplyPos());
+}
+
+// Drag the bottom-right corner handle — the standard OS-window resize spot,
+// growing away from the fixed top-left corner (this panel is draggable, so
+// unlike the agent panel there's no "anchored" corner to keep tethered).
+function fbIvInitResize() {
+  const handle = document.getElementById('fbiv-resize-handle');
+  const panel = document.getElementById('fbiv-panel');
+  if (!handle || !panel) return;
+  handle.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const startX = e.clientX, startY = e.clientY;
+    const startRect = panel.getBoundingClientRect();
+    const startW = fbState.iv.width, startH = fbState.iv.height;
+    const maxW = window.innerWidth - startRect.left - 4;
+    const maxH = window.innerHeight - startRect.top - 4;
+    function onMove(ev) {
+      const w = Math.max(360, Math.min(maxW, startW + (ev.clientX - startX)));
+      const h = Math.max(320, Math.min(maxH, startH + (ev.clientY - startY)));
+      fbState.iv.width = w; fbState.iv.height = h;
+      panel.style.width = w + 'px'; panel.style.height = h + 'px';
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      fbPrefsSave();
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+// Page-independent init — called once from app.js's init(), alongside
+// ptInit()/agentInit(), not gated behind ever visiting the Fretboard page.
+function fbIvInit() {
+  fbEnsurePrefsLoaded();
+  fbIvApplyPos();
+  fbIvInitDrag();
+  fbIvInitResize();
+  fbIvSetOpenUI(fbState.iv.open);
+  fbRenderIvOptions();
+  fbIvBuild();
 }
 
 // ── Scale / mode switches ──────────────────────────────────────────────────
@@ -4155,6 +4459,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbChordPickTargetProgression, fbChordPreviewProgression,
     FB_SEQ_SCALE_KEYS, FB_SEQ_PATTERNS, fbSeqScaleSteps, fbSeqBuildAscending, fbSeqBuildSemitoneOffsets,
     fbSeqAnchorPosition, fbSeqAssignFretting,
+    FB_IV_DEGREES, FB_IV_PRESETS, fbIvPositionsForRoot,
     FB_SOUND_CATEGORIES, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX,
     fbSoundVolumesLoad, fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbOutput,

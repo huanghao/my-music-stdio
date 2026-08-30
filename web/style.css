@@ -444,6 +444,31 @@ input[type="number"] { width: 64px; text-align: center; }
 .fb-shape-dot.correct { fill: var(--primary); stroke: var(--text-inverse); }
 .fb-shape-dot.wrong { fill: var(--danger-dark); stroke: var(--text-inverse); }
 .fb-shape-degree-label { font-size: 12px; fill: var(--text-inverse); font-family: sans-serif; font-weight: 700; pointer-events: none; }
+/* Interval Shapes board: each dot shows note name + degree side by side, so
+   the bigger dot needs its own (smaller) label sizes. fb-shape-dot's light
+   fill needs dark text for contrast — text-inverse (white) is only right on
+   the dark-red root dot (fb-quiz-dot), via the -on-root modifier below. */
+.fb-iv-note-label { font-size: 11px; fill: var(--text); font-family: sans-serif; font-weight: 700; pointer-events: none; }
+.fb-iv-degree-label { font-size: 10px; fill: var(--text); font-family: sans-serif; font-weight: 600; opacity: 0.85; pointer-events: none; }
+.fb-iv-label-on-root.fb-iv-note-label, .fb-iv-label-on-root.fb-iv-degree-label { fill: var(--text-inverse); }
+/* Degree dots (Interval Shapes panel) — two distinct visual concepts so the
+   root never gets lost: root is the only *filled* dot (fb-quiz-dot, solid
+   red); the chord-quality flats (b3/b5/b7) are hollow colored rings; every
+   other degree falls back to the app's plain fb-shape-dot (no color at
+   all — see fbIvRenderBoard). */
+.fb-deg-dot { fill: var(--bg-subtle); stroke-width: 3; }
+.fb-deg-dot.fb-deg-3 { stroke: var(--fb-deg-3); }
+.fb-deg-dot.fb-deg-5 { stroke: var(--fb-deg-5); }
+.fb-deg-dot.fb-deg-7 { stroke: var(--fb-deg-7); }
+/* Small ring-swatch legend next to each degree checkbox, echoing the hollow
+   dot style on the board — only b3/b5/b7 get a colored ring; everything
+   else gets a plain neutral outline (fb-deg-swatch-plain), matching how
+   little visual weight those degrees carry on the board itself. */
+.fb-deg-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; background: var(--bg-subtle); border-width: 2px; border-style: solid; box-sizing: border-box; }
+.fb-deg-swatch.fb-deg-3 { border-color: var(--fb-deg-3); }
+.fb-deg-swatch.fb-deg-5 { border-color: var(--fb-deg-5); }
+.fb-deg-swatch.fb-deg-7 { border-color: var(--fb-deg-7); }
+.fb-deg-swatch.fb-deg-swatch-plain { border-color: var(--border-muted); }
 
 .fb-answer-grid {
   display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; max-width: 480px;
@@ -1855,3 +1880,91 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
   border: 1px solid var(--border-dim); background: var(--bg-page); color: var(--text-dim);
 }
 .agent-send-group { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ── Tools menu (app.js toolsMenu*) ──────────────────────────────────────
+   Single launcher, bottom-left, for secondary floating helpers — keeps
+   AI 助教's bottom-right corner free so an opened tool panel never covers
+   the agent panel (see the fbiv-toggle collision this replaced). */
+.tools-toggle {
+  position: fixed; left: 20px; bottom: 20px; z-index: 200;
+  padding: 10px 16px; border-radius: 999px; border: none;
+  background: var(--primary); color: var(--text-inverse); font-size: 13px; font-weight: 600;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22); cursor: pointer;
+}
+.tools-toggle:hover { background: var(--primary-lt); }
+
+.tools-menu {
+  position: fixed; left: 20px; bottom: 68px; z-index: 200;
+  display: none; flex-direction: column; min-width: 180px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.22); overflow: hidden;
+}
+.tools-menu.open { display: flex; }
+.tools-menu-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 14px; border: none; background: none; color: var(--text);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.tools-menu-item:hover { background: var(--bg-faint); }
+.tools-menu-item + .tools-menu-item { border-top: 1px solid var(--border-dim); }
+.tools-menu-check { color: var(--primary); font-size: 15px; line-height: 1; width: 12px; text-align: center; }
+
+/* ── Floating fretboard reference panel (fretboard.js fbIv*) ────────────────
+   A small always-available helper — pick a root note, tick degrees (3/5/7
+   etc.), see the shape on the neck — usable from any page (e.g. while
+   looking at a Lick), not gated behind the Fretboard page's tab strip.
+   Opened from the tools menu (bottom-left); the panel itself is draggable
+   (like the transport pill) *and* resizable (like the agent panel). */
+.fbiv-panel {
+  position: fixed; left: 20px; bottom: 20px; z-index: 200;
+  display: none; flex-direction: column; overflow: hidden;
+  width: 520px; height: 460px; min-width: 360px; min-height: 320px;
+  max-width: calc(100vw - 40px); max-height: calc(100vh - 40px);
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 10px 34px rgba(0,0,0,0.22);
+}
+.fbiv-panel.open { display: flex; }
+.fbiv-panel.dragging { opacity: 0.92; }
+/* Bottom-right corner grip — the standard window-resize spot (this panel is
+   draggable, so there's no fixed "anchor corner" the way the agent panel's
+   top-left handle implied; growing toward bottom-right while top-left stays
+   put is the familiar OS-window convention instead). Repeating diagonal
+   hairlines, not a filled square — visible but quiet until hovered. */
+.fbiv-resize-handle {
+  position: absolute; right: 3px; bottom: 3px; width: 11px; height: 11px; cursor: nwse-resize; z-index: 1;
+  background-image: repeating-linear-gradient(135deg, var(--border-dim) 0 1.5px, transparent 1.5px 4px);
+  opacity: 0.55;
+}
+.fbiv-resize-handle:hover { opacity: 1; }
+.fbiv-head {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px 8px 20px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.fbiv-panel.dragging .fbiv-head { cursor: grabbing; }
+.fbiv-grip { color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 2px; }
+.fbiv-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
+.fbiv-body { flex: 1; overflow-y: auto; padding: 10px 12px; }
+/* Compact options row — this panel floats over the page, so every line of
+   chrome above the board eats into the space the neck diagram gets. */
+#fbiv-panel .fb-options { padding: 6px 8px; margin-bottom: 8px; gap: 6px 10px; font-size: 11px; }
+#fbiv-panel .fb-options label { gap: 2px; }
+/* Less left padding than the default .fb-board — the SVG already reserves
+   room for the string names at the nut, so the outer padding on that side
+   was mostly dead space in a panel this size. */
+#fbiv-panel .fb-board { padding: 12px 16px 12px 8px; }
+/* Degrees checkbox list collapses into a click-to-open dropdown (11 boxes
+   in a row would otherwise wrap across several lines of the options bar). */
+.fb-iv-degrees-dropdown { position: relative; }
+.fb-iv-degrees-menu {
+  display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+  flex-direction: column; gap: 4px; width: max-content;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.18); padding: 8px 10px; z-index: 10;
+}
+.fb-iv-degrees-menu.open { display: flex; }
+/* One scale-step (2nd/3rd/4th/5th/6th/7th) per row, so alterations of the
+   same step (b5/5/#5) read as a group instead of flowing together with
+   everything else. */
+.fb-iv-degrees-row { display: flex; gap: 10px; }
+.fb-iv-degrees-row label { min-width: 34px; }

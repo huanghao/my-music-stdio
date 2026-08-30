@@ -917,6 +917,40 @@
   <div class="agent-sidebar-rail" id="agent-sidebar-rail" onclick="agentToggleSidebarCollapsed()" title="展开助教">✦</div>
 </div>
 
+<!-- Tools menu: a single launcher (bottom-left, away from AI 助教'/the
+     practice timer's bottom-right corner so an opened tool panel never
+     covers the agent panel) for secondary floating helpers. Only Interval
+     Shapes today; future reference-style tools register a row here too,
+     instead of each claiming their own fixed corner button. AI 助教 keeps
+     its own dedicated button since it's used far more often than these. -->
+<button id="tools-toggle" class="tools-toggle" title="工具" onclick="toolsMenuToggle()">🛠 工具</button>
+<div id="tools-menu" class="tools-menu">
+  <button type="button" class="tools-menu-item" onclick="toolsMenuSelectFretboard()">
+    <span>🎸 指板参考图</span><span id="tools-menu-fretboard-check" class="tools-menu-check"></span>
+  </button>
+</div>
+
+<!-- Floating fretboard reference (fretboard.js fbIv*): pick a root note, tick
+     degrees (3/5/7 etc. or a chord-quality preset), see every occurrence of
+     root + those degrees nearby on the neck — pure geometry, no key needed.
+     Page-independent like the practice timer pill and the agent panel above,
+     so it's usable while looking at a Lick without leaving the page. Opened
+     from the tools menu above (not its own fixed toggle button); the panel
+     itself is both draggable (like the transport pill) and resizable (like
+     the agent panel). -->
+<div id="fbiv-panel" class="fbiv-panel">
+  <div class="fbiv-resize-handle" id="fbiv-resize-handle" title="拖拽调整大小"></div>
+  <div class="fbiv-head" id="fbiv-head">
+    <span class="fbiv-grip" title="拖动到任意位置（双击复位）">⠿</span>
+    <span class="fbiv-title">指板参考图</span>
+    <button type="button" class="agent-icon-btn" onclick="fbIvClose()">✕</button>
+  </div>
+  <div class="fbiv-body">
+    <div class="fb-options" id="fb-iv-options"></div>
+    <div id="fb-iv-board"></div>
+  </div>
+</div>
+
 <script src="vendor/svguitar.umd.js"></script>
 <script src="vendor/marked.umd.js"></script>
 <script src="fretboard.js"></script>

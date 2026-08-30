@@ -738,3 +738,23 @@ test('fbDedupDevices collapses the "Default - X" alias into the real device', ()
   const orphan = fb.fbDedupDevices([d('default', 'Default - Something Else')]);
   assert.equal(orphan.length, 1);
 });
+
+test('fbIvPositionsForRoot: root on 5th string 3rd fret (C), degrees 3/5/7 (maj7)', () => {
+  // stringIdx 1 = A string; fret 3 = C. Root string open = A(9); +3 = C(0).
+  const degrees = new Set([4, 7, 11]); // 3, 5, 7
+  const positions = fb.fbIvPositionsForRoot(1, 3, degrees, 3);
+  const root = positions.find(p => p.stringIdx === 1 && p.fret === 3);
+  assert.ok(root && root.isRoot && root.degree === 'R' && root.noteName === 'C');
+  // The 3rd (E) one string up, one fret down from a root on the A/D/G strings
+  // (standard-tuning shape) — D string (stringIdx 2), fret 2.
+  const third = positions.find(p => p.stringIdx === 2 && p.fret === 2);
+  assert.ok(third && third.degree === '3' && third.noteName === 'E' && !third.isRoot);
+  // Every returned position's degree is either the root or one of the
+  // requested degrees — nothing outside the selection leaks through.
+  positions.forEach(p => assert.ok(p.isRoot || ['3', '5', '7'].includes(p.degree)));
+});
+
+test('fbIvPositionsForRoot: unselected degrees never appear', () => {
+  const positions = fb.fbIvPositionsForRoot(0, 5, new Set([4]), 4); // only the 3rd
+  positions.forEach(p => assert.ok(p.isRoot || p.degree === '3'));
+});

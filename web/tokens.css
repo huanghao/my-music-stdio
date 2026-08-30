@@ -78,6 +78,19 @@
   --fb-chroma: #b8c8b8;  /* chroma "chord tone" bar */
   --fb-octave-bg: #f5f0e0;  /* very faint tint on the 12th/24th-fret column */
 
+  /* Interval Shapes panel: color is reserved for the chord-quality-defining
+     flats (b3/b5/b7) — the alterations that actually change what chord
+     you're looking at. Everything else (natural 3/5/7, 9/11/13, #5) renders
+     as the plain neutral fb-shape-dot, same as the rest of the app, so color
+     stays a meaningful signal instead of noise. Root uses --fb-quiz above.
+     Since only these 3 hues ever appear together, they're deliberately more
+     saturated than the app's muted brand palette (primary/accent/warn) —
+     with only 3 colors on screen there's room for higher contrast without
+     it turning noisy, and they need to pop against the neutral board. */
+  --fb-deg-3: #2f6fbf;  /* b3 — vivid blue */
+  --fb-deg-5: #8a3fc0;  /* b5 — vivid violet */
+  --fb-deg-7: #c98a12;  /* b7 — vivid gold */
+
   /* song loop */
   --sl-teal:    #2f6f68;  /* loop checkbox accent */
   --sl-wave:    #c9927e;  /* waveform bars */

@@ -227,6 +227,16 @@ function plChordSymbol(rootPc, quality, tonicPc) {
   return PL_NOTE_NAMES_FLAT[absPc] + PL_QUALITY_LABELS[quality];
 }
 
+// Same root/quality resolution as plChordSymbol, but for the Jam page's
+// backing-track engine (src/gen_accompaniment_midi.py QUALITY_INTERVALS)
+// instead of on-screen display — so it appends the raw quality *token*
+// (e.g. "m7b5", "madd9") rather than the prettified label (e.g. "m7♭5",
+// "m(add9)"), which the backend's chord parser can't read.
+function plJamChordName(rootPc, quality, tonicPc) {
+  const absPc = (tonicPc + rootPc) % 12;
+  return PL_NOTE_NAMES_FLAT[absPc] + quality;
+}
+
 // Renders resolved chords grouped by bar (e.g. "Dm7 G7 | Cmaj7"), with each
 // chord's beat count shown when it's not a whole number (so *N overrides
 // and uneven splits are visible, not just implied).
@@ -463,6 +473,34 @@ function plPlaySelected() {
   parsed.forEach(r => { t = plScheduleChords(r.chords, tonicPc, t) + gapSec; });
 }
 
+// Sends one card's progression to the Jam page as its chord chart, carrying
+// over this page's key/BPM too (Jam's own style choice — which drives the
+// drum/bass groove — is left untouched, since it's an arrangement pick that
+// has nothing to do with which harmony you're feeding it).
+function plSendToJam(id) {
+  const c = plState.cards.find(c => c.id === id);
+  if (!c) return;
+  const result = plParseProgression(c.text, plState.beatsPerBar);
+  if (result.error) return;
+  const tonicPc = PL_NOTE_INDEX[plState.key];
+  const bars = [];
+  result.chords.forEach(ch => {
+    if (!bars[ch.barIndex]) bars[ch.barIndex] = { chords: [] };
+    bars[ch.barIndex].chords.push({ name: plJamChordName(ch.rootPc, ch.quality, tonicPc), beats: ch.beats });
+  });
+  state.jam.bars = bars;
+  state.jam.key = plState.key;
+  state.jam.bpm = plState.bpm;
+  const bpmEl = document.getElementById('jam-bpm');
+  const keyEl = document.getElementById('jam-key');
+  if (bpmEl) bpmEl.value = plState.bpm;
+  if (keyEl) keyEl.value = plState.key;
+  updateJamDuration();
+  renderJamChart();
+  saveLastSelection();
+  showPage('jam');
+}
+
 function plRenderCompareBar() {
   const selectedCount = plState.cards.filter(c => c.selected).length;
   document.getElementById('pl-sel-count').textContent = selectedCount;
@@ -501,6 +539,7 @@ function plRenderCards() {
         <input type="checkbox" ${c.selected ? 'checked' : ''} onchange="plToggleSelect(${c.id}, this.checked)" title="加入连播对比">
         <div class="pl-ctrl">
           <button class="btn btn-ghost btn-sm" onclick="plPlayCard(${c.id})" ${result.error ? 'disabled' : ''}>▶</button>
+          <button class="btn btn-ghost btn-sm" onclick="plSendToJam(${c.id})" ${result.error ? 'disabled' : ''} title="发送到 Jam 页面编曲">→ Jam</button>
           <button class="btn btn-ghost btn-sm danger" onclick="plRemoveCard(${c.id})">×</button>
         </div>
         <div class="pl-content">
@@ -595,5 +634,5 @@ function initProgressionLabPage() {
 // grammar, see its own comment on slRomanEngineAvailable) can be unit-tested
 // against the real parser/formatter instead of a hand-rolled stand-in.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PL_NOTE_INDEX, PL_NOTE_NAMES_FLAT, PL_MAJOR_SCALE_OFFSETS, plParseToken, plChordSymbol, plResolveQuality, PL_LOOKUP_DEGREES };
+  module.exports = { PL_NOTE_INDEX, PL_NOTE_NAMES_FLAT, PL_MAJOR_SCALE_OFFSETS, plParseToken, plChordSymbol, plJamChordName, plResolveQuality, PL_LOOKUP_DEGREES };
 }

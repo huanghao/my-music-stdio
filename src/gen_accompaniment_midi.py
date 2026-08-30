@@ -43,6 +43,17 @@ QUALITY_INTERVALS: dict[str, list[int]] = {
     "m6":   [0, 3, 7, 9],
     "dim7": [0, 3, 6, 9],
     "m7b5": [0, 3, 6, 10],    # half-diminished
+    # Qualities the Progressions page's roman-numeral parser can produce
+    # (web/progression-lab.js PL_QUALITIES) but that weren't otherwise
+    # reachable from the chord toolbar / styles.py — kept in sync with that
+    # table so "send progression to Jam" never hits an unparseable chord.
+    "madd9": [0, 3, 7, 2],
+    "7sus4": [0, 5, 7, 10],
+    "9sus4": [0, 5, 7, 10, 14],
+    "6/9":   [0, 4, 7, 9, 2],
+    "mmaj7": [0, 3, 7, 11],
+    "7b9":   [0, 4, 7, 10, 1],
+    "7#9":   [0, 4, 7, 10, 3],
 }
 
 
@@ -421,6 +432,7 @@ def _bass_context(chord: str, next_chord: str | None = None) -> dict[str, int]:
         "root": bass_root,
         "third": to_bass(root + intervals[1]),
         "fifth": to_bass(root + 7),
+        "sixth": to_bass(root + 9),  # walking-blues passing tone (see bass_bar_events shuffle/blues)
         "octave": bass_root + 12,
         "approach_next": to_bass(approach),
     }
@@ -451,6 +463,95 @@ def bass_bar_events(
         ]
     elif style == "ambient":
         hits = []  # pure pad, no bass
+    elif style in ("shuffle", "blues"):
+        # Walking blues bass (1-3-5-6 walk), swung to the same triplet
+        # subdivision as groove_shuffle's hi-hat (TRIPLET*2 = the swung
+        # "and"). The old flat-quarter-note fallback played straight against
+        # a swung hi-hat, which is what made this style feel rhythmically
+        # unstable — locking the bass to the same grid fixes that.
+        TRIPLET = PPQ // 3
+        SWING_OFF = TRIPLET * 2
+        hits = [
+            (0,                   bass_notes["root"],   100, SWING_OFF - 10),
+            (SWING_OFF,           bass_notes["third"],   70, TRIPLET - 10),
+            (PPQ,                 bass_notes["fifth"],   90, SWING_OFF - 10),
+            (PPQ + SWING_OFF,     bass_notes["sixth"],   68, TRIPLET - 10),
+            (PPQ * 2,             bass_notes["octave"],  88, SWING_OFF - 10),
+            (PPQ * 2 + SWING_OFF, bass_notes["sixth"],   66, TRIPLET - 10),
+            (PPQ * 3,             bass_notes["fifth"],   85, SWING_OFF - 10),
+            (PPQ * 3 + SWING_OFF, bass_notes["approach_next"], 78, TRIPLET - 10),
+        ]
+    elif style == "rock":
+        # Driving eighth-note pumping root, matching groove_rock's kick on
+        # the "and" of beat 1 — this is what made rock indistinguishable
+        # from pop's plain quarter notes.
+        HALF = PPQ // 2
+        hits = [
+            (0,            bass_notes["root"],          105, HALF - 8),
+            (HALF,         bass_notes["root"],            80, HALF - 8),
+            (PPQ,          bass_notes["fifth"],            95, HALF - 8),
+            (PPQ + HALF,   bass_notes["root"],             78, HALF - 8),
+            (PPQ * 2,      bass_notes["root"],            100, HALF - 8),
+            (PPQ * 2 + HALF, bass_notes["root"],           80, HALF - 8),
+            (PPQ * 3,      bass_notes["fifth"],             90, HALF - 8),
+            (PPQ * 3 + HALF, bass_notes["approach_next"],   80, HALF - 8),
+        ]
+    elif style == "metal":
+        # Tight 8th-note root pumping doubling groove_metal's kick-on-every-
+        # 8th pattern (a real metal bass locks to the kick, it doesn't amble
+        # through chord tones like a ballad bass would).
+        HALF = PPQ // 2
+        hits = []
+        for e in range(8):
+            if e == 7:
+                note, vel = bass_notes["approach_next"], 85
+            elif e == 6:
+                note, vel = bass_notes["fifth"], 100
+            else:
+                note, vel = bass_notes["root"], 112 if e % 2 == 0 else 92
+            hits.append((e * HALF, note, vel, HALF - 6))
+    elif style == "funk":
+        # Syncopated 16ths doubling groove_funk's kick (beat 1, the 16th
+        # before beat 3, beat 3) plus a ghost note — a straight quarter-note
+        # bass under a syncopated kick is exactly the "fighting the drums"
+        # problem this whole pass is fixing.
+        Q = PPQ // 4
+        hits = [
+            (0,                bass_notes["root"],          100, Q - 4),
+            (Q * 3,            bass_notes["root"],            35, Q - 6),   # ghost, 16th before beat 2
+            (PPQ,              bass_notes["fifth"],           85, Q - 4),
+            (PPQ * 2 - Q,      bass_notes["root"],             92, Q - 4),  # syncopated push into beat 3
+            (PPQ * 2,          bass_notes["root"],             98, Q - 4),
+            (PPQ * 3,          bass_notes["third"],            80, Q - 4),
+            (PPQ * 3 + Q * 2,  bass_notes["fifth"],             70, Q - 4),
+            (PPQ * 3 + Q * 3,  bass_notes["approach_next"],     75, Q - 4),
+        ]
+    elif style == "rnb":
+        # Smooth syncopation doubling groove_rnb's kick (beat 1, beat 2-and,
+        # beat 3) instead of plain quarters.
+        Q = PPQ // 4
+        hits = [
+            (0,             bass_notes["root"],          95, Q * 2 - 6),
+            (PPQ,           bass_notes["fifth"],          75, Q * 2 - 6),
+            (PPQ + PPQ // 2, bass_notes["root"],           85, Q - 6),
+            (PPQ * 2,       bass_notes["third"],          88, Q * 2 - 6),
+            (PPQ * 3,       bass_notes["fifth"],          80, Q - 6),
+            (PPQ * 3 + Q * 2, bass_notes["approach_next"], 72, Q * 2 - 6),
+        ]
+    elif style == "ballad":
+        # Sparse and sustained, matching piano_bar_events' "beat 1 long,
+        # beat 3 long" comping instead of pumping quarters under a ballad.
+        hits = [
+            (0,       bass_notes["root"],  85, PPQ * 2 - 20),
+            (PPQ * 2, bass_notes["fifth"], 72, PPQ * 2 - 20),
+        ]
+    elif style == "bossa":
+        # Two-note tumbao doubling groove_bossa's kick (beat 1, beat 1-and)
+        # instead of four even quarters.
+        hits = [
+            (0,                    bass_notes["root"],  85, PPQ + PPQ // 2 - 15),
+            (PPQ + PPQ // 2,       bass_notes["fifth"], 75, PPQ * 2 + PPQ // 2 - 15),
+        ]
     else:
         hits = [
             (0,       bass_notes["root"],          95, PPQ - 30),

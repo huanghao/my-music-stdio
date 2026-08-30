@@ -108,6 +108,13 @@ body {
 /* Playback elapsed + loop counter in the transport bar (filled by startPolling) */
 .transport-progress { font-size: 12.5px; font-family: monospace; color: var(--text); letter-spacing: 0.5px; white-space: nowrap; }
 .transport-actions { display: flex; align-items: center; gap: 8px; cursor: auto; }
+/* Keep the primary button's footprint identical across Play/Stop so its
+   position never shifts when playback starts/stops */
+.transport-primary { min-width: 64px; }
+
+/* Master volume row (second row of the panel) — static markup in index.html;
+   cursor:auto so the slider doesn't show the pill's grab cursor */
+.transport-volume-row { cursor: auto; font-size: 13px; }
 
 /* Practice timer row (bottom row of the panel above) — see
    practice-timer.js header comment for why it's a separate concept from

@@ -890,26 +890,29 @@ function renderTransportBar() {
   // timer, which works on every page) — an unregistered transport just
   // means this row renders empty, not that the whole pill hides.
   if (!_transport) { bodyEl.innerHTML = ''; return; }
-  let btns;
+  // Button order is fixed so the bar doesn't jump on state changes: the
+  // primary slot (Play ↔ Stop) always comes first and never moves; the
+  // Pause/Resume secondary and the progress text trail behind it.
+  let primary, secondary = '';
   if (_transport.kind === 'listen') {
-    btns = _transportState === 'listening'
-      ? `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`
-      : `<button class="btn btn-listen" onclick="transportPlay()">Start Listening</button>`;
+    primary = _transportState === 'listening'
+      ? `<button class="btn btn-stop transport-primary" onclick="transportStop()">Stop</button>`
+      : `<button class="btn btn-listen transport-primary" onclick="transportPlay()">Start Listening</button>`;
   } else if (_transportState === 'playing') {
-    btns = (_transport.pause ? `<button class="btn btn-ghost" onclick="transportPause()">⏸ Pause</button>` : '') +
-      `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`;
+    primary = `<button class="btn btn-stop transport-primary" onclick="transportStop()">Stop</button>`;
+    secondary = _transport.pause ? `<button class="btn btn-ghost" onclick="transportPause()">⏸ Pause</button>` : '';
   } else if (_transportState === 'paused') {
-    btns = `<button class="btn btn-play" onclick="transportResume()">Resume</button>` +
-      `<button class="btn btn-stop" onclick="transportStop()">Stop</button>`;
+    primary = `<button class="btn btn-stop transport-primary" onclick="transportStop()">Stop</button>`;
+    secondary = `<button class="btn btn-play" onclick="transportResume()">Resume</button>`;
   } else {
-    btns = `<button class="btn btn-play" onclick="transportPlay()">Play</button>`;
+    primary = `<button class="btn btn-play transport-primary" onclick="transportPlay()">Play</button>`;
   }
   const label = _transport.label ? `<span class="transport-label">${htmlEsc(_transport.label)}</span>` : '';
   // Playback progress (elapsed + loop) lives here — the single time display
   // for playback, filled by startPolling; per-page playback panels are gone.
   const progress = _transport.kind === 'playback'
     ? '<span class="transport-progress hidden" id="transport-progress"></span>' : '';
-  bodyEl.innerHTML = `${label}${progress}<span class="transport-actions">${btns}</span>`;
+  bodyEl.innerHTML = `${label}<span class="transport-actions">${primary}${secondary}</span>${progress}`;
   transportApplyPos(); // content width just changed — re-clamp so it can't drift off-screen
 }
 
@@ -944,10 +947,11 @@ function transportApplyPos() {
 function initTransportDrag() {
   const pill = document.getElementById('transport-pill');
   if (!pill) return;
-  // The whole pill is a drag surface (grip + label + padding, across both
-  // rows) — only actual buttons are excluded, so clicks on Play/Stop/preset
-  // buttons still register instead of starting a drag.
-  const onButtons = e => e.target.closest('button');
+  // The whole pill is a drag surface (grip + label + padding, across all
+  // rows) — only actual controls are excluded, so clicks on Play/Stop/preset
+  // buttons and drags on the volume slider still register instead of
+  // starting a pill drag.
+  const onButtons = e => e.target.closest('button, input, select');
   let sx, sy, ox, oy, dragging = false;
   pill.addEventListener('pointerdown', e => {
     if (onButtons(e)) return;

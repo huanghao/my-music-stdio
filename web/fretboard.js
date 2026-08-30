@@ -188,6 +188,10 @@ function fbRenderDeviceBar() {
       class="w-[100px]" oninput="fbMasterVolumeChange(this.value)"
       title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">
   `;
+  // Push the loaded value into every master-volume slider — the device bar's
+  // own slider above renders with it baked in, but the transport pill's
+  // slider is static markup (index.html) and needs the value set here.
+  document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
   fbRefreshOutputDevices();
 }
 

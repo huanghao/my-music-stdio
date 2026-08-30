@@ -850,14 +850,24 @@
 
 <!-- App-wide floating control panel: one draggable pill (position remembered)
      combining the current page's primary Play/Listen action (top row; empty
-     when the page has none) with the generic practice timer (bottom row,
-     always present — it works on every page, not just ones with a
-     registered transport). app.js fills #transport-body; practice-timer.js
-     fills #pt-row. -->
+     when the page has none), the master volume (second row, always present —
+     the one loudness control that works even for audio interfaces with no
+     software volume, and the knob you reach for mid-jam), and the generic
+     practice timer (bottom row, always present — it works on every page,
+     not just ones with a registered transport). app.js fills
+     #transport-body; practice-timer.js fills #pt-row. The volume slider is
+     static markup so transport re-renders never recreate it mid-drag; its
+     fb-master-volume-slider class keeps it in sync with the device bar's
+     slider (fretboard.js fbMasterVolumeChange). -->
 <div id="transport-pill" class="transport-pill">
   <div class="transport-row">
     <span class="transport-grip" id="transport-grip" title="拖动到任意位置（双击复位）">⠿</span>
     <span class="transport-body" id="transport-body"></span>
+  </div>
+  <div class="transport-row transport-volume-row">
+    <span title="Scales every sound this app generates — use this if your audio interface's output isn't controlled by the OS volume keys">🔊</span>
+    <input type="range" class="fb-master-volume-slider w-[80px]" min="0" max="1" step="0.01" value="1"
+      oninput="fbMasterVolumeChange(this.value)">
   </div>
   <div class="transport-row pt-row" id="pt-row"></div>
 </div>

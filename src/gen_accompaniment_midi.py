@@ -359,6 +359,9 @@ def piano_bar_events(
             events.append((t, mido.Message("note_on",  channel=0, note=n, velocity=v)))
             events.append((t + dur, mido.Message("note_off", channel=0, note=n, velocity=0)))
 
+    # Declarative patterns (style_patterns.py) win when present; the elif
+    # branches below are the not-yet-migrated styles. See the note on
+    # STYLE_PATTERNS.
     if style in style_patterns.STYLE_PATTERNS and style_patterns.STYLE_PATTERNS[style].piano:
         pattern = style_patterns.STYLE_PATTERNS[style].piano
         ticks_per_slot = PPQ * 4 // pattern.grid_slots
@@ -582,7 +585,7 @@ def drum_bar_events(
     style: str = "pop",
     bar_role: str = "phrase_middle",
 ) -> list[tuple[int, mido.Message]]:
-    if style in style_patterns.DRUM_PATTERNS:
+    if style in style_patterns.DRUM_PATTERNS:  # declarative styles only (pop); others use groove_fn below
         raw = style_patterns.drum_bar_raw_events(style, bar_offset, bar_role, PPQ)
     else:
         raw = groove_fn(bar_offset, False)  # groove functions no longer handle fills

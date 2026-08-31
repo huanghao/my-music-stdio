@@ -160,6 +160,13 @@ POP_STYLE = StylePattern(
     piano=PIANO_PATTERNS["pop"],
 )
 
+# NOTE: this declarative pattern system is the intended direction for style
+# definitions, but pop is a pilot — the other 9 styles (ballad, funk, rnb,
+# rock, metal, blues, bossa, jazz, reggae) still live as hardcoded groove
+# branches in gen_accompaniment_midi.py (piano_bar_events / bass_bar_events /
+# drum_bar_events dispatch here first, then fall through to those branches).
+# Deliberate status, not forgotten half-work: migrate a style only when you're
+# already touching it, and verify the generated MIDI by ear when you do.
 STYLE_PATTERNS = {
     "pop": POP_STYLE,
 }

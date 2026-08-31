@@ -3,6 +3,8 @@ name = "my-music-stdio"
 version = "0.1.0"
 description = "Music practice workstation research and prototypes."
 requires-python = ">=3.12,<3.13"
+# NOTE: requirements.txt is the source of truth for runtime deps
+# (environment.yml and README install from it). Keep this list in sync.
 dependencies = [
     "matplotlib>=3.10",
     "fastapi>=0.110",
@@ -10,6 +12,11 @@ dependencies = [
     "mido>=1.3",
     "pyfluidsynth>=1.3",
     "python-multipart>=0.0.9",
+    "httpx>=0.27",
+    "pyyaml>=6.0",
+    "pydantic-ai-slim[anthropic,openai]>=2.36.0",
+    "pypdf>=5.0",
+    "socksio",
 ]
 
 [tool.ruff]

@@ -1,3 +1,5 @@
 -r requirements.txt
 
-# Development-only dependencies can be added here when needed.
+# Development-only dependencies (Justfile runs both: `just test`, `just lint`).
+pytest>=8.4
+ruff>=0.15

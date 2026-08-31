@@ -128,6 +128,13 @@ function agentPrefsLoad() {
             if (m.runMeta && typeof m.runMeta === 'object') next.runMeta = m.runMeta;
             if (m.error) next.error = true;
             if (m.done) next.done = true;
+            // 历史修补：这个字段一度被发送时的 thinking 档位（"medium" 等）占了坑，
+            // 再被流式思考文本接在后面（见 agentSend 里的 thinkingLevel）——把这段
+            // 混进去的档位词剥掉，老会话的「思考过程」才不会只剩一个 "medium"
+            if (typeof next.thinking === 'string') {
+              const cleaned = next.thinking.replace(/^(off|minimal|low|medium|high|xhigh|max)(?=$|\S)/, '');
+              if (cleaned) next.thinking = cleaned; else delete next.thinking;
+            }
             return next;
           })
           .slice(-AGENT_HISTORY_LIMIT),
@@ -180,7 +187,7 @@ function agentRenderTray() {
     const chip = document.createElement('span');
     chip.className = 'agent-mchip';
     chip.title = `${m.quote}${m.source && m.source !== '助教回答' ? `\n标注自：${m.source}` : ''}`
-      + `${m.note ? `\n批注：${m.note}` : ''}\n（点击定位原文）`;
+      + `${m.note ? `\n批注：${m.note}` : ''}\n（点击继续编辑批注）`;
     chip.innerHTML = `<span class="q">「${htmlEsc(m.quote)}」</span>${m.note ? '<span class="n">✎</span>' : ''}<span class="x">×</span>`;
     chip.querySelector('.x').onclick = (e) => {
       e.stopPropagation();
@@ -188,21 +195,9 @@ function agentRenderTray() {
       agentPrefsSave();
       agentRenderTray();
     };
-    chip.onclick = () => agentFlashMark(m.quote);
+    chip.onclick = () => agentEditMark(i, chip);
     tray.appendChild(chip);
   });
-}
-
-// 点 chip → 在消息流里找到含这段引用的气泡，滚过去闪一下
-function agentFlashMark(quote) {
-  for (const b of document.querySelectorAll('#agent-messages .agent-msg-bubble')) {
-    if (b.textContent.includes(quote.slice(0, 30))) {
-      b.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      b.classList.add('flash');
-      setTimeout(() => b.classList.remove('flash'), 900);
-      return;
-    }
-  }
 }
 
 // 标记 + 留言合成结构化提问，直接烤进用户消息 content（kolab 同款）——
@@ -230,13 +225,86 @@ function agentRestoreMarks(session, marks) {
   agentRenderTray();
 }
 
-let agentMarkAnchor = null;   // 选区的 getBoundingClientRect（fixed 定位基准）
+let agentMarkAnchor = null;   // 选区（或托盘 chip）的 getBoundingClientRect（fixed 定位基准）
 let agentMarkPending = null;  // { quote, source } — 批注在 commit 时从菜单输入框读，一起落进 marks
+let agentMarkEditing = -1;    // >= 0：正在改托盘里第 i 条已有标记，不是新建
 
-function agentHideMarkMenu() {
-  document.getElementById('agent-mark-menu')?.classList.add('hidden');
+// 关闭菜单：批注的提交/放弃只有这一条路径（⌘/Ctrl+Enter 和点别处/滚动都走这里，
+// 不各自 push，避免重复提交）。
+// - discard=true（Esc 明确取消）：编辑中的标记保留原值，新写的直接不提交
+// - 其它关闭方式：非空草稿才提交/更新；空草稿什么都不做（真要删标记走 chip 的 ×）
+function agentHideMarkMenu({ discard = false } = {}) {
+  const menu = document.getElementById('agent-mark-menu');
+  if (!menu) return;
+  const note = document.getElementById('agent-mm-note');
+  const wasWritingNote = !note.classList.contains('hidden');
+  const draft = note.value.trim().slice(0, AGENT_MARK_NOTE_LIMIT);
+  const idx = agentMarkEditing;
+  const pending = agentMarkPending;
+  menu.classList.add('hidden');
+  document.getElementById('agent-mm-items').classList.remove('hidden');
+  const quoteEl = document.getElementById('agent-mm-quote');
+  quoteEl.classList.add('hidden');
+  quoteEl.textContent = '';
+  note.classList.add('hidden');
+  note.style.height = '';
+  note.value = '';
   agentMarkAnchor = null;
   agentMarkPending = null;
+  agentMarkEditing = -1;
+  if (discard || !wasWritingNote || !draft) return;
+  const marks = agentSessionMarks(agentActiveSession());
+  if (idx >= 0) {
+    if (marks[idx]) marks[idx].note = draft;
+  } else if (pending?.quote && marks.length < AGENT_MARK_LIMIT) {
+    marks.push({ ...pending, note: draft });
+  }
+  agentPrefsSave();
+  agentRenderTray();
+  window.getSelection()?.removeAllRanges();
+}
+
+// 批注可空的那条路径（「直接加入托盘」）：不经输入框，直接落进托盘
+function agentAddMark(m) {
+  const marks = agentSessionMarks(agentActiveSession());
+  if (m?.quote && marks.length < AGENT_MARK_LIMIT) marks.push({ ...m, note: '' });
+  agentPrefsSave();
+  agentRenderTray();
+  agentHideMarkMenu();
+  window.getSelection()?.removeAllRanges();
+}
+
+// 菜单从「选项列表」切成「引用回显 + 批注输入框」：引用回显是让人看清自己标了
+// 哪段（输入框拿走焦点后选区高亮会变淡，光靠选区不够）
+function agentShowNoteEditor(quote, note) {
+  document.getElementById('agent-mm-items').classList.add('hidden');
+  const quoteEl = document.getElementById('agent-mm-quote');
+  quoteEl.textContent = quote;
+  quoteEl.classList.remove('hidden');
+  const inp = document.getElementById('agent-mm-note');
+  inp.classList.remove('hidden');
+  inp.value = note || '';
+  document.getElementById('agent-mark-menu').classList.remove('hidden'); // 先显示再 focus/量高度
+  inp.focus();
+  agentGrowMarkNote();
+  agentPositionMarkMenu();
+}
+
+function agentGrowMarkNote() {
+  const inp = document.getElementById('agent-mm-note');
+  if (!inp) return;
+  inp.style.height = 'auto';
+  inp.style.height = Math.min(inp.scrollHeight, 220) + 'px';
+}
+
+// 点托盘里的 chip → 重新打开批注编辑器续写/改，定位到 chip 旁边
+function agentEditMark(i, chip) {
+  const m = agentSessionMarks(agentActiveSession())[i];
+  if (!m) return;
+  agentMarkPending = { quote: m.quote, source: m.source };
+  agentMarkEditing = i;
+  agentMarkAnchor = chip.getBoundingClientRect();
+  agentShowNoteEditor(m.quote, m.note);
 }
 
 function agentPositionMarkMenu() {
@@ -252,25 +320,26 @@ function agentPositionMarkMenu() {
 function agentInitMarkMenu() {
   const menu = document.getElementById('agent-mark-menu');
   if (!menu) return;
-  const noteInput = menu.querySelector('input');
-  const commit = () => {
-    if (agentMarkPending?.quote) {
-      const note = (noteInput?.value || '').trim().slice(0, AGENT_MARK_NOTE_LIMIT);
-      const marks = agentSessionMarks(agentActiveSession());
-      if (marks.length < AGENT_MARK_LIMIT) marks.push({ ...agentMarkPending, note });
-      agentPrefsSave();
-      agentRenderTray();
-    }
-    agentHideMarkMenu();
-    window.getSelection()?.removeAllRanges();
-  };
-  // 点菜单自身不能清掉选区（选区没了 quote 就没了）——但批注输入框要拿
-  // 焦点，例外放行（quote 在 mouseup 时已抓进 agentMarkPending，选区塌了也无妨）
-  menu.addEventListener('mousedown', (e) => { if (e.target !== noteInput) e.preventDefault(); });
-  menu.querySelector('button').addEventListener('click', commit);
-  noteInput?.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); commit(); }
-    else if (e.key === 'Escape') { agentHideMarkMenu(); window.getSelection()?.removeAllRanges(); }
+  const noteInput = document.getElementById('agent-mm-note');
+  // 点菜单自身不能清掉选区（选区没了、划中的那段就不再高亮）——但批注输入框
+  // 要拿焦点/定位光标，例外放行
+  menu.addEventListener('mousedown', (e) => { if (!e.target.closest('#agent-mm-note')) e.preventDefault(); });
+  menu.querySelectorAll('.agent-mi').forEach(item => {
+    item.addEventListener('click', () => {
+      if (item.dataset.act === 'note') {
+        agentMarkEditing = -1;   // 新标记，不是在改托盘里已有的
+        agentShowNoteEditor(agentMarkPending?.quote || '', '');
+      } else {
+        agentAddMark(agentMarkPending);
+      }
+    });
+  });
+  noteInput.addEventListener('input', () => { agentGrowMarkNote(); agentPositionMarkMenu(); });
+  noteInput.addEventListener('keydown', (e) => {
+    e.stopPropagation();   // 回车是换行，也不让页面级快捷键吃掉输入
+    // 提交/取消都走 agentHideMarkMenu 这一条路径（见其注释）
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') agentHideMarkMenu();
+    else if (e.key === 'Escape') agentHideMarkMenu({ discard: true });
   });
   // 划选文字（助教回答 / 当前页面正文）→ 弹菜单；点别处/选区塌陷 → 收起。
   // lick 的 PDF 在 pdf.js iframe 里，跨文档拿不到选区，覆盖不到它。
@@ -286,11 +355,14 @@ function agentInitMarkMenu() {
     if (!source) { agentHideMarkMenu(); return; }
     const quote = sel.toString().trim().slice(0, AGENT_MARK_QUOTE_LIMIT);
     if (!quote) { agentHideMarkMenu(); return; }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    agentHideMarkMenu();   // 上一次没关的批注（若有）先按草稿规则落袋，再复位成选项列表
     agentMarkPending = { quote, source };
-    agentMarkAnchor = sel.getRangeAt(0).getBoundingClientRect();
+    agentMarkEditing = -1;
+    agentMarkAnchor = rect;
+    // 先出选项列表、不抢焦点：选区的高亮就留在原文上，看得见自己标了哪段
     menu.classList.remove('hidden'); // 先显示再量宽高——display:none 时 offsetWidth 是 0
     agentPositionMarkMenu();
-    if (noteInput) { noteInput.value = ''; noteInput.focus(); } // 划完直接写批注，Enter 即入托盘
   });
   document.getElementById('agent-messages')?.addEventListener('scroll', agentHideMarkMenu);
 }
@@ -353,9 +425,14 @@ function agentRenderMessages(forceScroll) {
     const tools = (m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length)
       ? m.tools.map(t => `<div class="agent-msg-tool">🔧 ${htmlEsc(t.name || '')}(${htmlEsc(JSON.stringify(t.args || {}))})</div>`).join('')
       : '';
+    // 正文还没开始吐字时气泡是空的（等待/思考期），空气泡整框由 CSS 隐藏
+    // （.agent-msg-bubble:empty），不留一块带底色的空壳；流完了仍一个字都没有
+    // 才写占位文案，免得只剩个孤零零的思考框
+    const answer = m.content || (m.role === 'assistant' && m.done && !m.error
+      ? '（未生成内容，可能是网络中断或页面刷新打断了这轮回答）' : '');
     const bubble = m.role === 'user'
       ? `<div class="agent-msg-bubble">${htmlEsc(m.content)}</div>`
-      : `<div class="agent-msg-bubble">${typeof marked !== 'undefined' ? marked.parse(m.content || '') : htmlEsc(m.content || '')}</div>`;
+      : `<div class="agent-msg-bubble">${typeof marked !== 'undefined' ? marked.parse(answer) : htmlEsc(answer)}</div>`;
     const metaBits = [];
     if (m.role === 'assistant' && Number.isFinite(m.durationMs)) {
       metaBits.push(agentFmtDuration(m.durationMs));
@@ -722,7 +799,9 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
     // Just the outcome word — the full breakdown (duration/model/thinking/ctx)
     // is already permanently shown under the message itself; repeating it
     // here in the transient status line was pure duplication.
-    const statusWord = assistantMsg.interrupted ? '已中断' : (assistantMsg.error ? '出错' : '完成');
+    // 正常完成不留状态行：耗时/模型/ctx 那行本来就挂在消息下面，状态栏再说一句
+    // 「完成」只是白占一行（收起后底部就只剩输入区一行操作条）。中断/出错才保留结论。
+    const statusWord = assistantMsg.interrupted ? '已中断' : (assistantMsg.error ? '出错' : '');
     agentSetStatus(statusWord, assistantMsg.error);
   } catch (e) {
     if (e.name === 'AbortError') {
@@ -787,9 +866,11 @@ async function agentSend(retryQuestion) {
   if (session.messages.length > AGENT_HISTORY_LIMIT) session.messages.splice(0, session.messages.length - AGENT_HISTORY_LIMIT);
   agentRenderSessions();
 
+  // thinkingLevel 而不是 thinking：后者是流式思考文本的字段（见 agentApplyRunEvent
+  // 和渲染里的「思考过程」框），两者同名会让思考过程凭空多出一个 "medium" 开头
   const assistantMsg = {
     role: 'assistant', content: '', retryQuestion: question,
-    provider: agentState.provider, model: agentState.model, thinking: agentState.thinking,
+    provider: agentState.provider, model: agentState.model, thinkingLevel: agentState.thinking,
   };
   session.messages.push(assistantMsg);
   agentRenderMessages(true);

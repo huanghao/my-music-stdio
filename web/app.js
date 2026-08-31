@@ -543,6 +543,19 @@ function renderChart(containerEl, bars, onChordClick, onChordCtx, onBarCtx, onAd
       }
 
       barEl.appendChild(beatsEl);
+
+      // Beat dots baked into every bar upfront (same pattern as renderVampPhrase):
+      // the ticker only toggles .active, and jamBeatView re-lights the current
+      // dot across edit-driven re-renders.
+      if (state.jam.beat_dots) {
+        const dotsEl = document.createElement('div');
+        dotsEl.className = 'beat-dots';
+        dotsEl.innerHTML = Array.from({length: 4}, (_, b) =>
+          `<span class="beat-dot${b === 0 ? ' downbeat' : ''}${barIdx === jamBeatView.bar && b === jamBeatView.beat ? ' active' : ''}"></span>`
+        ).join('');
+        barEl.appendChild(dotsEl);
+      }
+
       barEl.addEventListener('contextmenu', e => { e.preventDefault(); onBarCtx(e, barIdx); });
       row.appendChild(barEl);
     }
@@ -717,6 +730,9 @@ const VAMP_PHRASE_BARS = 4;
 // bakes it into the dots so the poll-driven innerHTML rebuild doesn't wipe the
 // lit dot for up to 100ms between rebuild and next tick.
 const vampBeatView = { bar: -1, beat: -1 };
+// Same role for jam: renderChart bakes it into the dots so edit-driven chart
+// re-renders don't wipe the lit beat mid-playback.
+const jamBeatView = { bar: -1, beat: -1 };
 
 function renderVampPhrase(activebar) {
   const el = document.getElementById('vamp-phrase');
@@ -1102,7 +1118,10 @@ function stopPolling() {
   }
   state.playback.anchor = null;
   vampBeatView.bar = vampBeatView.beat = -1;
-  document.querySelectorAll('.beat-dots').forEach(el => el.remove());
+  jamBeatView.bar = jamBeatView.beat = -1;
+  // Dots are baked into the vamp phrase / jam chart markup, so on stop just
+  // unlight them — removing the elements would strip jam's until a re-render.
+  document.querySelectorAll('.beat-dot.active').forEach(el => el.classList.remove('active'));
 }
 
 // Beat dots: extrapolate the current beat from the last status poll's anchor

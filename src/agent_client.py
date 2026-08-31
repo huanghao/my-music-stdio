@@ -386,6 +386,9 @@ async def stream_parts(
             settings = OpenAIResponsesModelSettings(openai_store=False)
             if use_thinking:
                 settings["thinking"] = thinking
+                # Responses API 默认不回思考摘要（reasoning.summary 为空），只设 thinking
+                # 档位的话前端「思考过程」框永远收不到一个字——要摘要得显式开。
+                settings["openai_reasoning_summary"] = "auto"
         else:
             api_key = _resolve_var(p.api_key_env)
             model = AnthropicModel(

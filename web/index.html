@@ -916,12 +916,19 @@
   <div class="agent-sidebar-rail" id="agent-sidebar-rail" onclick="agentToggleSidebarCollapsed()" title="展开助教">✦</div>
 </div>
 
-<!-- 划词小菜单：选中助教回答/页面文本后浮在选区旁边，可写一句批注再收进
-     追问托盘（批注可空，Enter 即加入）。显隐和定位由 agent-assistant.js
-     的 agentInitMarkMenu 驱动。 -->
+<!-- 划词小菜单（抄 kolab 的 mark menu）：选中助教回答/页面文本后浮在选区旁边，
+     先出选项列表（不抢焦点，选区高亮留着让人看清标了什么），点「写批注…」才
+     换成引用回显 + 多行输入框（回车换行，⌘/Ctrl+Enter 确定）。显隐和定位由
+     agent-assistant.js 的 agentInitMarkMenu 驱动。 -->
 <div id="agent-mark-menu" class="agent-mark-menu hidden">
-  <input type="text" class="agent-mark-note" placeholder="写点批注…（可空）" maxlength="200">
-  <button type="button">＋ 加入托盘</button>
+  <div id="agent-mm-items" class="agent-mm-items">
+    <div class="agent-mi" data-act="note">写批注…</div>
+    <div class="agent-mi" data-act="plain">直接加入托盘</div>
+  </div>
+  <div id="agent-mm-quote" class="agent-mm-quote hidden"></div>
+  <!-- 不带 resize 把手：输入时按内容自动长高（见 agentInitMarkMenu 的 input 监听） -->
+  <textarea id="agent-mm-note" class="agent-mark-note hidden" rows="3" maxlength="200"
+            placeholder="写一句你的疑问，⌘/Ctrl+Enter 确定 · Esc 取消"></textarea>
 </div>
 
 <!-- Tools menu: a single launcher (bottom-left, away from AI 助教'/the

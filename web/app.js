@@ -805,7 +805,7 @@ function renderJamControls() {
         </div>
         <div class="field"><label>Beat dots</label>
           <input type="checkbox" id="jam-beat-dots" ${state.jam.beat_dots ? 'checked' : ''}
-            onchange="state.jam.beat_dots=this.checked; saveLastSelection()">
+            onchange="state.jam.beat_dots=this.checked; renderJamChart(); saveLastSelection()">
         </div>
       </div>
     </div>
@@ -1153,20 +1153,14 @@ function vampSetBeatDots(bar, beat) {
 }
 
 function jamSetBeatDots(bar, beat) {
-  const chart = document.getElementById('jam-chart');
-  if (!chart) return;
-  const barEl = chart.querySelectorAll('.chart-bar')[bar];
-  let dots = barEl?.querySelector('.beat-dots') || null;
-  chart.querySelectorAll('.beat-dots').forEach(el => { if (el !== dots) el.remove(); });
-  if (!state.jam.beat_dots || !barEl) { dots?.remove(); return; }
-  if (!dots) {
-    dots = document.createElement('div');
-    dots.className = 'beat-dots';
-    dots.innerHTML = Array.from({length: 4}, (_, b) =>
-      `<span class="beat-dot${b === 0 ? ' downbeat' : ''}"></span>`).join('');
-    barEl.appendChild(dots);
-  }
-  dots.querySelectorAll('.beat-dot').forEach((d, b) => d.classList.toggle('active', b === beat));
+  jamBeatView.bar = bar;
+  jamBeatView.beat = beat;
+  if (!state.jam.beat_dots) return;
+  document.querySelectorAll('#jam-chart .chart-bar').forEach((barEl, i) => {
+    barEl.querySelectorAll('.beat-dot').forEach((d, b) => {
+      d.classList.toggle('active', i === bar && b === beat);
+    });
+  });
 }
 
 async function jamPlay() {

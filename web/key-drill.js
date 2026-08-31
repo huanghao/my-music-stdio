@@ -45,8 +45,6 @@ function kdPickWeightedKey(keys, weights, rng = Math.random) {
   return keys[keys.length - 1];
 }
 
-const PL_NOTE_NAMES_SHARP = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
-
 // slRomanToChord (via progression-lab.js's plChordSymbol) always spells
 // accidentals as flats (PL_NOTE_NAMES_FLAT), regardless of key — correct
 // for F/Bb major and Dm/Gm minor, but wrong for sharp-signature keys: D
@@ -62,8 +60,9 @@ function kdRespell(chordSymbol, keyStr) {
   if (!KD_SHARP_KEYS.has(keyStr)) return chordSymbol;
   const m = chordSymbol.match(/^([A-G]b?)(.*)$/);
   if (!m) return chordSymbol;
+  // FB_NOTE_NAMES (fb-core.js) is the all-sharp spellings table.
   const idx = PL_NOTE_NAMES_FLAT.indexOf(m[1]);
-  return idx === -1 ? chordSymbol : PL_NOTE_NAMES_SHARP[idx] + m[2];
+  return idx === -1 ? chordSymbol : FB_NOTE_NAMES[idx] + m[2];
 }
 
 // The 7 diatonic triads of `keyStr`, in degree order — {roman, chord}

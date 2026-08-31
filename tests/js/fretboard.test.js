@@ -20,7 +20,7 @@ global.localStorage = {
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fb = require('../../web/fretboard.js');
+const fb = require('./load-fretboard.js');
 
 test('fbNoteAt returns the note name at a given string/fret', () => {
   assert.equal(fb.fbNoteAt(0, 0), 'E'); // low E open

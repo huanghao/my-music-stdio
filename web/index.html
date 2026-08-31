@@ -935,8 +935,9 @@
   </button>
 </div>
 
-<!-- Floating fretboard reference (fretboard.js fbIv*): pick a root note, tick
-     degrees (3/5/7 etc. or a chord-quality preset), see every occurrence of
+<!-- Floating fretboard reference (fretboard.js fbIv*): pick a root note
+     (string select + fret input, or just click the board), tick degrees
+     (3/5/7 etc. or a chord-quality preset), see every occurrence of
      root + those degrees nearby on the neck — pure geometry, no key needed.
      Page-independent like the practice timer pill and the agent panel above,
      so it's usable while looking at a Lick without leaving the page. Opened
@@ -958,7 +959,18 @@
 
 <script src="vendor/svguitar.umd.js"></script>
 <script src="vendor/marked.umd.js"></script>
-<script src="fretboard.js"></script>
+<script src="fb-core.js"></script>
+<script src="fb-prefs.js"></script>
+<script src="fb-board.js"></script>
+<script src="fb-audio.js"></script>
+<script src="fb-ear.js"></script>
+<script src="fb-seq.js"></script>
+<script src="fb-iv.js"></script>
+<script src="fb-pitch.js"></script>
+<script src="fb-tuner.js"></script>
+<script src="fb-chord.js"></script>
+<script src="fb-bend.js"></script>
+<script src="fb-init.js"></script>
 <script src="chord-id.js"></script>
 <script src="practice-timer.js"></script>
 <script src="speed-trainer.js"></script>

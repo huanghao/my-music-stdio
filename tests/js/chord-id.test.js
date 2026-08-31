@@ -8,7 +8,7 @@ global.HTMLMediaElement.prototype.setSinkId = function () {};
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-Object.assign(global, require('../../web/fretboard.js'));
+require('./load-fretboard.js');
 const cid = require('../../web/chord-id.js');
 
 test('fbCidPitchClasses reads pitch classes and the lowest sounding string', () => {

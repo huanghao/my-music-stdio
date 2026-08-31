@@ -12,7 +12,7 @@ global.document = global.document || { addEventListener() {} };
 global.HTMLMediaElement = global.HTMLMediaElement || function HTMLMediaElement() {};
 global.HTMLMediaElement.prototype.setSinkId = global.HTMLMediaElement.prototype.setSinkId || function () {};
 Object.assign(global, require('../../web/progression-lab.js'));
-Object.assign(global, require('../../web/fretboard.js'));
+require('./load-fretboard.js');
 Object.assign(global, require('../../web/song-loop.js'));
 const kd = require('../../web/key-drill.js');
 

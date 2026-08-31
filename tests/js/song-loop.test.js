@@ -27,7 +27,7 @@ Object.assign(global, require('../../web/progression-lab.js'));
 global.document = global.document || { addEventListener() {} };
 global.HTMLMediaElement = global.HTMLMediaElement || function HTMLMediaElement() {};
 global.HTMLMediaElement.prototype.setSinkId = global.HTMLMediaElement.prototype.setSinkId || function () {};
-Object.assign(global, require('../../web/fretboard.js'));
+require('./load-fretboard.js');
 
 function resetState() {
   sl.slState.bpm = 120;

@@ -443,6 +443,8 @@ input[type="number"] { width: 64px; text-align: center; }
 .fb-iv-note-label { font-size: 11px; fill: var(--text); font-family: sans-serif; font-weight: 700; pointer-events: none; }
 .fb-iv-degree-label { font-size: 10px; fill: var(--text); font-family: sans-serif; font-weight: 600; opacity: 0.85; pointer-events: none; }
 .fb-iv-label-on-root.fb-iv-note-label, .fb-iv-label-on-root.fb-iv-degree-label { fill: var(--text-inverse); }
+/* The whole board is a root-picker (click any cell to move the root there) */
+.fb-iv-board-clickable { cursor: pointer; }
 /* Degree dots (Interval Shapes panel) — two distinct visual concepts so the
    root never gets lost: root is the only *filled* dot (fb-quiz-dot, solid
    red); the chord-quality flats (b3/b5/b7) are hollow colored rings; every
@@ -1971,6 +1973,10 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
    room for the string names at the nut, so the outer padding on that side
    was mostly dead space in a panel this size. */
 #fbiv-panel .fb-board { padding: 12px 16px 12px 8px; }
+/* The board is a fixed 0–15 fret window at natural size (FB_IV_MAX_FRET):
+   no scaling to the panel, no auto-pan on root change. The user frames the
+   neck by scrolling horizontally (inherited .fb-board overflow-x: auto),
+   and that scroll position is preserved across rebuilds (fbState.iv.scrollX). */
 /* Degrees checkbox list collapses into a click-to-open dropdown (11 boxes
    in a row would otherwise wrap across several lines of the options bar). */
 .fb-iv-degrees-dropdown { position: relative; }

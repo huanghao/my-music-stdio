@@ -11,7 +11,7 @@
 | 页面 | localStorage key | 实现位置 |
 |------|-----------------|---------|
 | Vamp、Jam | `mps_last_selection` | `app.js` `loadLastSelection()` / `saveLastSelection()` |
-| Fretboard（全部模式） | `fb_prefs` | `fretboard.js` `fbPrefsLoad()` / `fbPrefsSave()` |
+| Fretboard（全部模式） | `fb_prefs` | `fb-prefs.js` `fbPrefsLoad()` / `fbPrefsSave()` |
 | Speed Trainer | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
@@ -74,10 +74,10 @@ function initFooPage() {
 
 ### 实现方式
 
-使用 `fretboard.js` 顶部定义的 `guarded()` 工具函数：
+使用 `web/fb-core.js` 顶部定义的 `guarded()` 工具函数（原 `fretboard.js` 已按 section 拆分为 `web/fb-*.js` 共 12 个文件）：
 
 ```js
-// fretboard.js 顶部已有
+// fb-core.js 顶部已有
 function guarded(fn, ms = 400) {
   let blocked = false;
   return function(...args) {
@@ -88,7 +88,7 @@ function guarded(fn, ms = 400) {
   };
 }
 
-// 在文件末尾（module.exports 之前）包装：
+// 在 fb-init.js 末尾（module.exports 之前）包装：
 fbCagedNext = guarded(fbCagedNext);
 fbEarPlayCurrent = guarded(fbEarPlayCurrent);
 // ... 其他需要防抖的函数
@@ -99,7 +99,7 @@ fbEarPlayCurrent = guarded(fbEarPlayCurrent);
 ### 新增按钮时的规则
 
 1. 判断该按钮是否属于上述"需要防抖"的类型
-2. 如果是，在 `fretboard.js` 末尾的包装列表里加上对应函数
+2. 如果是，在 `web/fb-init.js` 末尾的包装列表里加上对应函数
 3. `app.js` 里的新 play/stop 按钮通常已通过 UI 状态切换隐式保护，但若有疑问，也用 `guarded()` 包装
 
 ---

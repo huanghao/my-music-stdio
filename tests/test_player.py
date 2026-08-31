@@ -82,6 +82,60 @@ def test_pause_silences_sounding_notes(player, tmp_path):
     player.stop()
 
 
+def test_resume_retriggers_notes_held_at_pause(player, tmp_path):
+    # pause() cuts the sustained chord with All Notes Off; resume() must
+    # re-sound it (chase), or the music stays silent until the next note_on
+    # — the backing tracks sustain a chord for 1-2 bars.
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+    player.play(f)
+    time.sleep(0.05)
+    player.pause()
+    player._fs.noteon.reset_mock()
+    player.resume()
+    player._fs.noteon.assert_called_once_with(0, 60, 80)
+    player.stop()
+
+
+def test_resume_does_not_retrigger_notes_already_off(player, tmp_path):
+    # A note whose note_off played before the pause must stay silent on
+    # resume — the chase snapshot only covers notes sounding AT pause time.
+    f = _make_mid(tmp_path / "test.mid", duration_ticks=240)  # off after 0.25s @120bpm
+    player.play(f)
+    time.sleep(0.4)  # note_on AND note_off have both fired
+    player.pause()
+    player._fs.noteon.reset_mock()
+    player.resume()
+    player._fs.noteon.assert_not_called()
+    player.stop()
+
+
+def test_pause_mid_gap_shifts_pending_note_deadline(player, tmp_path):
+    # Pausing between two notes must push the pending note's deadline out by
+    # the pause duration, not fire it right at resume.
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    t = mido.MidiTrack()
+    t.append(mido.Message("note_on",  channel=0, note=60, velocity=80, time=0))
+    t.append(mido.Message("note_off", channel=0, note=60, velocity=0,  time=240))
+    t.append(mido.Message("note_on",  channel=0, note=64, velocity=80, time=480))
+    t.append(mido.Message("note_off", channel=0, note=64, velocity=0,  time=96000))
+    mid.tracks.append(t)
+    f = str(tmp_path / "gap.mid")
+    mid.save(f)
+
+    player.play(f, bpm=120)  # 480 ticks = 1 beat = 0.5s gap after the off
+    time.sleep(0.35)         # note 60 came and went; now mid-gap
+    player.pause()
+    time.sleep(0.4)
+    player.resume()
+    time.sleep(0.1)          # 0.25s of the gap was left at pause — too soon
+    early = [c for c in player._fs.noteon.call_args_list if c.args[1] == 64]
+    assert early == [], "pending note fired immediately at resume"
+    time.sleep(0.6)
+    late = [c for c in player._fs.noteon.call_args_list if c.args[1] == 64]
+    assert len(late) == 1
+    player.stop()
+
+
 def test_play_replaces_previous(player, tmp_path):
     f1 = _make_mid(tmp_path / "a.mid", duration_ticks=96000)
     f2 = _make_mid(tmp_path / "b.mid", duration_ticks=96000)

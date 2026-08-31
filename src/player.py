@@ -57,6 +57,11 @@ class Player:
         self._volume: float = 1.0  # 0.0-1.0, applied as MIDI CC7 (channel volume)
         self._output_device: str | None = None  # CoreAudio device name, None = system default
         self._lock = threading.Lock()
+        # Notes currently sounding, (channel, note) -> velocity, maintained by
+        # the playback thread. pause() snapshots this into _paused_notes so
+        # resume() can re-sound the held harmony (see resume).
+        self._active_notes: dict[tuple[int, int], int] = {}
+        self._paused_notes: dict[tuple[int, int], int] = {}
 
     def _ensure_synth(self) -> None:
         if self._fs is None:
@@ -106,16 +111,19 @@ class Player:
                 if delta_ticks > 0:
                     with self._lock:
                         bpm = self._bpm
-                        paused_acc = self._total_paused
                     musical_sec += delta_ticks * (60.0 / (bpm * ppq))
-                    deadline = t0 + musical_sec + paused_acc
                     # split sleep into small chunks so pause/stop stay responsive
                     chunk = 0.02  # 20ms chunks
                     while True:
                         self._pause_event.wait()
                         if self._stop_event.is_set():
                             break
-                        remaining = deadline - _time.monotonic()
+                        with self._lock:
+                            paused_acc = self._total_paused
+                        # re-read _total_paused every chunk: a pause mid-gap
+                        # must push the deadline out, or the pending note
+                        # fires right at resume instead of its shifted time
+                        remaining = t0 + musical_sec + paused_acc - _time.monotonic()
                         if remaining <= 0:
                             break
                         _time.sleep(min(chunk, remaining))
@@ -138,8 +146,15 @@ class Player:
                 first_note = False
 
             if msg.type == "note_on":
+                with self._lock:
+                    if msg.velocity > 0:
+                        self._active_notes[(msg.channel, msg.note)] = msg.velocity
+                    else:  # velocity-0 note_on is the conventional note_off
+                        self._active_notes.pop((msg.channel, msg.note), None)
                 self._fs.noteon(msg.channel, msg.note, msg.velocity)
             elif msg.type == "note_off":
+                with self._lock:
+                    self._active_notes.pop((msg.channel, msg.note), None)
                 self._fs.noteoff(msg.channel, msg.note)
             elif msg.type == "program_change":
                 if msg.channel != 9:
@@ -149,6 +164,7 @@ class Player:
 
         self._all_notes_off()
         with self._lock:
+            self._active_notes = {}
             if self._current_file == midi_file:
                 self._current_file = None
                 self._started_at = None
@@ -244,21 +260,36 @@ class Player:
             self._paused_at = None
             self._total_paused = 0.0
             self._session_meta = {}
+            self._active_notes = {}
+            self._paused_notes = {}
 
     def pause(self) -> None:
         self._pause_event.clear()
+        with self._lock:
+            # Snapshot the sounding harmony before cutting it, so resume()
+            # can re-sound it (chase) — the backing tracks sustain chords for
+            # 1-2 bars, so without the re-trigger a resume stays silent until
+            # the next note_on.
+            self._paused_notes = dict(self._active_notes)
+            if self._paused_at is None:  # a double-pause must not lose the earlier start
+                self._paused_at = _time.monotonic()
         # Silence notes that are already sounding — otherwise a sustained
         # chord (piano holds a whole bar, ambient pads hold several) keeps
         # ringing through the pause and Pause feels like it did nothing.
         self._all_notes_off()
-        with self._lock:
-            self._paused_at = _time.monotonic()
 
     def resume(self) -> None:
         with self._lock:
             if self._paused_at is not None:
                 self._total_paused += _time.monotonic() - self._paused_at
                 self._paused_at = None
+            held = list(self._paused_notes.items())
+            self._paused_notes = {}
+        # Re-sound the notes that were held when paused; their note_offs are
+        # still scheduled, so they end at the correct musical time.
+        if self._fs:
+            for (ch, note), vel in held:
+                self._fs.noteon(ch, note, vel)
         self._pause_event.set()
 
     def status(self) -> dict:

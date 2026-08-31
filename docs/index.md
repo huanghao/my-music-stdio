@@ -38,6 +38,7 @@
 
 - [音乐专业英语词汇表](music-professional-english-glossary.md)：音乐、吉他、钢琴、谱面、演奏表达和数字音乐制作相关的专业英语词汇。
 - [吉他和弦指法学习资料推荐](guitar-chord-shapes-resources.md)：配合 Fretboard 页面练习内容整理的外部资料——和弦图读法惯例、CAGED 系统、减七/半减七和弦指法来源、Standard/Jazz 记谱法对比。
+- [架子鼓加花（Fill）学习资料调研](drum-fill-materials.md)：练"简单 groove 末小节加花"的教材清单（含当前流行度核实结果）、《Realistic Rock》等经典已退出社区讨论的结论、各家一致的 3+1 练习框架，以及自编 L1 分级 fill 的后续计划。
 - [吉他延伸和弦（6/add9/9/11/13）常用程度调研](guitar-extended-chords-research.md)：这几类和弦在流行/摇滚/民谣/爵士里的实际使用频率对比，以及哪些值得加进指型参考表的结论。
 - [独奏爵士吉他（Chord Melody）全景：门类背景、谱系必知乐手，以及 Joe Pass、Ted Greene 深度介绍](joe-pass-ted-greene-intro.md)：Chord Melody 是什么、为什么存在，从 Django Reinhardt、George Van Eps、Wes Montgomery 到 Martin Taylor 的完整谱系，以及 Joe Pass、Ted Greene 两人的生平、风格、代表作品和教材深度介绍。
 - [Shell Chord（壳和弦）完全指南：从基础到精通](shell-chords-guide.md)：根音+3音+7音三音和弦的理论、指板上的两组基础指型家族、ii-V-I 与全 12 调练习法、进阶到 drop voicing 和 chord melody 的路径，以及推荐练习材料。

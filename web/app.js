@@ -1113,10 +1113,13 @@ function beatTick() {
   if (!a) return;
   const elapsed = a.paused ? a.elapsed : a.elapsed + (performance.now() - a.at) / 1000;
   const barFloat = elapsed / a.secPerBar;
-  const barInLoop = Math.floor(barFloat) % a.barsPerLoop;
-  const beat = Math.min(3, Math.floor((barFloat - Math.floor(barFloat)) * 4));
-  if (a.prefix === 'vamp') vampSetBeatDots(barInLoop, beat);
-  else jamSetBeatDots(barInLoop, beat);
+  const totalBars = Math.floor(barFloat);
+  const beat = Math.min(3, Math.floor((barFloat - totalBars) * 4));
+  // vamp loops a ONE-bar chord but displays a 4-bar phrase (VAMP_PHRASE_BARS),
+  // so its dots must follow the same cumulative-bar clock renderVampPhrase
+  // uses — % barsPerLoop would be % 1 and pin the dots to bar 1 forever.
+  if (a.prefix === 'vamp') vampSetBeatDots(totalBars % VAMP_PHRASE_BARS, beat);
+  else jamSetBeatDots(totalBars % a.barsPerLoop, beat);
 }
 
 function vampSetBeatDots(bar, beat) {

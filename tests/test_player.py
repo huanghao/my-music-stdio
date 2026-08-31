@@ -170,3 +170,62 @@ def test_set_bpm_recomputes_duration_sec(player, tmp_path):
 
     assert player.status()["duration_sec"] == 8
     player.stop()
+
+
+def test_set_output_device_same_value_is_noop(player):
+    player.set_output_device(None)  # already None
+    player.set_output_device("")    # '' normalizes to None too
+    player._fs.delete.assert_not_called()
+
+
+def test_set_output_device_recreates_synth_on_next_play(tmp_path):
+    # The coreaudio driver binds its device at start() time, so switching
+    # devices must tear down the synth and rebuild it lazily on next play.
+    fs1 = MagicMock()
+    fs1.sfload.return_value = 1
+    fs2 = MagicMock()
+    fs2.sfload.return_value = 1
+    with patch("fluidsynth.Synth", side_effect=[fs1, fs2]):
+        from importlib import reload
+        import src.player as pm
+        reload(pm)
+        p = pm.Player(soundfont="/tmp/test.sf3")
+        p._ensure_synth()
+        fs1.start.assert_called_once_with(driver="coreaudio", device=None)
+
+        p.set_output_device("Scarlett Solo USB")
+
+        fs1.delete.assert_called_once()
+        assert p._fs is None
+
+        f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+        p.play(f)
+        time.sleep(0.05)
+        fs2.start.assert_called_once_with(driver="coreaudio", device="Scarlett Solo USB")
+        p.stop()
+        p.close()
+
+
+def test_set_output_device_back_to_default(tmp_path):
+    fs1 = MagicMock()
+    fs1.sfload.return_value = 1
+    fs2 = MagicMock()
+    fs2.sfload.return_value = 1
+    with patch("fluidsynth.Synth", side_effect=[fs1, fs2]):
+        from importlib import reload
+        import src.player as pm
+        reload(pm)
+        p = pm.Player(soundfont="/tmp/test.sf3")
+        p.set_output_device("Scarlett Solo USB")  # before any synth exists
+        p._ensure_synth()
+        fs1.start.assert_called_once_with(driver="coreaudio", device="Scarlett Solo USB")
+
+        p.set_output_device(None)
+
+        fs1.delete.assert_called_once()
+        f = _make_mid(tmp_path / "test.mid", duration_ticks=96000)
+        p.play(f)
+        time.sleep(0.05)
+        fs2.start.assert_called_once_with(driver="coreaudio", device=None)
+        p.stop()
+        p.close()

@@ -118,6 +118,9 @@ async function loadApp() {
 // browser's Web Audio graph, so the shared master-volume slider (fbMasterGain,
 // fretboard.js) can't reach it through gain nodes like the other pages do —
 // push live changes to the backend instead, which applies them as MIDI CC7.
+// The output-device picker has the same reach problem: setSinkId only affects
+// browser audio, so the selected device's name rides along on every /api/play
+// request (output_device) for the backend to route FluidSynth to it.
 function vampJamApplyVolumeChange(e) {
   api('/api/volume', 'PUT', { volume: e.detail.gain }).catch(() => {});
 }
@@ -725,7 +728,7 @@ async function vampPlay() {
   const payload = {
     bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
     bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
-    fill_every: 8, volume: fbMasterGain(),
+    fill_every: 8, volume: fbMasterGain(), output_device: fbOutputDeviceName() || null,
   };
   setPlaybackUI('vamp', 'playing');
   renderVampPhrase(-1);
@@ -1071,7 +1074,7 @@ async function jamPlay() {
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, fill_every: 8, volume: fbMasterGain() });
+    await api('/api/play', 'POST', { ...state.jam, fill_every: 8, volume: fbMasterGain(), output_device: fbOutputDeviceName() || null });
     startPolling('jam');
   } catch(e) {
     setStatus('Error: ' + e.message);

@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from unittest.mock import MagicMock
 
 
 @pytest.fixture
@@ -155,6 +156,41 @@ def test_play_ignores_empty_bars_in_duration(client):
     # 2 sounding bars * 2 loops * 2s/bar at 120bpm — not 3 bars
     assert body["duration_sec"] == 8.0
     client.post("/api/stop")
+
+
+def test_play_routes_output_device_to_player(client, monkeypatch):
+    """The web UI's output-device picker label must reach Player so server-side
+    FluidSynth playback goes to the same interface the user picked."""
+    import src.server as server
+    mock_player = MagicMock()
+    monkeypatch.setattr(server, "_player", mock_player)
+    monkeypatch.setattr(
+        server.audio_devices, "resolve_output_device",
+        lambda name: name or None,
+    )
+    r = client.post("/api/play", json={
+        "bars": [{"chords": [{"name": "C"}]}],
+        "bpm": 120, "style": "pop", "loops": 1,
+        "output_device": "Scarlett Solo USB",
+    })
+    assert r.status_code == 200
+    mock_player.set_output_device.assert_called_once_with("Scarlett Solo USB")
+
+
+def test_play_without_output_device_uses_system_default(client, monkeypatch):
+    import src.server as server
+    mock_player = MagicMock()
+    monkeypatch.setattr(server, "_player", mock_player)
+    monkeypatch.setattr(
+        server.audio_devices, "resolve_output_device",
+        lambda name: name or None,
+    )
+    r = client.post("/api/play", json={
+        "bars": [{"chords": [{"name": "C"}]}],
+        "bpm": 120, "style": "pop", "loops": 1,
+    })
+    assert r.status_code == 200
+    mock_player.set_output_device.assert_called_once_with(None)
 
 
 def test_play_bpm_validated(client):

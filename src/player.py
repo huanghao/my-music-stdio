@@ -34,9 +34,9 @@ import fluidsynth  # noqa: E402  (must come after ctypes preload)
 class Player:
     """Thread-based MIDI player using pyfluidsynth.
 
-    The fluidsynth.Synth instance is created once on first play and reused.
-    Playback runs in a daemon thread. Stop and pause are controlled via
-    threading.Event flags.
+    The fluidsynth.Synth instance is created on first play and reused, and is
+    rebuilt when the output device changes (set_output_device). Playback runs
+    in a daemon thread. Stop and pause are controlled via threading.Event flags.
     """
 
     def __init__(self, soundfont: str | None = None):
@@ -55,13 +55,14 @@ class Player:
         self._midi_tempo: int = 500_000  # microseconds per beat from MIDI file
         self._session_meta: dict = {}
         self._volume: float = 1.0  # 0.0-1.0, applied as MIDI CC7 (channel volume)
+        self._output_device: str | None = None  # CoreAudio device name, None = system default
         self._lock = threading.Lock()
 
     def _ensure_synth(self) -> None:
         if self._fs is None:
             logger.info("initialising FluidSynth with %s", self._soundfont)
             self._fs = fluidsynth.Synth(gain=0.7)
-            self._fs.start(driver="coreaudio")
+            self._fs.start(driver="coreaudio", device=self._output_device)
             sf = str(Path(self._soundfont).expanduser())
             self._sfid = self._fs.sfload(sf)
             self._init_gm_channels()
@@ -165,6 +166,21 @@ class Player:
                 self._fs.sfunload(self._sfid, reset_presets=True)
             self._sfid = self._fs.sfload(path)
             self._init_gm_channels()
+
+    def set_output_device(self, name: str | None) -> None:
+        # The coreaudio driver picks its device at start() time, so switching
+        # means rebuilding the synth — takes effect on the next play(), same
+        # as a soundfont switch. None means the system default output.
+        name = name or None
+        if name == self._output_device:
+            return
+        logger.info("switching output device → %s", name or "system default")
+        self._output_device = name
+        if self._fs is not None:
+            self.stop()
+            self._fs.delete()
+            self._fs = None
+            self._sfid = None
 
     def set_volume(self, volume: float) -> None:
         with self._lock:

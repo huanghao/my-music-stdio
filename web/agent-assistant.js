@@ -68,6 +68,10 @@ let agentCurrentRunId = null;
 let agentCurrentAttachPromise = null;
 let agentTicker = null;   // 1s interval driving the live "思考中… Xs" counter
 let agentTickBase = null; // the rest of the status text that the ticker appends the time to
+// 贴底跟随的「意图」状态：向上滚过就脱手（false），滚回底部/强制滚动才恢复（true）。
+// 消息列表与思考框各自独立跟踪（监听器在 agentInitMarkMenu 尾部统一挂）。
+let agentMsgsPinned = true;
+let agentThinkPinned = true;
 
 function agentActiveSession() {
   return agentState.sessions.find(s => s.id === agentState.activeId) || agentState.sessions[0];
@@ -365,6 +369,37 @@ function agentInitMarkMenu() {
     agentPositionMarkMenu();
   });
   document.getElementById('agent-messages')?.addEventListener('scroll', agentHideMarkMenu);
+
+  // 贴底跟随按「意图」脱手：wheel/触屏方向向上立即 unpin，不等滚出位置阈值——流式期间
+  // 每条 delta 都整列表重渲染、scrollHeight 持续长，按位置判定的话轻滚仍在阈值内，
+  // 下一条 delta 就把人拽回底部来回拉锯（kolab 同款问题，那边已按此修法改）。
+  // 思考框每轮重渲染都是新节点，挂不住监听器，所以统一挂在稳定的外层容器上按事件来源
+  // 分流：wheel/touchmove 会冒泡（e.target 能区分两个框），scroll 不冒泡（只管外层）。
+  const msgsEl = document.getElementById('agent-messages');
+  if (msgsEl) {
+    msgsEl.addEventListener('wheel', (e) => {
+      if (e.deltaY >= 0) return;
+      // 思考框自己还能往上滚（scrollTop>0）时手势由它消费，只脱它的手；
+      // 它已到顶（或手势不在它上面）才算滚外层列表
+      const think = e.target.closest?.('.agent-think-body');
+      if (think && think.scrollTop > 0) agentThinkPinned = false;
+      else agentMsgsPinned = false;
+    }, { passive: true });
+    let touchY = null;   // 触屏：手指下移 = 内容往上滚（方向与 wheel deltaY 相反）
+    msgsEl.addEventListener('touchstart', (e) => { touchY = e.touches[0].clientY; }, { passive: true });
+    msgsEl.addEventListener('touchmove', (e) => {
+      const upward = touchY != null && e.touches[0].clientY > touchY;
+      touchY = e.touches[0].clientY;
+      if (!upward) return;
+      const think = e.target.closest?.('.agent-think-body');
+      if (think && think.scrollTop > 0) agentThinkPinned = false;
+      else agentMsgsPinned = false;
+    }, { passive: true });
+    // 键盘翻页/滚动条拖拽没有方向事件，按位置兜底重判（程序贴底后位置也就在底，语义一致）
+    msgsEl.addEventListener('scroll', () => {
+      agentMsgsPinned = msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 48;
+    });
+  }
 }
 
 // ── Page context — the one part that varies by page ──
@@ -409,8 +444,10 @@ function agentSetOpenUI(open) {
 function agentRenderMessages(forceScroll) {
   const el = document.getElementById('agent-messages');
   if (!el) return;
-  const wasNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  if (forceScroll) agentMsgsPinned = true;
   const prevTop = el.scrollTop;
+  // 思考框随整列表 innerHTML 重建、scrollTop 归零，先记下用户滚到的位置
+  const thinkPrevTop = el.querySelector('.agent-think[open] .agent-think-body')?.scrollTop;
   const session = agentActiveSession();
   if (!session.messages.length) {
     el.innerHTML = '<div class="agent-empty">可以问某个和弦为什么这么判断、还有哪些备选读法、终止式是什么，或者练习上遇到的其他问题。</div>';
@@ -460,8 +497,12 @@ function agentRenderMessages(forceScroll) {
     const meta = (metaBits.length || retry) ? `<div class="agent-msg-meta">${metaBits.join(' · ')}${retry}</div>` : '';
     return `<div class="agent-msg agent-msg-${m.role}">${think}${tools}${bubble}${meta}</div>`;
   }).join('');
-  if (forceScroll || wasNearBottom) el.scrollTop = el.scrollHeight;
+  if (forceScroll || agentMsgsPinned) el.scrollTop = el.scrollHeight;
   else el.scrollTop = prevTop;
+  // 用户向上滚过思考框（agentThinkPinned=false）就还原他刚才的位置，别拽回底部；
+  // 没滚过则由 agentFollowThinkingScroll 在 thinking 事件后贴底
+  const thinkBody = el.querySelector('.agent-think[open] .agent-think-body');
+  if (thinkBody && !agentThinkPinned && thinkPrevTop != null) thinkBody.scrollTop = thinkPrevTop;
 }
 
 function agentSessionPreview(session) {
@@ -472,7 +513,9 @@ function agentSessionPreview(session) {
 // The .agent-think-body box scrolls independently of the outer message list
 // (it has its own max-height) — keep it pinned to its own bottom while text
 // is still streaming in, same idea as the outer list's own auto-scroll.
+// 用户向上滚过（agentThinkPinned=false）就脱手，位置由 agentRenderMessages 还原。
 function agentFollowThinkingScroll() {
+  if (!agentThinkPinned) return;
   const open = document.querySelector('.agent-think[open] .agent-think-body');
   if (open) open.scrollTop = open.scrollHeight;
 }
@@ -717,6 +760,7 @@ function agentApplyRunEvent(msg, assistantMsg, session) {
   } else if (msg.type === 'thinking') {
     agentTickBase = '思考中…' + (msg.text ? ' ' + msg.text.slice(-60).replace(/\n/g, ' ') : '');
     agentSetStatus(agentTickBase);
+    if (!assistantMsg.thinking) agentThinkPinned = true;   // 新一轮思考流，重新贴底
     assistantMsg.thinking = (assistantMsg.thinking || '') + msg.text;
     agentRenderMessages();
     agentFollowThinkingScroll();

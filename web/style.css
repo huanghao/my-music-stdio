@@ -1855,6 +1855,32 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
 }
 .agent-retry-btn:hover { color: var(--text); border-color: var(--primary); }
 .agent-input-row { border-top: 1px solid var(--border); padding: 8px; flex-shrink: 0; position: relative; }
+/* 划词托盘（抄 kolab 的 mark tray）：选中的文本攒成 chip 排在输入框上方 */
+.agent-mark-tray {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 8px;
+  border-top: 1px solid var(--border); max-height: 72px; overflow-y: auto; flex-shrink: 0;
+}
+.agent-mchip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  background: var(--primary-bg); border: 1px solid var(--border); border-radius: 10px;
+  padding: 1px 6px; font-size: 12px; cursor: pointer;
+}
+.agent-mchip .q { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; color: var(--text); }
+.agent-mchip .x { color: var(--text-muted); padding: 0 2px; }
+.agent-mchip .x:hover { color: var(--danger); }
+/* 选中即弹的小菜单 —— fixed 定位，层级压过 agent panel */
+.agent-mark-menu {
+  position: fixed; z-index: var(--z-menu); padding: 2px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  box-shadow: var(--elev-md);
+}
+.agent-mark-menu button {
+  background: none; border: none; padding: 5px 10px; font-size: 12.5px;
+  cursor: pointer; color: var(--text); border-radius: 6px; white-space: nowrap;
+}
+.agent-mark-menu button:hover { background: var(--bg-subtle); }
+/* 点托盘 chip 时闪一下来源气泡（定位反馈） */
+.agent-msg-bubble.flash { outline: 2px solid var(--primary); border-radius: 4px; }
 .agent-input-resize-handle {
   height: 6px; margin: -8px -8px 2px; cursor: row-resize;
 }

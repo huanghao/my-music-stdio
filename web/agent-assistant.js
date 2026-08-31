@@ -23,6 +23,9 @@ const AGENT_SIDEBAR_WIDTH_MIN = 280;
 const AGENT_SIDEBAR_WIDTH_MAX = 640;
 const AGENT_INPUT_HEIGHT_MIN = 36;
 const AGENT_INPUT_HEIGHT_MAX = 400;
+const AGENT_MARK_QUOTE_LIMIT = 400;  // 单条引用上限，防止整段谱例灌爆 question 的 4000 字上限
+const AGENT_MARK_LIMIT = 10;
+const AGENT_COMPOSE_LIMIT = 3900;    // 后端 AgentAskRequest.question max_length=4000，留余量
 
 function agentNewSessionId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -127,6 +130,14 @@ function agentPrefsLoad() {
             return next;
           })
           .slice(-AGENT_HISTORY_LIMIT),
+        // 划词托盘随会话持久化；加载时做类型/长度清洗，防坏数据进 UI
+        marks: (Array.isArray(s.marks) ? s.marks : [])
+          .filter(m => m && typeof m.quote === 'string' && m.quote)
+          .slice(0, AGENT_MARK_LIMIT)
+          .map(m => ({
+            quote: m.quote.slice(0, AGENT_MARK_QUOTE_LIMIT),
+            source: typeof m.source === 'string' ? m.source : '',
+          })),
       }));
     if (valid.length) agentState.sessions = valid.slice(0, AGENT_SESSION_LIMIT);
   }
@@ -143,6 +154,132 @@ function agentPrefsSave() {
     panelWidth: agentState.panelWidth, panelHeight: agentState.panelHeight, inputHeight: agentState.inputHeight,
     sessions: agentState.sessions, activeId: agentState.activeId,
   }));
+}
+
+// ── 划词追问托盘（抄 kolab 的 mark tray）──
+// 在助教回答或当前页面里选中一段文本 → 选区旁弹出「＋ 加入追问托盘」→
+// 攒成 chip 留在输入框上方，下次提问时和留言合成一条结构化追问发出去。
+// 标记按会话存（session.marks），随 agentPrefsSave 持久化、切会话自动切换；
+// 发出即清，发送失败原样还原（同 kolab 的乐观清空/失败回滚约定）。
+
+function agentSessionMarks(session) {
+  if (!Array.isArray(session.marks)) session.marks = [];
+  return session.marks;
+}
+
+function agentRenderTray() {
+  const tray = document.getElementById('agent-mark-tray');
+  if (!tray) return;
+  const marks = agentSessionMarks(agentActiveSession());
+  tray.classList.toggle('hidden', !marks.length);
+  tray.innerHTML = '';
+  marks.forEach((m, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'agent-mchip';
+    chip.title = `${m.quote}${m.source && m.source !== '助教回答' ? `\n标注自：${m.source}` : ''}\n（点击定位原文）`;
+    chip.innerHTML = `<span class="q">「${htmlEsc(m.quote)}」</span><span class="x">×</span>`;
+    chip.querySelector('.x').onclick = (e) => {
+      e.stopPropagation();
+      marks.splice(i, 1);
+      agentPrefsSave();
+      agentRenderTray();
+    };
+    chip.onclick = () => agentFlashMark(m.quote);
+    tray.appendChild(chip);
+  });
+}
+
+// 点 chip → 在消息流里找到含这段引用的气泡，滚过去闪一下
+function agentFlashMark(quote) {
+  for (const b of document.querySelectorAll('#agent-messages .agent-msg-bubble')) {
+    if (b.textContent.includes(quote.slice(0, 30))) {
+      b.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      b.classList.add('flash');
+      setTimeout(() => b.classList.remove('flash'), 900);
+      return;
+    }
+  }
+}
+
+// 标记 + 留言合成结构化提问，直接烤进用户消息 content（kolab 同款）——
+// 这样历史回放和重试（retryQuestion）都自带标记，不用额外字段。
+function agentComposeWithMarks(question, marks) {
+  if (!marks || !marks.length) return question;
+  const lines = [`标记追问（共 ${marks.length} 处）：`];
+  marks.forEach((m, i) => {
+    const suffix = m.source && m.source !== '助教回答' ? `（标注自：${m.source}）` : '';
+    lines.push(`${i + 1}. 「${m.quote}」${suffix}`);
+  });
+  if (question) lines.push(`\n补充问题：${question}`);
+  const composed = lines.join('\n');
+  return composed.length > AGENT_COMPOSE_LIMIT
+    ? composed.slice(0, AGENT_COMPOSE_LIMIT) + '\n…[过长已截断]'
+    : composed;
+}
+
+// 发送前的乐观清空在别处做了；这里只负责把标记还原回托盘（别的会话正在
+// 流式、发送失败等没发出去的情况）
+function agentRestoreMarks(session, marks) {
+  if (!marks.length) return;
+  session.marks = [...marks, ...agentSessionMarks(session)];
+  agentPrefsSave();
+  agentRenderTray();
+}
+
+let agentMarkAnchor = null;   // 选区的 getBoundingClientRect（fixed 定位基准）
+let agentMarkPending = null;  // { quote, source } — 点了「加入托盘」才落进 marks
+
+function agentHideMarkMenu() {
+  document.getElementById('agent-mark-menu')?.classList.add('hidden');
+  agentMarkAnchor = null;
+  agentMarkPending = null;
+}
+
+function agentPositionMarkMenu() {
+  const menu = document.getElementById('agent-mark-menu');
+  if (!menu || !agentMarkAnchor) return;
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  menu.style.left = Math.max(8, Math.min(agentMarkAnchor.left, window.innerWidth - mw - 8)) + 'px';
+  menu.style.top = (agentMarkAnchor.bottom + 6 + mh > window.innerHeight - 8
+    ? agentMarkAnchor.top - mh - 6
+    : agentMarkAnchor.bottom + 6) + 'px';
+}
+
+function agentInitMarkMenu() {
+  const menu = document.getElementById('agent-mark-menu');
+  if (!menu) return;
+  // 点菜单自身不能清掉选区（选区没了 quote 就没了）
+  menu.addEventListener('mousedown', (e) => e.preventDefault());
+  menu.querySelector('button').addEventListener('click', () => {
+    if (agentMarkPending?.quote) {
+      const marks = agentSessionMarks(agentActiveSession());
+      if (marks.length < AGENT_MARK_LIMIT) marks.push(agentMarkPending);
+      agentPrefsSave();
+      agentRenderTray();
+    }
+    agentHideMarkMenu();
+    window.getSelection()?.removeAllRanges();
+  });
+  // 划选文字（助教回答 / 当前页面正文）→ 弹菜单；点别处/选区塌陷 → 收起。
+  // lick 的 PDF 在 pdf.js iframe 里，跨文档拿不到选区，覆盖不到它。
+  document.addEventListener('mouseup', (e) => {
+    if (menu.contains(e.target)) return;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { agentHideMarkMenu(); return; }
+    const node = sel.anchorNode;
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    let source = null;
+    if (el?.closest?.('#agent-messages .agent-msg-bubble')) source = '助教回答';
+    else if (el?.closest?.('.page.active')) source = '页面';
+    if (!source) { agentHideMarkMenu(); return; }
+    const quote = sel.toString().trim().slice(0, AGENT_MARK_QUOTE_LIMIT);
+    if (!quote) { agentHideMarkMenu(); return; }
+    agentMarkPending = { quote, source };
+    agentMarkAnchor = sel.getRangeAt(0).getBoundingClientRect();
+    menu.classList.remove('hidden'); // 先显示再量宽高——display:none 时 offsetWidth 是 0
+    agentPositionMarkMenu();
+  });
+  document.getElementById('agent-messages')?.addEventListener('scroll', agentHideMarkMenu);
 }
 
 // ── Page context — the one part that varies by page ──
@@ -398,12 +535,13 @@ function agentClose() {
 
 function agentNewSession() {
   if (agentLoading) return;
-  const session = { id: agentNewSessionId(), title: '新对话', messages: [] };
+  const session = { id: agentNewSessionId(), title: '新对话', messages: [], marks: [] };
   agentState.sessions.unshift(session);
   if (agentState.sessions.length > AGENT_SESSION_LIMIT) agentState.sessions.length = AGENT_SESSION_LIMIT;
   agentState.activeId = session.id;
   agentRenderSessions();
   agentRenderMessages(true);
+  agentRenderTray();
   agentPrefsSave();
 }
 
@@ -413,6 +551,7 @@ function agentSwitchSession(id) {
   agentToggleSessionsMenu(false);
   agentRenderSessions();
   agentRenderMessages(true);
+  agentRenderTray();
   agentPrefsSave();
 }
 
@@ -607,23 +746,31 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
 // with the new question as usual.
 async function agentSend(retryQuestion) {
   const input = document.getElementById('agent-input');
-  const question = (typeof retryQuestion === 'string' ? retryQuestion : input?.value || '').trim();
+  const isRetry = typeof retryQuestion === 'string';
+  const raw = (isRetry ? retryQuestion : input?.value || '').trim();
+  const session = agentActiveSession();
+  // 划词托盘只在全新提问时取走（splice 即乐观清空）；重试的问题里已经烤过
+  // 标记（agentComposeWithMarks），再取会重复
+  const sentMarks = isRetry ? [] : agentSessionMarks(session).splice(0);
+  const question = agentComposeWithMarks(raw, sentMarks);
   if (!question) return;
+  if (sentMarks.length) { agentRenderTray(); agentPrefsSave(); } // 发出即清托盘
 
   if (agentLoading) {
-    const session = agentActiveSession();
     const pendingId = agentCurrentRunId;
-    if (!pendingId || !session.messages.some(m => m.runId === pendingId)) return; // a different session is streaming
-    if (typeof retryQuestion !== 'string') input.value = '';
+    if (!pendingId || !session.messages.some(m => m.runId === pendingId)) {
+      agentRestoreMarks(session, sentMarks); // 别的会话在流式，这条没发出去——标记回托盘
+      return;
+    }
+    if (!isRetry) input.value = '';
     fetch(`/api/agent/runs/${pendingId}?reason=steer`, { method: 'DELETE', keepalive: true }).catch(() => {});
     if (agentCurrentAttachPromise) await agentCurrentAttachPromise;
     return agentSend(question);
   }
 
-  if (typeof retryQuestion !== 'string') input.value = '';
-  const session = agentActiveSession();
+  if (!isRetry) input.value = '';
   session.messages.push({ role: 'user', content: question });
-  if (session.messages.length === 1) session.title = question.slice(0, 24) || '新对话';
+  if (session.messages.length === 1) session.title = (raw || question).slice(0, 24) || '新对话';
   if (session.messages.length > AGENT_HISTORY_LIMIT) session.messages.splice(0, session.messages.length - AGENT_HISTORY_LIMIT);
   agentRenderSessions();
 
@@ -672,6 +819,7 @@ async function agentSend(retryQuestion) {
     await agentCurrentAttachPromise;
   } catch (e) {
     agentLoading = false;
+    agentRestoreMarks(session, sentMarks); // 发送失败：内容还原回托盘，用户自己决定要不要重发
     assistantMsg.error = true;
     assistantMsg.content += (assistantMsg.content ? '\n\n' : '') + `（请求失败：${e.message || e}）`;
     agentSetStatus('请求失败', true);
@@ -794,12 +942,15 @@ function agentInit() {
   agentSetOpenUI(agentState.open); // restore, but don't steal focus like a fresh agentOpen() would
   agentRenderSessions();
   agentRenderMessages(true);
+  agentRenderTray();
+  agentInitMarkMenu();
   agentRenderProviders();
   const pending = agentActivePendingRun();
   if (pending) {
     agentState.activeId = pending.session.id;
     agentRenderSessions();
     agentRenderMessages(true);
+    agentRenderTray();
     agentAttachRun(pending.session, pending.assistantMsg, Date.now());
   }
   agentInitResize();
@@ -817,6 +968,8 @@ function agentInit() {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     agentClamp, agentFmtDuration, agentReadSseEvent, agentFmtContextMeta, agentHumanizeNum,
+    agentComposeWithMarks,
     AGENT_SIDEBAR_WIDTH_MIN, AGENT_SIDEBAR_WIDTH_MAX,
+    AGENT_MARK_QUOTE_LIMIT, AGENT_MARK_LIMIT, AGENT_COMPOSE_LIMIT,
   };
 }

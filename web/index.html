@@ -893,6 +893,11 @@
   </div>
   <div id="agent-messages" class="agent-messages"></div>
   <div id="agent-status" class="agent-status"></div>
+  <!-- 划词托盘（抄 kolab）：在助教回答/页面里选中文本 → 弹小菜单「加入追问
+       托盘」→ 攒成 chip 留在输入框上方，下次提问随问题一起发给助教。
+       发出即清空；发送失败会还原。标记按会话存（session.marks），随
+       agent prefs 持久化，切会话即切换托盘。 -->
+  <div id="agent-mark-tray" class="agent-mark-tray hidden"></div>
   <div class="agent-input-row">
     <div class="agent-input-resize-handle" id="agent-input-resize-handle" title="拖拽调整输入框高度"></div>
     <textarea id="agent-input" class="agent-input" placeholder="问问题…⌘/Ctrl+Enter 发送"></textarea>
@@ -909,6 +914,12 @@
     </div>
   </div>
   <div class="agent-sidebar-rail" id="agent-sidebar-rail" onclick="agentToggleSidebarCollapsed()" title="展开助教">✦</div>
+</div>
+
+<!-- 划词小菜单：选中助教回答/页面文本后浮在选区旁边，一键收进追问托盘。
+     显隐和定位由 agent-assistant.js 的 agentInitMarkMenu 驱动。 -->
+<div id="agent-mark-menu" class="agent-mark-menu hidden">
+  <button type="button">＋ 加入追问托盘</button>
 </div>
 
 <!-- Tools menu: a single launcher (bottom-left, away from AI 助教'/the

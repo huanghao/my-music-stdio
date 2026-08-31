@@ -56,3 +56,32 @@ test('agentHumanizeNum abbreviates counts >= 1000 with a "k" suffix, leaves smal
   assert.equal(agent.agentHumanizeNum(999), '999');
   assert.equal(agent.agentHumanizeNum(1048576), '1,049k');
 });
+
+test('agentComposeWithMarks passes through when the tray is empty', () => {
+  assert.equal(agent.agentComposeWithMarks('这个和弦为什么这样按？', []), '这个和弦为什么这样按？');
+  assert.equal(agent.agentComposeWithMarks('', []), '');
+});
+
+test('agentComposeWithMarks composes a structured follow-up with source suffixes', () => {
+  const out = agent.agentComposeWithMarks('展开讲', [
+    { quote: 'V7 省略五音', source: '助教回答' },
+    { quote: 'BPM 120', source: '页面' },
+  ]);
+  assert.ok(out.startsWith('标记追问（共 2 处）：'));
+  assert.ok(out.includes('1. 「V7 省略五音」'));          // 助教回答来源不带后缀（默认来源）
+  assert.ok(!out.includes('「V7 省略五音」（'));
+  assert.ok(out.includes('2. 「BPM 120」（标注自：页面）'));
+  assert.ok(out.endsWith('补充问题：展开讲'));
+});
+
+test('agentComposeWithMarks supports marks-only sends (no typed question)', () => {
+  const out = agent.agentComposeWithMarks('', [{ quote: 'guide tone', source: '助教回答' }]);
+  assert.ok(out.includes('「guide tone」'));
+  assert.ok(!out.includes('补充问题'));
+});
+
+test('agentComposeWithMarks clips over-long compositions to the backend question limit', () => {
+  const out = agent.agentComposeWithMarks('q', [{ quote: 'x'.repeat(5000), source: '' }]);
+  assert.ok(out.length <= agent.AGENT_COMPOSE_LIMIT + 20);
+  assert.ok(out.includes('截断'));
+});

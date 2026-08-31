@@ -1868,6 +1868,7 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
   padding: 1px 6px; font-size: 12px; cursor: pointer;
 }
 .agent-mchip .q { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; color: var(--text); }
+.agent-mchip .n { color: var(--primary); font-size: 11px; } /* 有批注的 chip 带 ✎ */
 .agent-mchip .x { color: var(--text-muted); padding: 0 2px; }
 .agent-mchip .x:hover { color: var(--danger); }
 /* 选中即弹的小菜单 —— fixed 定位，层级压过 agent panel */
@@ -1875,6 +1876,11 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
   position: fixed; z-index: var(--z-menu); padding: 2px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   box-shadow: var(--elev-md);
+  display: flex; align-items: center; gap: 2px;
+}
+.agent-mark-menu .agent-mark-note {
+  border: none; background: none; outline: none; padding: 5px 8px;
+  font-size: 12.5px; color: var(--text); width: 160px;
 }
 .agent-mark-menu button {
   background: none; border: none; padding: 5px 10px; font-size: 12.5px;

@@ -25,6 +25,7 @@ const AGENT_INPUT_HEIGHT_MIN = 36;
 const AGENT_INPUT_HEIGHT_MAX = 400;
 const AGENT_MARK_QUOTE_LIMIT = 400;  // 单条引用上限，防止整段谱例灌爆 question 的 4000 字上限
 const AGENT_MARK_LIMIT = 10;
+const AGENT_MARK_NOTE_LIMIT = 200;   // 每条标记的批注上限
 const AGENT_COMPOSE_LIMIT = 3900;    // 后端 AgentAskRequest.question max_length=4000，留余量
 
 function agentNewSessionId() {
@@ -137,6 +138,7 @@ function agentPrefsLoad() {
           .map(m => ({
             quote: m.quote.slice(0, AGENT_MARK_QUOTE_LIMIT),
             source: typeof m.source === 'string' ? m.source : '',
+            note: typeof m.note === 'string' ? m.note.slice(0, AGENT_MARK_NOTE_LIMIT) : '',
           })),
       }));
     if (valid.length) agentState.sessions = valid.slice(0, AGENT_SESSION_LIMIT);
@@ -157,8 +159,9 @@ function agentPrefsSave() {
 }
 
 // ── 划词追问托盘（抄 kolab 的 mark tray）──
-// 在助教回答或当前页面里选中一段文本 → 选区旁弹出「＋ 加入追问托盘」→
-// 攒成 chip 留在输入框上方，下次提问时和留言合成一条结构化追问发出去。
+// 在助教回答或当前页面里选中一段文本 → 选区旁弹出小菜单，可顺手写一句批注
+// → 「＋ 加入托盘」（或 Enter）攒成 chip 留在输入框上方，下次提问时和留言
+// 合成一条结构化追问发出去（批注随行）。
 // 标记按会话存（session.marks），随 agentPrefsSave 持久化、切会话自动切换；
 // 发出即清，发送失败原样还原（同 kolab 的乐观清空/失败回滚约定）。
 
@@ -176,8 +179,9 @@ function agentRenderTray() {
   marks.forEach((m, i) => {
     const chip = document.createElement('span');
     chip.className = 'agent-mchip';
-    chip.title = `${m.quote}${m.source && m.source !== '助教回答' ? `\n标注自：${m.source}` : ''}\n（点击定位原文）`;
-    chip.innerHTML = `<span class="q">「${htmlEsc(m.quote)}」</span><span class="x">×</span>`;
+    chip.title = `${m.quote}${m.source && m.source !== '助教回答' ? `\n标注自：${m.source}` : ''}`
+      + `${m.note ? `\n批注：${m.note}` : ''}\n（点击定位原文）`;
+    chip.innerHTML = `<span class="q">「${htmlEsc(m.quote)}」</span>${m.note ? '<span class="n">✎</span>' : ''}<span class="x">×</span>`;
     chip.querySelector('.x').onclick = (e) => {
       e.stopPropagation();
       marks.splice(i, 1);
@@ -208,7 +212,7 @@ function agentComposeWithMarks(question, marks) {
   const lines = [`标记追问（共 ${marks.length} 处）：`];
   marks.forEach((m, i) => {
     const suffix = m.source && m.source !== '助教回答' ? `（标注自：${m.source}）` : '';
-    lines.push(`${i + 1}. 「${m.quote}」${suffix}`);
+    lines.push(`${i + 1}. 「${m.quote}」${suffix}${m.note ? `\n   批注：${m.note}` : ''}`);
   });
   if (question) lines.push(`\n补充问题：${question}`);
   const composed = lines.join('\n');
@@ -227,7 +231,7 @@ function agentRestoreMarks(session, marks) {
 }
 
 let agentMarkAnchor = null;   // 选区的 getBoundingClientRect（fixed 定位基准）
-let agentMarkPending = null;  // { quote, source } — 点了「加入托盘」才落进 marks
+let agentMarkPending = null;  // { quote, source } — 批注在 commit 时从菜单输入框读，一起落进 marks
 
 function agentHideMarkMenu() {
   document.getElementById('agent-mark-menu')?.classList.add('hidden');
@@ -248,17 +252,25 @@ function agentPositionMarkMenu() {
 function agentInitMarkMenu() {
   const menu = document.getElementById('agent-mark-menu');
   if (!menu) return;
-  // 点菜单自身不能清掉选区（选区没了 quote 就没了）
-  menu.addEventListener('mousedown', (e) => e.preventDefault());
-  menu.querySelector('button').addEventListener('click', () => {
+  const noteInput = menu.querySelector('input');
+  const commit = () => {
     if (agentMarkPending?.quote) {
+      const note = (noteInput?.value || '').trim().slice(0, AGENT_MARK_NOTE_LIMIT);
       const marks = agentSessionMarks(agentActiveSession());
-      if (marks.length < AGENT_MARK_LIMIT) marks.push(agentMarkPending);
+      if (marks.length < AGENT_MARK_LIMIT) marks.push({ ...agentMarkPending, note });
       agentPrefsSave();
       agentRenderTray();
     }
     agentHideMarkMenu();
     window.getSelection()?.removeAllRanges();
+  };
+  // 点菜单自身不能清掉选区（选区没了 quote 就没了）——但批注输入框要拿
+  // 焦点，例外放行（quote 在 mouseup 时已抓进 agentMarkPending，选区塌了也无妨）
+  menu.addEventListener('mousedown', (e) => { if (e.target !== noteInput) e.preventDefault(); });
+  menu.querySelector('button').addEventListener('click', commit);
+  noteInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { agentHideMarkMenu(); window.getSelection()?.removeAllRanges(); }
   });
   // 划选文字（助教回答 / 当前页面正文）→ 弹菜单；点别处/选区塌陷 → 收起。
   // lick 的 PDF 在 pdf.js iframe 里，跨文档拿不到选区，覆盖不到它。
@@ -278,6 +290,7 @@ function agentInitMarkMenu() {
     agentMarkAnchor = sel.getRangeAt(0).getBoundingClientRect();
     menu.classList.remove('hidden'); // 先显示再量宽高——display:none 时 offsetWidth 是 0
     agentPositionMarkMenu();
+    if (noteInput) { noteInput.value = ''; noteInput.focus(); } // 划完直接写批注，Enter 即入托盘
   });
   document.getElementById('agent-messages')?.addEventListener('scroll', agentHideMarkMenu);
 }
@@ -970,6 +983,6 @@ if (typeof module !== 'undefined' && module.exports) {
     agentClamp, agentFmtDuration, agentReadSseEvent, agentFmtContextMeta, agentHumanizeNum,
     agentComposeWithMarks,
     AGENT_SIDEBAR_WIDTH_MIN, AGENT_SIDEBAR_WIDTH_MAX,
-    AGENT_MARK_QUOTE_LIMIT, AGENT_MARK_LIMIT, AGENT_COMPOSE_LIMIT,
+    AGENT_MARK_QUOTE_LIMIT, AGENT_MARK_LIMIT, AGENT_MARK_NOTE_LIMIT, AGENT_COMPOSE_LIMIT,
   };
 }

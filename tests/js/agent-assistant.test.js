@@ -85,3 +85,12 @@ test('agentComposeWithMarks clips over-long compositions to the backend question
   assert.ok(out.length <= agent.AGENT_COMPOSE_LIMIT + 20);
   assert.ok(out.includes('截断'));
 });
+
+test('agentComposeWithMarks carries the per-mark note as a 批注 line', () => {
+  const out = agent.agentComposeWithMarks('', [
+    { quote: 'V7 省略五音', source: '助教回答', note: '为什么可以省？' },
+    { quote: 'BPM 120', source: '页面', note: '' },
+  ]);
+  assert.ok(out.includes('1. 「V7 省略五音」\n   批注：为什么可以省？'));
+  assert.ok(!out.includes('「BPM 120」（标注自：页面）\n   批注')); // 空批注不占行
+});

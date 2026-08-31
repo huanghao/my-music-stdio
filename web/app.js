@@ -20,10 +20,10 @@ function keyOptions(selected) {
 // ── State ──
 const state = {
   styles: [],
-  vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3 },
-  jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3 },
+  vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3, beat_dots: true },
+  jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3, beat_dots: true },
   modal: { _onConfirm: null },
-  playback: { polling: null },
+  playback: { polling: null, beatTimer: null, anchor: null },
   prefs: { bars_per_row: 4 },
 };
 
@@ -81,6 +81,7 @@ function loadLastSelection() {
     if (typeof saved.vamp.style === 'string') state.vamp.style = saved.vamp.style;
     if (Number.isFinite(saved.vamp.bpm)) state.vamp.bpm = saved.vamp.bpm;
     if (Number.isFinite(saved.vamp.loops)) state.vamp.loops = saved.vamp.loops;
+    if (typeof saved.vamp.beat_dots === 'boolean') state.vamp.beat_dots = saved.vamp.beat_dots;
   }
   if (saved.jam) {
     if (Array.isArray(saved.jam.bars)) state.jam.bars = saved.jam.bars;
@@ -88,6 +89,7 @@ function loadLastSelection() {
     if (typeof saved.jam.key === 'string') state.jam.key = saved.jam.key;
     if (Number.isFinite(saved.jam.bpm)) state.jam.bpm = saved.jam.bpm;
     if (Number.isFinite(saved.jam.loops)) state.jam.loops = saved.jam.loops;
+    if (typeof saved.jam.beat_dots === 'boolean') state.jam.beat_dots = saved.jam.beat_dots;
   }
 }
 
@@ -699,6 +701,10 @@ function renderVampControls() {
           <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" class="w-[60px]!"
             oninput="state.vamp.loops=parseInt(this.value)||1; saveLastSelection()">
         </div>
+        <div class="field"><label>Beat dots</label>
+          <input type="checkbox" id="vamp-beat-dots" ${state.vamp.beat_dots ? 'checked' : ''}
+            onchange="state.vamp.beat_dots=this.checked; saveLastSelection()">
+        </div>
       </div>
     </div>
   `;
@@ -707,14 +713,23 @@ function renderVampControls() {
 // 4/4 = 4 bars per phrase
 const VAMP_PHRASE_BARS = 4;
 
+// Last beat position the beat ticker computed (beatTick below) — renderVampPhrase
+// bakes it into the dots so the poll-driven innerHTML rebuild doesn't wipe the
+// lit dot for up to 100ms between rebuild and next tick.
+const vampBeatView = { bar: -1, beat: -1 };
+
 function renderVampPhrase(activebar) {
   const el = document.getElementById('vamp-phrase');
   if (!el) return;
+  const dotsOn = state.vamp.beat_dots;
   el.innerHTML = `
     <div class="vamp-phrase">
       ${Array.from({length: VAMP_PHRASE_BARS}, (_, i) => `
-        <div class="vamp-bar ${activebar === i ? 'active' : ''}">
+        <div class="vamp-bar ${activebar === i ? 'active' : ''}${dotsOn ? ' with-dots' : ''}">
           <span class="vamp-bar-num">${i + 1}</span>
+          ${dotsOn ? `<div class="beat-dots">${Array.from({length: 4}, (_, b) =>
+            `<span class="beat-dot${b === 0 ? ' downbeat' : ''}${activebar === i && vampBeatView.bar === i && vampBeatView.beat === b ? ' active' : ''}"></span>`
+          ).join('')}</div>` : ''}
         </div>
       `).join('')}
     </div>`;
@@ -771,6 +786,10 @@ function renderJamControls() {
         <div class="field"><label>Loops</label>
           <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" class="w-[60px]!"
             oninput="state.jam.loops=parseInt(this.value)||1; saveLastSelection()">
+        </div>
+        <div class="field"><label>Beat dots</label>
+          <input type="checkbox" id="jam-beat-dots" ${state.jam.beat_dots ? 'checked' : ''}
+            onchange="state.jam.beat_dots=this.checked; saveLastSelection()">
         </div>
       </div>
     </div>
@@ -1013,6 +1032,7 @@ function highlightBar(barIndex) {
 function startPolling(prefix) {
   stopPolling();
   let failCount = 0;
+  state.playback.beatTimer = setInterval(beatTick, 100);
   state.playback.polling = setInterval(async () => {
     try {
       const s = await api('/api/status');
@@ -1034,6 +1054,18 @@ function startPolling(prefix) {
         } else {
           progress.classList.add('invisible');
         }
+      }
+
+      // Anchor for the beat-dot ticker (beatTick below): the 250ms poll is too
+      // coarse to light individual beats (a beat is 250ms at 240bpm), so between
+      // polls the ticker extrapolates from this server-reported position with the
+      // local clock. Re-anchoring every poll means drift can't accumulate; a
+      // paused anchor freezes the lit beat instead of extrapolating past it.
+      if (s.elapsed_sec != null && s.duration_sec && s.bars && s.loops) {
+        state.playback.anchor = {
+          elapsed: s.elapsed_sec, at: performance.now(), paused: !!s.paused,
+          secPerBar: s.duration_sec / (s.bars * s.loops), barsPerLoop: s.bars, prefix,
+        };
       }
 
       if (s.paused) return;
@@ -1064,6 +1096,55 @@ function stopPolling() {
     clearInterval(state.playback.polling);
     state.playback.polling = null;
   }
+  if (state.playback.beatTimer) {
+    clearInterval(state.playback.beatTimer);
+    state.playback.beatTimer = null;
+  }
+  state.playback.anchor = null;
+  vampBeatView.bar = vampBeatView.beat = -1;
+  document.querySelectorAll('.beat-dots').forEach(el => el.remove());
+}
+
+// Beat dots: extrapolate the current beat from the last status poll's anchor
+// (server elapsed_sec + local clock delta). 4 dots per bar — the server's
+// sec_per_bar (src/server.py) is hardcoded to 4 beats the same way.
+function beatTick() {
+  const a = state.playback.anchor;
+  if (!a) return;
+  const elapsed = a.paused ? a.elapsed : a.elapsed + (performance.now() - a.at) / 1000;
+  const barFloat = elapsed / a.secPerBar;
+  const barInLoop = Math.floor(barFloat) % a.barsPerLoop;
+  const beat = Math.min(3, Math.floor((barFloat - Math.floor(barFloat)) * 4));
+  if (a.prefix === 'vamp') vampSetBeatDots(barInLoop, beat);
+  else jamSetBeatDots(barInLoop, beat);
+}
+
+function vampSetBeatDots(bar, beat) {
+  vampBeatView.bar = bar;
+  vampBeatView.beat = beat;
+  if (!state.vamp.beat_dots) return;
+  document.querySelectorAll('#vamp-phrase .vamp-bar').forEach((barEl, i) => {
+    barEl.querySelectorAll('.beat-dot').forEach((d, b) => {
+      d.classList.toggle('active', i === bar && b === beat);
+    });
+  });
+}
+
+function jamSetBeatDots(bar, beat) {
+  const chart = document.getElementById('jam-chart');
+  if (!chart) return;
+  const barEl = chart.querySelectorAll('.chart-bar')[bar];
+  let dots = barEl?.querySelector('.beat-dots') || null;
+  chart.querySelectorAll('.beat-dots').forEach(el => { if (el !== dots) el.remove(); });
+  if (!state.jam.beat_dots || !barEl) { dots?.remove(); return; }
+  if (!dots) {
+    dots = document.createElement('div');
+    dots.className = 'beat-dots';
+    dots.innerHTML = Array.from({length: 4}, (_, b) =>
+      `<span class="beat-dot${b === 0 ? ' downbeat' : ''}"></span>`).join('');
+    barEl.appendChild(dots);
+  }
+  dots.querySelectorAll('.beat-dot').forEach((d, b) => d.classList.toggle('active', b === beat));
 }
 
 async function jamPlay() {

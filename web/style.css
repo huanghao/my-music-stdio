@@ -188,6 +188,18 @@ input[type="number"] { width: 64px; text-align: center; }
   font-family: Georgia, serif;
 }
 .vamp-bar.active .vamp-bar-num { color: var(--primary); }
+/* Beat dots (Vamp/Jam playback) — one dot per beat; the lit dot follows the
+   beat ticker (app.js beatTick). Smaller, quieter sibling of .st-beat-dot. */
+.vamp-bar.with-dots { flex-direction: column; gap: 2px; }
+.beat-dots { display: flex; gap: 5px; justify-content: center; pointer-events: none; }
+.beat-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--bg-raised); border: 1px solid var(--border-dim);
+  transition: background 0.05s;
+}
+.beat-dot.active { background: var(--primary-lt); }
+.beat-dot.downbeat.active { background: var(--primary); }
+.chart-bar .beat-dots { position: absolute; left: 0; right: 0; bottom: 3px; }
 
 /* Current bar highlight */
 .chart-bar.active {

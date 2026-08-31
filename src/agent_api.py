@@ -370,14 +370,3 @@ async def api_agent_cancel_run(run_id: str, reason: Literal["cancel", "steer"] =
     await run.append({"type": "done"})
     agent_ledger.record_run({"run_id": run.id, "outcome": "steered" if reason == "steer" else "cancelled"})
     return {"ok": True}
-
-
-@router.post("/ask")
-async def api_agent_ask(req: AgentAskRequest, request: Request) -> StreamingResponse:
-    run = _start_agent_run(req)
-
-    async def stream():
-        async for event in _stream_agent_run(run, request):
-            yield event
-
-    return StreamingResponse(stream(), media_type="text/event-stream")

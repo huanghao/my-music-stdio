@@ -31,7 +31,17 @@ def _sse_payloads(text: str) -> list[dict]:
     return payloads
 
 
-def test_agent_ask_retries_empty_error_once(agent_api_client, monkeypatch):
+def _post_run_and_collect_events(client: TestClient, body: dict) -> str:
+    """Start a run via POST /runs and drain its full SSE event stream."""
+    r = client.post("/api/agent/runs", json=body)
+    assert r.status_code == 200
+    run_id = r.json()["run_id"]
+    events = client.get(f"/api/agent/runs/{run_id}/events")
+    assert events.status_code == 200
+    return events.text
+
+
+def test_agent_run_retries_empty_error_once(agent_api_client, monkeypatch):
     calls = 0
 
     async def fake_stream_parts(**kwargs):
@@ -51,10 +61,7 @@ def test_agent_ask_retries_empty_error_once(agent_api_client, monkeypatch):
         yield ("text", "ok")
 
     monkeypatch.setattr(agent_api.agent_client, "stream_parts", fake_stream_parts)
-    r = agent_api_client.post("/api/agent/ask", json={"question": "hello"})
-    assert r.status_code == 200
-
-    payloads = _sse_payloads(r.text)
+    payloads = _sse_payloads(_post_run_and_collect_events(agent_api_client, {"question": "hello"}))
     assert [item["type"] for item in payloads] == ["retry", "delta", "meta", "done"]
     assert payloads[0]["reason"] == "backend fake: Reached maximum number of turns (3)"
     assert payloads[1]["text"] == "ok"
@@ -63,7 +70,7 @@ def test_agent_ask_retries_empty_error_once(agent_api_client, monkeypatch):
     assert calls == 2
 
 
-def test_agent_ask_does_not_retry_after_text_was_sent(agent_api_client, monkeypatch):
+def test_agent_run_does_not_retry_after_text_was_sent(agent_api_client, monkeypatch):
     calls = 0
 
     async def fake_stream_parts(**kwargs):
@@ -73,17 +80,14 @@ def test_agent_ask_does_not_retry_after_text_was_sent(agent_api_client, monkeypa
         yield ("error", "late failure")
 
     monkeypatch.setattr(agent_api.agent_client, "stream_parts", fake_stream_parts)
-    r = agent_api_client.post("/api/agent/ask", json={"question": "hello"})
-    assert r.status_code == 200
-
-    payloads = _sse_payloads(r.text)
+    payloads = _sse_payloads(_post_run_and_collect_events(agent_api_client, {"question": "hello"}))
     assert [item["type"] for item in payloads] == ["delta", "error", "meta", "done"]
     assert payloads[0]["text"] == "partial"
     assert payloads[1]["message"] == "late failure"
     assert calls == 1
 
 
-def test_agent_ask_reports_context_hits_and_clips_prompt(agent_api_client, monkeypatch):
+def test_agent_run_reports_context_hits_and_clips_prompt(agent_api_client, monkeypatch):
     captured = {}
 
     async def fake_stream_parts(**kwargs):
@@ -91,20 +95,16 @@ def test_agent_ask_reports_context_hits_and_clips_prompt(agent_api_client, monke
         yield ("text", "ok")
 
     monkeypatch.setattr(agent_api.agent_client, "stream_parts", fake_stream_parts)
-    r = agent_api_client.post(
-        "/api/agent/ask",
-        json={
-            "question": "explain this",
-            "context": {
-                "page": "test-page",
-                "title": "Test Page",
-                "visibleText": "v" * 7000,
-                "selectedText": "s" * 2500,
-                "data": {"items": list(range(45)), "label": "shape"},
-            },
+    text = _post_run_and_collect_events(agent_api_client, {
+        "question": "explain this",
+        "context": {
+            "page": "test-page",
+            "title": "Test Page",
+            "visibleText": "v" * 7000,
+            "selectedText": "s" * 2500,
+            "data": {"items": list(range(45)), "label": "shape"},
         },
-    )
-    assert r.status_code == 200
+    })
 
     prompt = captured["prompt"]
     assert "[页面上下文]" in prompt
@@ -113,7 +113,7 @@ def test_agent_ask_reports_context_hits_and_clips_prompt(agent_api_client, monke
     assert "truncated 500 chars" in prompt
     assert "_truncated_items" in prompt
 
-    payloads = _sse_payloads(r.text)
+    payloads = _sse_payloads(text)
     meta = next(item for item in payloads if item["type"] == "meta")
     assert meta["context_hits"] == [
         "页面：Test Page",
@@ -186,14 +186,13 @@ def test_agent_run_steer_emits_steered_and_done(agent_api_client, monkeypatch):
     assert payloads[-2:] == [{"type": "steered"}, {"type": "done"}]
 
 
-def test_agent_ask_forwards_tool_events(agent_api_client, monkeypatch):
+def test_agent_run_forwards_tool_events(agent_api_client, monkeypatch):
     async def fake_stream_parts(**kwargs):
         yield ("tool", '{"name": "read", "args": {"path": "x.md"}, "result_preview": "1\\thi"}')
         yield ("text", "ok")
 
     monkeypatch.setattr(agent_api.agent_client, "stream_parts", fake_stream_parts)
-    r = agent_api_client.post("/api/agent/ask", json={"question": "hello"})
-    payloads = _sse_payloads(r.text)
+    payloads = _sse_payloads(_post_run_and_collect_events(agent_api_client, {"question": "hello"}))
     assert [item["type"] for item in payloads] == ["tool", "delta", "meta", "done"]
     assert payloads[0]["name"] == "read"
     assert payloads[0]["args"] == {"path": "x.md"}

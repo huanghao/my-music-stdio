@@ -146,9 +146,12 @@ def _models_from_pi_store(provider_name: str) -> list["AgentModel"] | None:
     store_key = _PI_STORE_KEY_BY_PROVIDER.get(provider_name)
     if not store_key:
         return None
+    if not _PI_MODELS_STORE_PATH.exists():
+        return None
     try:
         store = json.loads(_PI_MODELS_STORE_PATH.read_text())
-    except Exception:
+    except (OSError, ValueError) as e:
+        logger.warning("failed to read pi models store: %s: %s", type(e).__name__, e)
         return None
     entries = (store.get(store_key) or {}).get("models") or []
     if not entries:
@@ -231,7 +234,8 @@ def _resolve_var(name: str) -> str | None:
         return None
     try:
         text = _ZSHRC_LOCAL.read_text()
-    except OSError:
+    except OSError as e:
+        logger.warning("failed to read %s: %s", _ZSHRC_LOCAL, e)
         return None
     m = re.search(rf'^\s*export\s+{re.escape(name)}=["\']?([^"\'\n]+)["\']?\s*$', text, re.MULTILINE)
     return m.group(1) if m else None

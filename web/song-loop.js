@@ -289,12 +289,12 @@ function slResolveChordRef(bar, annotations, visited = new Set()) {
 // writing a second, subtly-different regex here).
 
 // Open E-shape/A-shape fingerings — standard textbook forms, low string to
-// high (E A D G B e) — barred (via fbBarreFretForShape, fretboard.js) to fit
+// high (E A D G B e) — barred (via fbBarreFretForShape, fb-core.js) to fit
 // any root. Major deliberately isn't listed here (see slChordDiagramFor) —
 // it reuses FB_CAGED_SHAPES.E/.A directly, but only a *function body* can
-// reference that global safely: fretboard.js and song-loop.js only share one
+// reference that global safely: the fb-*.js modules and song-loop.js only share one
 // scope on the real page (loaded as sibling <script> tags in page order), and
-// in the Node test harness the equivalent — copying fretboard.js's exports
+// in the Node test harness the equivalent — copying the fb-*.js modules' exports
 // onto `global` — happens right before each test runs, not before this file
 // is first required, so a top-level `const` here would see FB_CAGED_SHAPES
 // as undefined.
@@ -794,7 +794,7 @@ function slApplyPlaybackVolume() {
 // dedicated Web Audio context *before* slPlay() ever calls audioEl.play(),
 // only when starting fresh from the very beginning (see the currentTime
 // check in slPlay). Cross-file references (fbRegisterAudioContext/
-// fbMasterGain/fbSoundGain, all fretboard.js) are unguarded here, same as
+// fbMasterGain/fbSoundGain, all fb-audio.js) are unguarded here, same as
 // setTransportState already is in slPause/slStop below — these only ever run
 // from a real user interaction on the real page, by which point every
 // <script> has finished loading. None of the actual scheduling below is
@@ -2305,7 +2305,7 @@ function initSongLoopPage() {
     libraryList: $('sl-library-list'), libraryCloseBtn: $('sl-library-close-btn'),
     audioEl: $('sl-player'),
   };
-  // Route playback through the app-wide output-device picker (fretboard.js)
+  // Route playback through the app-wide output-device picker (fb-audio.js)
   // like every other sound this app generates — without this, the <audio>
   // element just plays through the system default regardless of what's
   // selected up top, since HTMLMediaElement.setSinkId() is a separate call

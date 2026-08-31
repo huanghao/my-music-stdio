@@ -1,6 +1,6 @@
 """CoreAudio output-device enumeration for server-side FluidSynth playback.
 
-The web UI's output-device picker (fbOutput in web/fretboard.js) can only
+The web UI's output-device picker (fbOutput in web/fb-audio.js) can only
 redirect browser-generated audio via AudioContext.setSinkId. Jam/Vamp play
 server-side through FluidSynth's coreaudio driver, which needs the CoreAudio
 device *name* (setting `audio.coreaudio.device`). Browser deviceIds don't map

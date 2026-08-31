@@ -4,7 +4,7 @@
 // index.html's fb-tabs / fb-panel wiring) — shares fbState's global scope
 // like every other fb* module, prefixed `fbCid` to stay collision-free.
 //
-// Deliberately self-contained: reuses fretboard.js's FB_CHORD_QUALITIES /
+// Deliberately self-contained: reuses fb-chord.js's FB_CHORD_QUALITIES /
 // FB_NOTE_NAMES / FB_STRING_OPEN / fbChordDisplaySymbol (loaded first, same
 // script-scope trick progression-lab.js already relies on), but defines its
 // own roman-numeral reference table (FB_CID_DEGREE_OFFSET) rather than
@@ -111,7 +111,7 @@ function fbCidCandidates(pcSet) {
 }
 
 // Translates a candidate's omitted pitch classes back into degree labels
-// ("5th", "b7", ...) using the same formula tables fretboard.js's Chord
+// ("5th", "b7", ...) using the same formula tables fb-chord.js's Chord
 // Match already uses to describe a chord's own tones.
 function fbCidMissingLabels(rootPc, quality, missingPcs) {
   const intervals = FB_CHORD_QUALITIES[quality];
@@ -839,7 +839,7 @@ function fbCidRenderGrid() {
 // Converts an absolute fret-per-string input (this file's own format:
 // 'x'/0-24 per string, low E first) into svguitar's finger list — a normal
 // vertical chord-box diagram (strings vertical, frets horizontal, nut at
-// top), the same convention fretboard.js's fbShapeToSvguitarChord draws for
+// top), the same convention fb-board.js's fbShapeToSvguitarChord draws for
 // CAGED shapes. That function is keyed to *movable-shape* offsets though
 // (relative to a barre position); this one is simpler because the input
 // here is always already absolute frets.

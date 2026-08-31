@@ -116,7 +116,7 @@ async function loadApp() {
 
 // Vamp/Jam play server-side via fluidsynth (src/player.py), not through the
 // browser's Web Audio graph, so the shared master-volume slider (fbMasterGain,
-// fretboard.js) can't reach it through gain nodes like the other pages do —
+// fb-audio.js) can't reach it through gain nodes like the other pages do —
 // push live changes to the backend instead, which applies them as MIDI CC7.
 // The output-device picker has the same reach problem: setSinkId only affects
 // browser audio, so the selected device's name rides along on every /api/play

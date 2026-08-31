@@ -333,8 +333,8 @@
 
 <!-- CHORD MATCH PAGE (mic-based chord sight-reading: strum the named chord,
      get confirmation) — promoted to its own top-level page so it isn't also
-     nested as a Fretboard sub-tab; still shares fbState.chord/fbMic with
-     fretboard.js since the underlying drill logic didn't need to move. -->
+     nested as a Fretboard sub-tab; still shares fbState.chord/fbMic with the
+     fb-*.js modules since the underlying drill logic didn't need to move. -->
 <div class="page" id="page-chordmatch">
   <div class="page-header"><h2 class="page-title">Chord Match</h2></div>
 
@@ -858,7 +858,7 @@
      #transport-body; practice-timer.js fills #pt-row. The volume slider is
      static markup so transport re-renders never recreate it mid-drag; its
      value is seeded from localStorage at startup and persisted on change
-     (fretboard.js fbRenderDeviceBar / fbMasterVolumeChange). -->
+     (fb-init.js fbRenderDeviceBar / fb-audio.js fbMasterVolumeChange). -->
 <div id="transport-pill" class="transport-pill">
   <div class="transport-row">
     <span class="transport-grip" id="transport-grip" title="拖动到任意位置（双击复位）">⠿</span>
@@ -935,7 +935,7 @@
   </button>
 </div>
 
-<!-- Floating fretboard reference (fretboard.js fbIv*): pick a root note
+<!-- Floating fretboard reference (fb-iv.js fbIv*): pick a root note
      (string select + fret input, or just click the board), tick degrees
      (3/5/7 etc. or a chord-quality preset), see every occurrence of
      root + those degrees nearby on the neck — pure geometry, no key needed.

@@ -155,12 +155,12 @@
 </div>
 
 <script>
-// ── 极简 Web Audio 合成，独立于系统主页面 (fretboard.js) 之外，专用于本页 ──
+// ── 极简 Web Audio 合成，独立于系统主页面 (web/fb-*.js) 之外，专用于本页 ──
 const NOTE_INDEX = { C:0,'C#':1,Db:1,D:2,'D#':3,Eb:3,E:4,F:5,'F#':6,Gb:6,
   G:7,'G#':8,Ab:8,A:9,'A#':10,Bb:10,B:11 };
 
 // interval sets in semitones from the root; '7no3' / '9sus4' are ad-hoc for
-// this page's comparisons and not shared with fretboard.js's chord library
+// this page's comparisons and not shared with the fb-*.js chord library
 const QUALITIES = {
   '':      [0, 4, 7],
   'm':     [0, 3, 7],
@@ -286,7 +286,7 @@ const PROGRESSIONS = {
 };
 
 // Leading-edge debounce so a fast double-click can't overlap two copies of
-// the same progression (same convention as fretboard.js's guarded()).
+// the same progression (same convention as fb-core.js's guarded()).
 function guarded(fn, ms) {
   let blocked = false;
   return function (...args) {

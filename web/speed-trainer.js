@@ -2,9 +2,9 @@
 // yet" practice — start slow, only bump the tempo once you're actually clean
 // at the current one. No server dependency, works for any lick/solo
 // regardless of whether it's represented anywhere else in the app. Uses
-// fbRegisterAudioContext/fbOutput/fbMasterGain from fretboard.js for output
+// fbRegisterAudioContext/fbOutput/fbMasterGain from fb-audio.js for output
 // device + volume routing (global, shared with Ear Training) — index.html
-// loads fretboard.js first so these are always defined by the time stStart() runs.
+// loads the fb-*.js modules first so these are always defined by the time stStart() runs.
 
 // Web Audio scheduling needs a lookahead: naive setTimeout-per-click drifts
 // because JS timers aren't sample-accurate, so instead we poll frequently and
@@ -145,7 +145,7 @@ function stScheduleClick(tickIndex, time) {
   const beatIndexInBar = Math.floor(tickIndex / stState.subdivision) % stState.beatsPerBar;
   const isDownbeat = isBeat && beatIndexInBar === 0;
 
-  // fbMasterGain() lives in fretboard.js — shared across every sound this
+  // fbMasterGain() lives in fb-audio.js — shared across every sound this
   // app generates, since some audio interfaces don't expose a software
   // volume the OS volume keys can actually reach. fbSoundGain('metronome')
   // is a second, independent knob (Preferences → 声音音量) for just this
@@ -214,7 +214,7 @@ function stStart() {
   stReadOptionsFromUI();
   if (!stState.audioCtx) {
     stState.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    fbRegisterAudioContext(stState.audioCtx); // routes to the globally-selected output device (fretboard.js)
+    fbRegisterAudioContext(stState.audioCtx); // routes to the globally-selected output device (fb-audio.js)
   }
   if (stState.audioCtx.state === 'suspended') stState.audioCtx.resume();
   stState.currentBpm = Math.min(Math.max(stState.currentBpm, stState.startBpm), stState.targetBpm);
@@ -245,7 +245,7 @@ function stStop() {
 // that the live tempo changed, so it can be auto-saved and resumed from next
 // time, and so the eventual auto-logged session (see licksAutoLogSession)
 // records the tempo actually practiced at. Guarded the same way
-// fretboard.js guards its calls into app.js's transport bar — licks.js may
+// the fb-*.js modules guard their calls into app.js's transport bar — licks.js may
 // not be loaded (e.g. under the Node test harness).
 function stNotifyLickBpm() {
   if (typeof licksNotifyBpmChange === 'function') licksNotifyBpmChange(stState.currentBpm);

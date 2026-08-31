@@ -489,13 +489,13 @@ function licksAudioEl(playerEl) {
   a.preservesPitch = true; // default in modern browsers, stated for clarity
   a.playbackRate = parseFloat(playerEl.querySelector('.lick-audio-speed').value) || 1;
   // Without this, a plain <audio> element always plays through the OS
-  // default output, ignoring the app-wide output-device picker (fretboard.js)
+  // default output, ignoring the app-wide output-device picker (fb-audio.js)
   // — same reason Song Loop's player registers itself (see slState.audioEl).
   if (typeof fbRegisterMediaElement === 'function') fbRegisterMediaElement(a);
   // Same reason as above, for loudness instead of routing: audio interfaces
   // with no software-controlled output (Focusrite Scarlett etc.) need the
   // app's own master-volume slider to work on every player, not just Song
-  // Loop's — see fbMasterGain (fretboard.js) for why this exists at all.
+  // Loop's — see fbMasterGain (fb-audio.js) for why this exists at all.
   if (typeof fbMasterGain === 'function') a.volume = fbMasterGain();
   a.addEventListener('play', () => {
     for (const other of lickAudioPlayers) { if (other !== a) other.pause(); }
@@ -1638,12 +1638,12 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') cancelLickEdit();
 });
 
-// Guard against rapid double-clicks — same convention as fretboard.js's
+// Guard against rapid double-clicks — same convention as the fb-*.js
 // guarded() list. Without this, clicking "Practice with Song Loop" twice
 // before the first fetch/decode resolves can interleave two concurrent
 // loads and leave slState's audio element and its bpm/loop bookkeeping
-// pointing at two different tracks. guarded() only exists once fretboard.js
-// has loaded (browser only, not the Node test environment for this file).
+// pointing at two different tracks. guarded() only exists once the fb-*.js modules
+// have loaded (browser only, not the Node test environment for this file).
 if (typeof guarded === 'function') {
   licksPracticeWithSongLoop = guarded(licksPracticeWithSongLoop);
   // saveLickEdit is a submit action (button click, Ctrl+S, Enter-in-title —

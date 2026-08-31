@@ -739,7 +739,7 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
 // synchronously before any await) that lasts the whole in-flight request —
 // stronger than guarded()'s fixed debounce window would give it, so this
 // doesn't need that wrapper (same "already has an internal lock" exemption
-// fretboard.js's answer buttons get). The one exception is steering: sending
+// fretboard modules' answer buttons get). The one exception is steering: sending
 // while a run in THIS session is already streaming interrupts it (via
 // DELETE .../runs/{id}?reason=steer) instead of being dropped, folds the
 // partial output into history as an "interrupted" message, then proceeds

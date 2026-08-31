@@ -20,9 +20,9 @@ const sl = require('../../web/song-loop.js');
 // drift from the actual parser.
 Object.assign(global, require('../../web/progression-lab.js'));
 // Same reasoning for the chord-diagram lookup: slChordDiagramFor() calls
-// fretboard.js's fbBarreFretForShape()/FB_CAGED_SHAPES via a bare global
-// reference (shared <script> scope on the real page). fretboard.js registers
-// a visibilitychange listener and probes HTMLMediaElement at module scope —
+// fb-core.js's fbBarreFretForShape()/FB_CAGED_SHAPES via a bare global
+// reference (shared <script> scope on the real page). the fb-*.js modules register
+// a visibilitychange listener and probe HTMLMediaElement at module scope —
 // stub both first, same as tests/js/fretboard.test.js does.
 global.document = global.document || { addEventListener() {} };
 global.HTMLMediaElement = global.HTMLMediaElement || function HTMLMediaElement() {};

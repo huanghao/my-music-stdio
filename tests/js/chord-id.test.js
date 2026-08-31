@@ -1,4 +1,4 @@
-// chord-id.js is a plain browser <script> sharing fretboard.js's global
+// chord-id.js is a plain browser <script> sharing the fb-*.js modules' global
 // scope for FB_CHORD_QUALITIES/FB_NOTE_NAMES/FB_STRING_OPEN/guarded() — same
 // bridging trick tests/js/song-loop.test.js uses for its own cross-file deps.
 global.document = { addEventListener() {} };

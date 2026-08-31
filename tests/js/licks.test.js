@@ -1,6 +1,6 @@
 // licks.js is a plain browser <script> — stub just enough DOM to load it
 // (it registers a DOMContentLoaded listener at module scope, mirroring
-// fretboard.js's test setup), plus a fake localStorage for licksApplyOrder.
+// fretboard.test.js's test setup), plus a fake localStorage for licksApplyOrder.
 global.document = { addEventListener() {} };
 let _fakeStore = {};
 global.localStorage = {

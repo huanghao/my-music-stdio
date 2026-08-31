@@ -1,10 +1,10 @@
-// fretboard.js is a plain browser <script>, so give it just enough of a DOM
+// The fb-*.js modules are plain browser <script>s, so give them just enough of a DOM
 // stub to load (it registers a visibilitychange listener at module scope).
 global.document = { addEventListener() {} };
 
 // FB_MEDIA_SETSINKID_SUPPORTED is computed once at module load from
 // `'setSinkId' in HTMLMediaElement.prototype` — stub the class (with the
-// method actually present) before requiring fretboard.js so the media-
+// method actually present) before requiring the fb-*.js modules so the media-
 // element output-routing tests below exercise the real code path instead of
 // permanently short-circuiting on "unsupported browser".
 global.HTMLMediaElement = function HTMLMediaElement() {};

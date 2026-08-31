@@ -998,7 +998,7 @@ input[type="number"] { width: 64px; text-align: center; }
 .prefs-form .field { gap: 12px; }
 .prefs-form .field > label { width: 160px; font-size: 13px; color: var(--text-dim); flex-shrink: 0; }
 
-/* Per-sound-category volume prefs — see fbRenderSoundVolumePrefs (fretboard.js) */
+/* Per-sound-category volume prefs — see fbRenderSoundVolumePrefs (fb-audio.js) */
 .fb-sound-vol-form { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
 .fb-sound-vol-title { font-size: 15px; margin: 0; }
 .fb-sound-vol-desc { font-size: 12px; color: var(--text-muted); margin: -8px 0 0; }
@@ -1929,7 +1929,7 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
 .tools-menu-item + .tools-menu-item { border-top: 1px solid var(--border-dim); }
 .tools-menu-check { color: var(--primary); font-size: 15px; line-height: 1; width: 12px; text-align: center; }
 
-/* ── Floating fretboard reference panel (fretboard.js fbIv*) ────────────────
+/* ── Floating fretboard reference panel (fb-iv.js fbIv*) ────────────────
    A small always-available helper — pick a root note, tick degrees (3/5/7
    etc.), see the shape on the neck — usable from any page (e.g. while
    looking at a Lick), not gated behind the Fretboard page's tab strip.

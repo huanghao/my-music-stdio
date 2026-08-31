@@ -1,7 +1,7 @@
 // ── Progressions page: roman-numeral progression lab ──
 // Ported from the standalone prototype (web/roman-numeral-progression-lab.html,
 // now retired — this is the only copy). Everything here is prefixed `pl`
-// since this file shares a global scope with app.js/fretboard.js/etc. via
+// since this file shares a global scope with app.js/fb-*.js/etc. via
 // plain <script> tags (no modules) — unprefixed names like `state` or
 // `getCtx` would collide with existing globals (app.js already has a
 // top-level `const state`).
@@ -41,7 +41,7 @@ function plPlayNote(ctx, midi, atTime, dur) {
   osc.stop(atTime + dur + 0.02);
 }
 
-// ── 和弦性质：音程集合（沿用 fretboard.js 的 FB_CHORD_QUALITIES 编码，
+// ── 和弦性质：音程集合（沿用 fb-chord.js 的 FB_CHORD_QUALITIES 编码，
 // 外加本页需要的 9sus4；两份表各自独立维护，没有共享模块）──
 const PL_QUALITIES = {
   '':      [0, 4, 7],

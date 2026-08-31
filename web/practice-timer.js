@@ -254,7 +254,7 @@ function ptTick() {
 }
 
 // Three ascending short beeps through a dedicated AudioContext, routed
-// through the shared master-volume gain (fbMasterGain, fretboard.js) like
+// through the shared master-volume gain (fbMasterGain, fb-audio.js) like
 // every other sound this app generates, plus its own 'timerAlert' category
 // gain (Preferences → 声音音量) for adjusting just this sound's default.
 function ptBeep() {
@@ -274,7 +274,7 @@ function ptBeep() {
     // matching note on stScheduleClick in speed-trainer.js — same root
     // cause, same fix: triangle for real perceived loudness at equal peak
     // amplitude, peak pulled down to leave the now-raised slider max
-    // (FB_SOUND_VOLUME_MAX, fretboard.js) room to actually do something).
+    // (FB_SOUND_VOLUME_MAX, fb-audio.js) room to actually do something).
     [880, 1108, 1318].forEach((freq, i) => {
       const t = ctx.currentTime + i * 0.16;
       const osc = ctx.createOscillator();
@@ -360,7 +360,7 @@ function ptInit() {
 }
 
 // Debounced against rapid double-click, per project convention for any
-// button with a side effect (guarded() is defined in fretboard.js, loaded
+// button with a side effect (guarded() is defined in fb-core.js, loaded
 // before this file).
 if (typeof guarded === 'function') ptStart = guarded(ptStart);
 

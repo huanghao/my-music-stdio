@@ -117,11 +117,14 @@ function agentPrefsLoad() {
   if (typeof saved.open === 'boolean') agentState.open = saved.open;
   if (Array.isArray(saved.sessions) && saved.sessions.length) {
     const valid = saved.sessions
-      .filter(s => s && typeof s.id === 'string' && Array.isArray(s.messages))
+      // messages 已迁到服务端（见 agentPrefsSave）：新形状没有 messages 键；
+      // 旧数据里的 messages 仍保留下来当本地缓存，首次发送时做种子迁移。
+      .filter(s => s && typeof s.id === 'string' && (s.messages === undefined || Array.isArray(s.messages)))
       .map(s => ({
         id: s.id,
         title: typeof s.title === 'string' && s.title ? s.title : '新对话',
-        messages: s.messages
+        serverSynced: s.serverSynced === true,
+        messages: (Array.isArray(s.messages) ? s.messages : [])
           .filter(m => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
           // Keep the post-hoc context-info meta too — otherwise it vanishes
           // on refresh even though durationMs (also per-message) is kept.
@@ -165,16 +168,93 @@ function agentPrefsSave() {
     modelByProvider: agentState.modelByProvider,
     mode: agentState.mode, sidebarWidth: agentState.sidebarWidth, sidebarCollapsed: agentState.sidebarCollapsed,
     panelWidth: agentState.panelWidth, panelHeight: agentState.panelHeight, inputHeight: agentState.inputHeight,
-    sessions: agentState.sessions, activeId: agentState.activeId,
+    // 会话历史存服务端（/api/agent/sessions/{id}），本地只留存根：id/title/marks +
+    // serverSynced（服务端是否已有这份会话——没有则首次发送时把本地缓存的
+    // messages 当种子 history 一次性导入）。避免 localStorage 膨胀 + 清浏览器数据即丢。
+    sessions: agentState.sessions.map(s => ({
+      id: s.id, title: s.title, marks: s.marks || [], serverSynced: !!s.serverSynced,
+    })),
+    activeId: agentState.activeId,
   }));
 }
 
+// 服务端恢复的消息是本地字段的子集（没有 thinking 文本/tools/contextInfo/runId/
+// retryQuestion），渲染对这些字段全都按缺省容错；这里只做形状归一，把
+// model/thinkingLevel 摆进 runMeta（渲染读 meta 的位置），其余原样带过来。
+function agentNormalizeServerMessage(m) {
+  if (!m || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string') return null;
+  const msg = { role: m.role, content: m.content, done: m.done !== false };
+  if (Number.isFinite(m.durationMs)) msg.durationMs = m.durationMs;
+  if (m.error) msg.error = true;
+  if (m.interrupted) msg.interrupted = true;
+  if (m.role === 'assistant' && (m.model || m.thinkingLevel)) {
+    msg.runMeta = {};
+    if (m.model) msg.runMeta.model = m.model;
+    if (m.thinkingLevel) msg.runMeta.thinking = m.thinkingLevel;
+  }
+  if (m.role === 'assistant' && Array.isArray(m.widgets) && m.widgets.length) {
+    msg.widgets = m.widgets.map(w => ({ widget: w.widget, data: w.data }));
+  }
+  return msg;
+}
+
+// 从服务端拉回一个会话的历史。只在本地还没有消息时填充（初始化/切会话时的空存根），
+// 避免覆盖本页流式中的实时状态；404 = 服务端文件没了，降级回未同步状态，
+// 下次发送会重新创建；其它失败保持现状（serverSynced 仍在，下次再试）。
+async function agentFetchSessionMessages(session) {
+  let data = null;
+  try {
+    const res = await fetch(`/api/agent/sessions/${session.id}`);
+    if (res.status === 404) {
+      session.serverSynced = false;
+      agentPrefsSave();
+      return false;
+    }
+    if (res.ok) data = await res.json();
+  } catch (_) { /* 离线/服务挂了：保持现状 */ }
+  if (!data || !Array.isArray(data.messages) || session.messages.length) return false;
+  session.messages = data.messages.map(agentNormalizeServerMessage).filter(Boolean);
+  return true;
+}
+
+// localStorage 被清后的恢复：本地只剩「新对话」默认存根时，问服务端要会话列表
+// 重建存根（倒序，最新的激活），再拉它的消息；列表为空就保持默认不动。
+// 本地有真实会话数据时跳过列表重建，只对当前激活的已同步空会话拉消息。
+async function agentRestoreSessionsFromServer() {
+  const onlyFreshDefault = agentState.sessions.length === 1
+    && !agentState.sessions[0].serverSynced
+    && !agentState.sessions[0].messages.length;
+  if (onlyFreshDefault) {
+    let list = null;
+    try {
+      const res = await fetch('/api/agent/sessions');
+      if (res.ok) list = await res.json();
+    } catch (_) { /* 同上：保持现状 */ }
+    if (Array.isArray(list) && list.length) {
+      agentState.sessions = list.slice(0, AGENT_SESSION_LIMIT).map(s => ({
+        id: s.id,
+        title: typeof s.title === 'string' && s.title ? s.title : '新对话',
+        messages: [], marks: [], serverSynced: true,
+      }));
+      agentState.activeId = agentState.sessions[0].id;
+      agentRenderSessions();
+      agentRenderTray();
+      agentPrefsSave();
+    }
+  }
+  const session = agentActiveSession();
+  if (session.serverSynced && !session.messages.length) {
+    await agentFetchSessionMessages(session);
+    agentRenderSessions();
+    agentRenderMessages(true);
+  }
+}
+
 // ── 划词追问托盘（抄 kolab 的 mark tray）──
-// 在助教回答或当前页面里选中一段文本 → 选区旁弹出小菜单，可顺手写一句批注
-// → 「＋ 加入托盘」（或 Enter）攒成 chip 留在输入框上方，下次提问时和留言
-// 合成一条结构化追问发出去（批注随行）。
-// 标记按会话存（session.marks），随 agentPrefsSave 持久化、切会话自动切换；
-// 发出即清，发送失败原样还原（同 kolab 的乐观清空/失败回滚约定）。
+// 在助教回答或当前页面里选中一段文本 → 选区旁弹出小菜单，「写批注…」顺手写一句
+// 批注 → 攒成 chip 留在输入框上方，下次提问时和留言合成一条结构化追问发出去
+// （批注随行）。标记按会话存（session.marks），随 agentPrefsSave 持久化、切会话
+// 自动切换；发出即清，发送失败原样还原（同 kolab 的乐观清空/失败回滚约定）。
 
 function agentSessionMarks(session) {
   if (!Array.isArray(session.marks)) session.marks = [];
@@ -268,16 +348,6 @@ function agentHideMarkMenu({ discard = false } = {}) {
   window.getSelection()?.removeAllRanges();
 }
 
-// 批注可空的那条路径（「直接加入托盘」）：不经输入框，直接落进托盘
-function agentAddMark(m) {
-  const marks = agentSessionMarks(agentActiveSession());
-  if (m?.quote && marks.length < AGENT_MARK_LIMIT) marks.push({ ...m, note: '' });
-  agentPrefsSave();
-  agentRenderTray();
-  agentHideMarkMenu();
-  window.getSelection()?.removeAllRanges();
-}
-
 // 菜单从「选项列表」切成「引用回显 + 批注输入框」：引用回显是让人看清自己标了
 // 哪段（输入框拿走焦点后选区高亮会变淡，光靠选区不够）
 function agentShowNoteEditor(quote, note) {
@@ -330,12 +400,8 @@ function agentInitMarkMenu() {
   menu.addEventListener('mousedown', (e) => { if (!e.target.closest('#agent-mm-note')) e.preventDefault(); });
   menu.querySelectorAll('.agent-mi').forEach(item => {
     item.addEventListener('click', () => {
-      if (item.dataset.act === 'note') {
-        agentMarkEditing = -1;   // 新标记，不是在改托盘里已有的
-        agentShowNoteEditor(agentMarkPending?.quote || '', '');
-      } else {
-        agentAddMark(agentMarkPending);
-      }
+      agentMarkEditing = -1;   // 新标记，不是在改托盘里已有的
+      agentShowNoteEditor(agentMarkPending?.quote || '', '');
     });
   });
   noteInput.addEventListener('input', () => { agentGrowMarkNote(); agentPositionMarkMenu(); });
@@ -441,6 +507,76 @@ function agentSetOpenUI(open) {
   agentApplySidebarLayout();
 }
 
+// ── Widget rendering ─────────────────────────────────────────────────────
+// 结构化能力信封（agent_client.py 里 Tool 返回 {"widget": <类型名>, "data": {...}}，
+// 见 "widget" kind）渲染成可交互卡片。新增一种能力只需要在这张表里加一个渲染
+// 函数，不用碰下面的聊天渲染主干（agentRenderMessages）或 SSE/落盘逻辑。
+const AGENT_WIDGET_RENDERERS = {
+  accompaniment_preview: agentRenderAccompanimentWidget,
+};
+
+function agentRenderAccompanimentWidget(data, addr) {
+  const acc = (data && data.accompaniment) || {};
+  const chords = (acc.bars || [])
+    .map(b => (b.chords || []).map(c => c.name).join('/'))
+    .filter(Boolean);
+  return `<div class="mt-1.5 rounded-md border-line border bg-subtle p-2 text-xs">
+    <div class="text-fg-muted">🎼 ${htmlEsc(acc.key || '')} · ${htmlEsc(acc.style || '')} · ${htmlEsc(String(acc.bpm ?? ''))} BPM</div>
+    <div class="mt-1 text-fg font-medium">${chords.map(htmlEsc).join(' → ')}</div>
+    <div class="mt-1.5 flex gap-1.5">
+      <button type="button" class="rounded-sm border-line-dim border bg-page text-fg-muted cursor-pointer px-2 py-0.5 text-xs" onclick="agentWidgetPlay(${addr})">▶ 试听</button>
+      <button type="button" class="rounded-sm border-line-dim border bg-page text-fg-muted cursor-pointer px-2 py-0.5 text-xs" onclick="agentWidgetOpenInJam(${addr})">在 Jam 中打开</button>
+    </div>
+  </div>`;
+}
+
+function agentRenderWidgets(m, sessionIndex, messageIndex) {
+  if (!(m.role === 'assistant' && Array.isArray(m.widgets) && m.widgets.length)) return '';
+  return m.widgets.map((w, wi) => {
+    const renderer = AGENT_WIDGET_RENDERERS[w.widget];
+    const addr = `${sessionIndex}, ${messageIndex}, ${wi}`;
+    return renderer
+      ? renderer(w.data, addr)
+      : `<div class="mt-1.5 rounded-md border-line border bg-subtle p-2 text-xs text-fg-muted">（不支持展示的内容：${htmlEsc(w.widget)}）</div>`;
+  }).join('');
+}
+
+function agentWidgetLookup(sessionIndex, messageIndex, widgetIndex) {
+  const session = agentState.sessions[sessionIndex];
+  return session?.messages[messageIndex]?.widgets?.[widgetIndex]?.data;
+}
+
+// "试听"：直接用现成的 /api/play（Vamp/Jam 共用的引擎），不新造播放通路。
+async function agentWidgetPlay(sessionIndex, messageIndex, widgetIndex) {
+  const accompaniment = agentWidgetLookup(sessionIndex, messageIndex, widgetIndex)?.accompaniment;
+  if (!accompaniment) return;
+  try {
+    await api('/api/play', 'POST', {
+      ...accompaniment,
+      volume: typeof fbMasterGain === 'function' ? fbMasterGain() : accompaniment.volume,
+      output_device: typeof fbOutputDeviceName === 'function' ? (fbOutputDeviceName() || null) : null,
+    });
+  } catch (e) {
+    if (typeof setStatus === 'function') setStatus('Error: ' + e.message);
+  }
+}
+
+// "在 Jam 中打开"：把生成的进行灌进 Jam 的既有 state，复用它的持久化/播放/编辑，
+// 不新造一套预览态存储。
+function agentWidgetOpenInJam(sessionIndex, messageIndex, widgetIndex) {
+  const accompaniment = agentWidgetLookup(sessionIndex, messageIndex, widgetIndex)?.accompaniment;
+  if (!accompaniment || typeof state === 'undefined') return;
+  state.jam.bars = (accompaniment.bars || []).map(b => ({ chords: (b.chords || []).map(c => ({ ...c })) }));
+  state.jam.style = accompaniment.style || state.jam.style;
+  state.jam.key = accompaniment.key || state.jam.key;
+  state.jam.bpm = accompaniment.bpm || state.jam.bpm;
+  state.jam.loops = accompaniment.loops || state.jam.loops;
+  if (typeof renderJamControls === 'function') renderJamControls();
+  if (typeof renderJamChart === 'function') renderJamChart();
+  if (typeof saveLastSelection === 'function') saveLastSelection();
+  if (typeof navGoToPage === 'function') navGoToPage('jam');
+}
+
 function agentRenderMessages(forceScroll) {
   const el = document.getElementById('agent-messages');
   if (!el) return;
@@ -453,12 +589,14 @@ function agentRenderMessages(forceScroll) {
     el.innerHTML = '<div class="agent-empty">可以问某个和弦为什么这么判断、还有哪些备选读法、终止式是什么，或者练习上遇到的其他问题。</div>';
     return;
   }
-  el.innerHTML = session.messages.map(m => {
+  const sessionIndex = agentState.sessions.indexOf(session);
+  el.innerHTML = session.messages.map((m, mi) => {
     // 思考过程实时可见（借鉴 kolab）：流式中展开跟着读，一收到 done 就自动折叠——
     // 折叠靠重渲染时按 m.done 决定要不要带 open 属性，不用额外记一份"用户手动展开过"的状态。
     const think = (m.role === 'assistant' && m.thinking)
       ? `<details class="agent-think"${m.done ? '' : ' open'}><summary>思考过程</summary><div class="agent-think-body">${htmlEsc(m.thinking)}</div></details>`
       : '';
+    const widgets = agentRenderWidgets(m, sessionIndex, mi);
     const tools = (m.role === 'assistant' && Array.isArray(m.tools) && m.tools.length)
       ? m.tools.map(t => `<div class="agent-msg-tool">🔧 ${htmlEsc(t.name || '')}(${htmlEsc(JSON.stringify(t.args || {}))})</div>`).join('')
       : '';
@@ -491,11 +629,12 @@ function agentRenderMessages(forceScroll) {
     }
     if (m.role === 'assistant' && m.interrupted) metaBits.push('已被新消息打断');
     else if (m.role === 'assistant' && m.error) metaBits.push('error');
+    if (m.role === 'user' && m.queued) metaBits.push('排队中…');   // followup 已提交未开答，见 agentQueueFollowup
     const retry = (m.role === 'assistant' && m.error && m.retryQuestion)
       ? `<button type="button" class="agent-retry-btn" onclick="agentRetryMessage(${agentState.sessions.indexOf(session)}, ${session.messages.indexOf(m)})">重试</button>`
       : '';
     const meta = (metaBits.length || retry) ? `<div class="agent-msg-meta">${metaBits.join(' · ')}${retry}</div>` : '';
-    return `<div class="agent-msg agent-msg-${m.role}">${think}${tools}${bubble}${meta}</div>`;
+    return `<div class="agent-msg agent-msg-${m.role}">${think}${tools}${bubble}${widgets}${meta}</div>`;
   }).join('');
   if (forceScroll || agentMsgsPinned) el.scrollTop = el.scrollHeight;
   else el.scrollTop = prevTop;
@@ -686,6 +825,15 @@ function agentSwitchSession(id) {
   agentRenderMessages(true);
   agentRenderTray();
   agentPrefsSave();
+  // 已同步会话的本地存根没有消息——切过去时从服务端拉回（渲染对缺字段容错）
+  const session = agentActiveSession();
+  if (session.serverSynced && !session.messages.length) {
+    agentFetchSessionMessages(session).then(filled => {
+      if (!filled || agentState.activeId !== id) return;
+      agentRenderSessions();
+      agentRenderMessages(true);
+    });
+  }
 }
 
 // 记住每个 provider 上一次用的 model/thinking，切换 provider 来回时不用重选
@@ -773,8 +921,27 @@ function agentApplyRunEvent(msg, assistantMsg, session) {
     agentTickBase = `调用工具 ${msg.name}…`;
     agentSetStatus(agentTickBase);
     agentRenderMessages();
-  } else if (msg.type === 'steered') {
-    assistantMsg.interrupted = true;
+  } else if (msg.type === 'widget') {
+    // 结构化能力信封（见 src/agent_client.py 的 "widget" kind）：不是文本，
+    // 渲染成可交互卡片——AGENT_WIDGET_RENDERERS 按 msg.widget 类型分发，见下方。
+    assistantMsg.widgets = assistantMsg.widgets || [];
+    assistantMsg.widgets.push({ widget: msg.widget, data: msg.data });
+    agentRenderMessages();
+  } else if (msg.type === 'followup') {
+    // 排队追问的回答开始流式（见 agentQueueFollowup）：当前气泡此刻已完整，封箱；
+    // 另起一个 assistant 气泡接后续 delta——返回值会被 agentAttachRun 的循环
+    // 当作新的当前气泡。多个排队追问按 FIFO 各对应一个 followup 事件，每次摘掉
+    // 第一个还在排队标记的用户气泡。
+    assistantMsg.done = true;
+    const queuedUser = session.messages.find(m => m.role === 'user' && m.queued);
+    if (queuedUser) delete queuedUser.queued;
+    const next = {
+      role: 'assistant', content: '', runId: assistantMsg.runId,
+      retryQuestion: queuedUser?.content || '',
+    };
+    session.messages.push(next);
+    agentRenderMessages();
+    return next;
   } else if (msg.type === 'meta') {
     assistantMsg.runMeta = {
       duration_ms: msg.duration_ms,
@@ -796,6 +963,7 @@ function agentApplyRunEvent(msg, assistantMsg, session) {
   } else if (msg.type === 'done') {
     assistantMsg.done = true;
   }
+  return assistantMsg;
 }
 
 async function agentAttachRun(session, assistantMsg, startedAt) {
@@ -806,7 +974,7 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
   agentSetStatus(agentTickBase);
   agentStartTicker(startedAt);
   // Send button stays visible (not hidden) while streaming — sending during
-  // an active run is how steering works (see agentSend()), so it can't be
+  // an active run is how followups are queued (see agentSend()), so it can't be
   // disabled the way a plain "one shot at a time" chat input would be.
   const cancelBtn = document.getElementById('agent-cancel-btn');
   if (cancelBtn) cancelBtn.classList.remove('hidden');
@@ -830,8 +998,10 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
       for (const ev of events) {
         const parsed = agentReadSseEvent(ev, assistantMsg.runCursor || 0);
         if (!parsed) continue;
+        // followup 事件会换一个新的当前气泡（见 agentApplyRunEvent）——先应用事件
+        // 再写游标，游标才会落在最新气泡上，刷新后 re-attach 不会从头重放
+        assistantMsg = agentApplyRunEvent(parsed.msg, assistantMsg, session);
         assistantMsg.runCursor = parsed.nextCursor;
-        agentApplyRunEvent(parsed.msg, assistantMsg, session);
         if (parsed.msg.type === 'error') hadError = true;
         agentPrefsSave();
       }
@@ -871,15 +1041,66 @@ async function agentAttachRun(session, assistantMsg, startedAt) {
   }
 }
 
+// followup 排队（取代已删除的 steer 打断）：会话在流式时不打断当前回答，把问题
+// 排进进行中的 run（服务端先落盘 user 条目再入队），当前回答结束后在同一条 SSE
+// 流里续答——followup 事件到达时另起气泡（见 agentApplyRunEvent）。
+async function agentQueueFollowup(session, question, sentMarks) {
+  const userMsg = { role: 'user', content: question, queued: true };
+  session.messages.push(userMsg);
+  agentRenderMessages(true);
+  agentPrefsSave();
+  try {
+    const res = await fetch('/api/agent/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        provider: agentState.provider || null,
+        model: agentState.model || null,
+        thinking: agentState.thinking || null,
+        session_id: session.id,
+        followup: true,
+        context: agentPageContext(),
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    if (body.queued) return;   // 排队成功：回答经现有 SSE 流到达，queued 标记由 followup 事件摘除
+    // 竞态：run 刚好结束，服务端按正常新 run 开了（无 queued）——本地补 assistant
+    // 占位并 attach 上去。先等老 attach 彻底收尾（finally 会复位 agentLoading/
+    // agentController），避免新旧两条 attach 抢全局状态。
+    delete userMsg.queued;
+    if (!body.run_id) throw new Error('missing run_id');
+    if (agentCurrentAttachPromise) await agentCurrentAttachPromise;
+    const assistantMsg = {
+      role: 'assistant', content: '', retryQuestion: question,
+      provider: agentState.provider, model: agentState.model, thinkingLevel: agentState.thinking,
+      runId: body.run_id, runCursor: 0,
+    };
+    session.messages.push(assistantMsg);
+    agentRenderMessages(true);
+    agentPrefsSave();
+    agentCurrentAttachPromise = agentAttachRun(session, assistantMsg, Date.now());
+    await agentCurrentAttachPromise;
+  } catch (e) {
+    // 排队失败：按「没发出去」处理——撤掉用户气泡、标记还原回托盘，用户可重发
+    const i = session.messages.indexOf(userMsg);
+    if (i >= 0) session.messages.splice(i, 1);
+    agentRestoreMarks(session, sentMarks);
+    agentSetStatus('请求失败', true);
+    agentRenderMessages();
+    agentPrefsSave();
+  }
+}
+
 // Sending has its own re-entrancy guard (agentLoading, checked and set
 // synchronously before any await) that lasts the whole in-flight request —
 // stronger than guarded()'s fixed debounce window would give it, so this
 // doesn't need that wrapper (same "already has an internal lock" exemption
-// fretboard modules' answer buttons get). The one exception is steering: sending
-// while a run in THIS session is already streaming interrupts it (via
-// DELETE .../runs/{id}?reason=steer) instead of being dropped, folds the
-// partial output into history as an "interrupted" message, then proceeds
-// with the new question as usual.
+// fretboard modules' answer buttons get). The one exception is followups: sending
+// while a run in THIS session is already streaming doesn't interrupt it — the
+// question is queued into the running agent (agentQueueFollowup) and answered
+// over the same SSE stream once the current answer finishes.
 async function agentSend(retryQuestion) {
   const input = document.getElementById('agent-input');
   const isRetry = typeof retryQuestion === 'string';
@@ -899,15 +1120,12 @@ async function agentSend(retryQuestion) {
       return;
     }
     if (!isRetry) input.value = '';
-    fetch(`/api/agent/runs/${pendingId}?reason=steer`, { method: 'DELETE', keepalive: true }).catch(() => {});
-    if (agentCurrentAttachPromise) await agentCurrentAttachPromise;
-    return agentSend(question);
+    return agentQueueFollowup(session, question, sentMarks);
   }
 
   if (!isRetry) input.value = '';
   session.messages.push({ role: 'user', content: question });
   if (session.messages.length === 1) session.title = (raw || question).slice(0, 24) || '新对话';
-  if (session.messages.length > AGENT_HISTORY_LIMIT) session.messages.splice(0, session.messages.length - AGENT_HISTORY_LIMIT);
   agentRenderSessions();
 
   // thinkingLevel 而不是 thinking：后者是流式思考文本的字段（见 agentApplyRunEvent
@@ -939,17 +1157,28 @@ async function agentSend(retryQuestion) {
         provider: agentState.provider || null,
         model: agentState.model || null,
         thinking: agentState.thinking || null,
-        history: session.messages
-          .slice(0, -2)
-          .filter(m => !m.error)
-          .slice(-8)
-          .map(({ role, content }) => ({ role, content })),
+        session_id: session.id,
+        // retry 只在服务端已有这份会话时发——服务端按 session_id 把上一轮整个作废；
+        // 未同步会话的作废对儿本地已经 splice 掉了，种子 history（slice(0,-2)）
+        // 本来就不含它，不用服务端再删一遍。
+        ...(isRetry && session.serverSynced ? { retry: true } : {}),
+        // 种子迁移：服务端还没有这份会话时，把本地缓存的历史一次性导入
+        // （服务端仅在创建会话文件时读 history，已存在则忽略）。这里不截 -8：
+        // 那是 prompt 窗口的限制，迁移要的是完整本地历史；prompt 裁剪由
+        // 服务端的 load_history_for_prompt 负责。
+        ...(session.serverSynced ? {} : {
+          history: session.messages
+            .slice(0, -2)
+            .filter(m => !m.error)
+            .map(({ role, content }) => ({ role, content })),
+        }),
         context,
       }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
     if (!body.run_id) throw new Error('missing run_id');
+    session.serverSynced = true;   // 服务端已收下这轮（或刚种子迁移完），历史以服务端为准
     assistantMsg.runId = body.run_id;
     assistantMsg.runCursor = 0;
     agentPrefsSave();
@@ -1101,12 +1330,15 @@ function agentInit() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); agentSend(); }
     });
   }
+  // 历史在服务端：本地存根没有消息——异步补拉（含 localStorage 被清后的列表重建）。
+  // 放在同步初始化之后 fire-and-forget，拉完自己重渲染。
+  agentRestoreSessionsFromServer();
 }
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     agentClamp, agentFmtDuration, agentReadSseEvent, agentFmtContextMeta, agentHumanizeNum,
-    agentComposeWithMarks,
+    agentComposeWithMarks, agentNormalizeServerMessage, agentApplyRunEvent, agentQueueFollowup,
     AGENT_SIDEBAR_WIDTH_MIN, AGENT_SIDEBAR_WIDTH_MAX,
     AGENT_MARK_QUOTE_LIMIT, AGENT_MARK_LIMIT, AGENT_MARK_NOTE_LIMIT, AGENT_COMPOSE_LIMIT,
   };

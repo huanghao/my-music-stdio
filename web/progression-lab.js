@@ -94,7 +94,7 @@ const PL_QUALITY_ALIASES = [
   ['6/9','6/9'], ['7sus4','7sus4'], ['9sus4','9sus4'], ['madd9','madd9'], ['mmaj7','mmaj7'],
   ['maj9','maj9'], ['maj7','maj7'], ['add9','add9'], ['m7b5','m7b5'], ['dim7','dim7'],
   ['7b9','7b9'], ['7#9','7#9'], ['7b5','m7b5'], ['7-5','m7b5'], ['-7','m7'], ['m9','m9'], ['m6','m6'], ['m7','m7'], ['9','9'], ['6','6'],
-  ['sus4','sus4'], ['sus2','sus2'], ['dim','dim'], ['aug','aug'],
+  ['sus4','sus4'], ['sus2','sus2'], ['dim','dim'], ['aug','aug'], ['m','m'],
   ['°7','dim7'], ['ø7','m7b5'], ['°','dim'], ['ø','m7b5'], ['+','aug'],
 ];
 
@@ -180,6 +180,59 @@ function plParseToken(raw) {
   return { rootPc, quality, weight };
 }
 
+// Matches an absolute note name (root or slash-bass) at the start of `s`
+// against PL_NOTE_INDEX, longest-first so "Eb"/"F#" aren't cut short by a
+// bare "E"/"F" match. Returns { pc, rest } (pc absolute, not yet relative to
+// any key) or null.
+function plMatchAbsoluteRoot(s) {
+  const two = s.slice(0, 2);
+  if (Object.prototype.hasOwnProperty.call(PL_NOTE_INDEX, two)) return { pc: PL_NOTE_INDEX[two], rest: s.slice(2) };
+  const one = s.slice(0, 1);
+  if (Object.prototype.hasOwnProperty.call(PL_NOTE_INDEX, one)) return { pc: PL_NOTE_INDEX[one], rest: s.slice(1) };
+  return null;
+}
+
+// Parses one absolute-chord-name token (e.g. "Cm", "G/B", "F#°7", "Bb*2")
+// into { rootPc, quality, bassPc, weight }, same shape as plParseToken but
+// for lead-sheet chord symbols instead of roman numerals — auto-detected by
+// plParseProgression from the token's leading letter (A-G), since roman
+// numerals are only ever spelled from I/V and can't collide with a note
+// name. rootPc/bassPc come out relative to `tonicPc` (not absolute), so
+// every downstream consumer (plChordSymbol, plScheduleChords, ...) keeps
+// working unchanged, and re-keying the page transposes typed-in absolute
+// chords right along with roman-numeral ones.
+function plParseAbsoluteToken(raw, tonicPc) {
+  let token = raw;
+  let weight = null;
+  const weightMatch = token.match(/\*(\d+(?:\.\d+)?)$/);
+  if (weightMatch) {
+    weight = parseFloat(weightMatch[1]);
+    token = token.slice(0, -weightMatch[0].length);
+  }
+  const rootMatch = plMatchAbsoluteRoot(token);
+  if (!rootMatch) return { error: `无法识别的和弦："${raw}"` };
+
+  let qualityToken = rootMatch.rest;
+  let bassToken = null;
+  const slashIdx = qualityToken.indexOf('/');
+  if (slashIdx !== -1) {
+    bassToken = qualityToken.slice(slashIdx + 1);
+    qualityToken = qualityToken.slice(0, slashIdx);
+  }
+
+  const quality = plResolveQuality(qualityToken, true, null, false);
+  if (quality === null) return { error: `无法识别的和弦性质："${qualityToken}"（在 "${raw}" 里）` };
+
+  let bassPc = null;
+  if (bassToken !== null) {
+    const bassMatch = plMatchAbsoluteRoot(bassToken);
+    if (!bassMatch || bassMatch.rest !== '') return { error: `无法识别的低音音符："${bassToken}"（在 "${raw}" 里）` };
+    bassPc = ((bassMatch.pc - tonicPc) % 12 + 12) % 12;
+  }
+  const rootPc = ((rootMatch.pc - tonicPc) % 12 + 12) % 12;
+  return { rootPc, quality, bassPc, weight };
+}
+
 // Splits one bar's chords into { rootPc, quality, beats }, evenly dividing
 // the bar's remaining beats (after subtracting any explicit `*N` weights)
 // among the chords that didn't specify one. A bar with a single unweighted
@@ -196,15 +249,18 @@ function plDistributeBeats(barChords, beatsPerBar) {
   return barChords.map(c => ({
     rootPc: c.rootPc,
     quality: c.quality,
+    bassPc: c.bassPc != null ? c.bassPc : null,
     beats: Math.max(0.25, c.weight != null ? c.weight : share),
   }));
 }
 
 // Parses a full progression string — bars separated by `|`, chords within a
 // bar separated by whitespace, each chord optionally suffixed `*N` — into a
-// flat list of { rootPc, quality, beats, barIndex }. Returns { error } from
-// the first token that fails to parse.
-function plParseProgression(text, beatsPerBar) {
+// flat list of { rootPc, quality, bassPc, beats, barIndex }. Returns
+// { error } from the first token that fails to parse. `tonicPc` is only
+// needed for absolute-chord tokens (roman numerals are key-independent by
+// design) — see plParseAbsoluteToken.
+function plParseProgression(text, beatsPerBar, tonicPc) {
   const barTexts = text.split('|').map(s => s.trim()).filter(Boolean);
   if (barTexts.length === 0) return { error: '空输入' };
   const chords = [];
@@ -212,7 +268,10 @@ function plParseProgression(text, beatsPerBar) {
     const tokens = barTexts[barIndex].split(/\s+/).filter(Boolean);
     const barChords = [];
     for (const tok of tokens) {
-      const parsed = plParseToken(tok);
+      // Roman numerals are only ever spelled from I/V, so a token starting
+      // with any other note letter (A-G) can only be an absolute chord name
+      // ("Cm", "G/B", "F#°7", ...) — auto-detected, no explicit mode switch.
+      const parsed = /^[A-G]/.test(tok) ? plParseAbsoluteToken(tok, tonicPc) : plParseToken(tok);
       if (parsed.error) return { error: parsed.error };
       barChords.push(parsed);
     }
@@ -222,16 +281,22 @@ function plParseProgression(text, beatsPerBar) {
   return { chords };
 }
 
-function plChordSymbol(rootPc, quality, tonicPc) {
+function plChordSymbol(rootPc, quality, tonicPc, bassPc) {
   const absPc = (tonicPc + rootPc) % 12;
-  return PL_NOTE_NAMES_FLAT[absPc] + PL_QUALITY_LABELS[quality];
+  const symbol = PL_NOTE_NAMES_FLAT[absPc] + PL_QUALITY_LABELS[quality];
+  if (bassPc == null) return symbol;
+  return `${symbol}/${PL_NOTE_NAMES_FLAT[(tonicPc + bassPc) % 12]}`;
 }
 
 // Same root/quality resolution as plChordSymbol, but for the Jam page's
 // backing-track engine (src/gen_accompaniment_midi.py QUALITY_INTERVALS)
 // instead of on-screen display — so it appends the raw quality *token*
 // (e.g. "m7b5", "madd9") rather than the prettified label (e.g. "m7♭5",
-// "m(add9)"), which the backend's chord parser can't read.
+// "m(add9)"), which the backend's chord parser can't read. Deliberately
+// ignores any bassPc on the chord: gen_accompaniment_midi.py's parse_chord
+// has no slash/inversion syntax and Jam's bass line is generated per-style
+// from the root anyway, so a typed-in inversion is exported as its plain
+// root chord rather than sent as an unparseable "X/Y" string.
 function plJamChordName(rootPc, quality, tonicPc) {
   const absPc = (tonicPc + rootPc) % 12;
   return PL_NOTE_NAMES_FLAT[absPc] + quality;
@@ -244,7 +309,7 @@ function plFormatResolved(chords, tonicPc) {
   const bars = [];
   chords.forEach(ch => {
     if (!bars[ch.barIndex]) bars[ch.barIndex] = [];
-    const symbol = plChordSymbol(ch.rootPc, ch.quality, tonicPc);
+    const symbol = plChordSymbol(ch.rootPc, ch.quality, tonicPc, ch.bassPc);
     const beatsLabel = Number.isInteger(ch.beats) ? '' : `(${ch.beats.toFixed(2)}拍)`;
     bars[ch.barIndex].push(symbol + beatsLabel);
   });
@@ -281,7 +346,11 @@ function plScheduleChords(chords, tonicPc, startAt) {
     // previous chord's root (see plNearestMidi) instead of a fixed octave.
     const rootMidi = prevRootMidi == null ? absPc + 4 * 12 : plNearestMidi(absPc, prevRootMidi);
     prevRootMidi = rootMidi;
-    const notes = [rootMidi - 12, ...PL_QUALITIES[ch.quality].map(iv => rootMidi + iv)];
+    // An explicit slash bass (absolute-chord tokens only, e.g. "G/B") takes
+    // over the doubled-root bass note below, voiced in whichever octave
+    // sits closest to where that doubled root would have been.
+    const bassMidi = ch.bassPc == null ? rootMidi - 12 : plNearestMidi((tonicPc + ch.bassPc) % 12, rootMidi - 12);
+    const notes = [bassMidi, ...PL_QUALITIES[ch.quality].map(iv => rootMidi + iv)];
     notes.forEach(n => plPlayNote(ctx, n, t, dur));
     t += dur;
   });
@@ -452,24 +521,25 @@ function plPlayCard(id) {
   if (Date.now() < plPlayBlockedUntil) return;
   const c = plState.cards.find(c => c.id === id);
   if (!c) return;
-  const result = plParseProgression(c.text, plState.beatsPerBar);
+  const tonicPc = PL_NOTE_INDEX[plState.key];
+  const result = plParseProgression(c.text, plState.beatsPerBar, tonicPc);
   if (result.error) return;
   const ctx = plGetCtx();
   plPlayBlockedUntil = Date.now() + plTotalBeats(result.chords) * plBeatSec() * 1000 + 150;
-  plScheduleChords(result.chords, PL_NOTE_INDEX[plState.key], ctx.currentTime + 0.05);
+  plScheduleChords(result.chords, tonicPc, ctx.currentTime + 0.05);
 }
 function plPlaySelected() {
   if (Date.now() < plPlayBlockedUntil) return;
   const selected = plState.cards.filter(c => c.selected);
   if (!selected.length) return;
-  const parsed = selected.map(c => plParseProgression(c.text, plState.beatsPerBar)).filter(r => !r.error);
+  const tonicPc = PL_NOTE_INDEX[plState.key];
+  const parsed = selected.map(c => plParseProgression(c.text, plState.beatsPerBar, tonicPc)).filter(r => !r.error);
   if (!parsed.length) return;
   const gapSec = 0.4 * plBeatSec();
   const totalSec = parsed.reduce((sum, r) => sum + plTotalBeats(r.chords) * plBeatSec() + gapSec, 0);
   plPlayBlockedUntil = Date.now() + totalSec * 1000 + 150;
   const ctx = plGetCtx();
   let t = ctx.currentTime + 0.05;
-  const tonicPc = PL_NOTE_INDEX[plState.key];
   parsed.forEach(r => { t = plScheduleChords(r.chords, tonicPc, t) + gapSec; });
 }
 
@@ -480,9 +550,9 @@ function plPlaySelected() {
 function plSendToJam(id) {
   const c = plState.cards.find(c => c.id === id);
   if (!c) return;
-  const result = plParseProgression(c.text, plState.beatsPerBar);
-  if (result.error) return;
   const tonicPc = PL_NOTE_INDEX[plState.key];
+  const result = plParseProgression(c.text, plState.beatsPerBar, tonicPc);
+  if (result.error) return;
   const bars = [];
   result.chords.forEach(ch => {
     if (!bars[ch.barIndex]) bars[ch.barIndex] = { chords: [] };
@@ -528,7 +598,7 @@ function plRenderCards() {
           </div>
         </div>`;
     }
-    const result = plParseProgression(c.text, plState.beatsPerBar);
+    const result = plParseProgression(c.text, plState.beatsPerBar, tonicPc);
     const resolvedHtml = result.error
       ? `<span class="pl-err">⚠ ${plEscapeHtml(result.error)}</span>`
       : plEscapeHtml(plFormatResolved(result.chords, tonicPc));
@@ -633,5 +703,5 @@ function initProgressionLabPage() {
 // grammar, see its own comment on slRomanEngineAvailable) can be unit-tested
 // against the real parser/formatter instead of a hand-rolled stand-in.
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { PL_NOTE_INDEX, PL_NOTE_NAMES_FLAT, PL_MAJOR_SCALE_OFFSETS, plParseToken, plChordSymbol, plJamChordName, plResolveQuality, PL_LOOKUP_DEGREES };
+  module.exports = { PL_NOTE_INDEX, PL_NOTE_NAMES_FLAT, PL_MAJOR_SCALE_OFFSETS, plParseToken, plParseAbsoluteToken, plParseProgression, plChordSymbol, plJamChordName, plResolveQuality, PL_LOOKUP_DEGREES };
 }

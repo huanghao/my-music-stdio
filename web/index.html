@@ -917,13 +917,11 @@
 </div>
 
 <!-- 划词小菜单（抄 kolab 的 mark menu）：选中助教回答/页面文本后浮在选区旁边，
-     先出选项列表（不抢焦点，选区高亮留着让人看清标了什么），点「写批注…」才
-     换成引用回显 + 多行输入框（回车换行，⌘/Ctrl+Enter 确定）。显隐和定位由
-     agent-assistant.js 的 agentInitMarkMenu 驱动。 -->
+     点「写批注…」换成引用回显 + 多行输入框（回车换行，⌘/Ctrl+Enter 确定）。
+     显隐和定位由 agent-assistant.js 的 agentInitMarkMenu 驱动。 -->
 <div id="agent-mark-menu" class="agent-mark-menu hidden">
   <div id="agent-mm-items" class="agent-mm-items">
     <div class="agent-mi" data-act="note">写批注…</div>
-    <div class="agent-mi" data-act="plain">直接加入托盘</div>
   </div>
   <div id="agent-mm-quote" class="agent-mm-quote hidden"></div>
   <!-- 不带 resize 把手：输入时按内容自动长高（见 agentInitMarkMenu 的 input 监听） -->

@@ -1,7 +1,14 @@
 // agent-assistant.js is a plain browser <script> — stub just enough of the
 // DOM/localStorage globals it touches at module scope to load it (same
-// pattern as licks.test.js).
-global.document = { addEventListener() {} };
+// pattern as licks.test.js). getElementById/querySelector return null so the
+// render helpers no-op; window is stubbed for agentPageContext's selection read.
+global.document = {
+  addEventListener() {},
+  getElementById() { return null; },
+  querySelector() { return null; },
+  body: { innerText: '' },
+};
+global.window = { getSelection: () => null };
 let _fakeStore = {};
 global.localStorage = {
   getItem(k) { return Object.prototype.hasOwnProperty.call(_fakeStore, k) ? _fakeStore[k] : null; },
@@ -93,4 +100,111 @@ test('agentComposeWithMarks carries the per-mark note as a 批注 line', () => {
   ]);
   assert.ok(out.includes('1. 「V7 省略五音」\n   批注：为什么可以省？'));
   assert.ok(!out.includes('「BPM 120」（标注自：页面）\n   批注')); // 空批注不占行
+});
+
+test('agentNormalizeServerMessage maps a full assistant record into render shape', () => {
+  const msg = agent.agentNormalizeServerMessage({
+    role: 'assistant', content: '答案', done: true,
+    model: 'claude-x', thinkingLevel: 'medium', durationMs: 2500,
+  });
+  assert.deepEqual(msg, {
+    role: 'assistant', content: '答案', done: true, durationMs: 2500,
+    runMeta: { model: 'claude-x', thinking: 'medium' },
+  });
+});
+
+test('agentNormalizeServerMessage keeps error/interrupted flags and defaults done', () => {
+  const partial = agent.agentNormalizeServerMessage({ role: 'assistant', content: '半截', interrupted: true });
+  assert.deepEqual(partial, { role: 'assistant', content: '半截', done: true, interrupted: true });
+  const failed = agent.agentNormalizeServerMessage({ role: 'assistant', content: '', error: true, done: true });
+  assert.deepEqual(failed, { role: 'assistant', content: '', done: true, error: true });
+  // 没有 model/thinkingLevel 时不出 runMeta（渲染按缺省容错）
+  assert.equal(agent.agentNormalizeServerMessage({ role: 'user', content: '问', done: true }).runMeta, undefined);
+});
+
+test('agentNormalizeServerMessage carries widgets through, stripped to widget+data', () => {
+  const msg = agent.agentNormalizeServerMessage({
+    role: 'assistant', content: '试听一下', done: true,
+    widgets: [{ name: 'generate_accompaniment', args: {}, widget: 'accompaniment_preview', data: { accompaniment: { key: 'Cm' } } }],
+  });
+  assert.deepEqual(msg.widgets, [{ widget: 'accompaniment_preview', data: { accompaniment: { key: 'Cm' } } }]);
+  // 没有 widgets 时不出该字段（渲染按缺省容错）
+  assert.equal(agent.agentNormalizeServerMessage({ role: 'assistant', content: 'x', done: true }).widgets, undefined);
+});
+
+test('agentNormalizeServerMessage rejects malformed records', () => {
+  assert.equal(agent.agentNormalizeServerMessage(null), null);
+  assert.equal(agent.agentNormalizeServerMessage({ role: 'system', content: 'x' }), null);
+  assert.equal(agent.agentNormalizeServerMessage({ role: 'user' }), null);
+});
+
+test('agentQueueFollowup posts followup:true and keeps the user bubble marked queued on a queued response', async () => {
+  const session = { id: 's1', title: 't', serverSynced: true, marks: [], messages: [{ role: 'user', content: '第一问' }] };
+  const calls = [];
+  const origFetch = global.fetch;
+  global.fetch = async (url, opts) => {
+    calls.push({ url, body: JSON.parse(opts.body) });
+    return { ok: true, json: async () => ({ queued: true, run_id: 'r1', session_id: 's1' }) };
+  };
+  try {
+    await agent.agentQueueFollowup(session, '追问一下', []);
+  } finally {
+    global.fetch = origFetch;
+  }
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, '/api/agent/runs');
+  assert.equal(calls[0].body.followup, true);
+  assert.equal(calls[0].body.session_id, 's1');
+  // 用户气泡进列表并带排队标记；还没有 assistant 气泡（回答走现有 SSE 流）
+  const last = session.messages[session.messages.length - 1];
+  assert.equal(last.role, 'user');
+  assert.equal(last.content, '追问一下');
+  assert.equal(last.queued, true);
+  assert.equal(session.messages.some(m => m.role === 'assistant'), false);
+});
+
+test('agentApplyRunEvent on followup closes the current bubble and starts a new one for the queued question', () => {
+  const session = {
+    id: 's1',
+    messages: [
+      { role: 'user', content: '第一问' },
+      { role: 'assistant', content: '完整回答', runId: 'r1' },
+      { role: 'user', content: '追问一下', queued: true },
+    ],
+  };
+  const current = session.messages[1];
+  const next = agent.agentApplyRunEvent({ type: 'followup' }, current, session);
+  assert.equal(current.done, true);                    // 当前气泡封箱
+  assert.equal(session.messages[2].queued, undefined); // 排队标记摘除
+  assert.equal(session.messages.length, 4);            // 新 assistant 气泡
+  assert.equal(next.role, 'assistant');
+  assert.equal(next.runId, 'r1');
+  assert.equal(next.retryQuestion, '追问一下');
+  // 后续 delta 由循环写入新气泡，旧气泡内容不动
+  const after = agent.agentApplyRunEvent({ type: 'delta', text: '续答' }, next, session);
+  assert.equal(after, next);
+  assert.equal(next.content, '续答');
+  assert.equal(current.content, '完整回答');
+});
+
+test('agentQueueFollowup falls back to attaching a new run when the race response is not queued', async () => {
+  const session = { id: 's1', title: 't', serverSynced: true, marks: [], messages: [{ role: 'user', content: '第一问' }] };
+  const origFetch = global.fetch;
+  global.fetch = async (url) => {
+    if (url === '/api/agent/runs') {
+      return { ok: true, json: async () => ({ run_id: 'r2', session_id: 's1' }) }; // 无 queued：竞态，服务端开了新 run
+    }
+    // SSE events 端点：返回一条立刻结束的流
+    return { ok: true, body: new ReadableStream({ start(c) { c.close(); } }) };
+  };
+  try {
+    await agent.agentQueueFollowup(session, '追问一下', []);
+  } finally {
+    global.fetch = origFetch;
+  }
+  assert.equal(session.messages[1].queued, undefined); // 用户气泡的排队标记摘掉
+  const last = session.messages[session.messages.length - 1];
+  assert.equal(last.role, 'assistant');                // 按正常新 run 补了占位并 attach
+  assert.equal(last.runId, 'r2');
+  assert.equal(last.retryQuestion, '追问一下');
 });

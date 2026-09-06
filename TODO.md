@@ -1,4 +1,9 @@
 
+鼓的小节加花，积累一些最近本的groove和简单的加花。说着去找本练习来看看
+
+session auto compact
+steering message
+
 
 雷鬼节奏还有什么
 

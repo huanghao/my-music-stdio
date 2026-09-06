@@ -81,3 +81,62 @@ test('stChartWindowMs scales with tempo and beats-per-bar (last N bars, not a fi
   st.stState.currentBpm = 60; // half the tempo -> bar takes twice as long -> window doubles
   assert.equal(st.stChartWindowMs(), 16000);
 });
+
+function _setOptionInputs({ start = '60', target = '200', step = '4', beats = '4', sub = '1' } = {}) {
+  _fakeElement('st-start-bpm').value = start;
+  _fakeElement('st-target-bpm').value = target;
+  _fakeElement('st-step-bpm').value = step;
+  _fakeElement('st-beats-per-bar').value = beats;
+  _fakeElement('st-subdivision').value = sub;
+  _fakeElement('st-auto-advance').checked = false;
+  _fakeElement('st-auto-advance-bars').value = '4';
+}
+
+test('stOnOptionsChanged propagates a Start BPM edit to the active lick', () => {
+  // Regression test: editing Start BPM while practicing a lick used to only
+  // reach the global st_prefs — which practiceLick then clobbered on the next
+  // visit when it reseeded startBpm from the lick's saved last_practiced_bpm,
+  // so the edit silently reverted on refresh.
+  const notified = [];
+  global.licksState = { activeLick: { id: 'L1', lastBpm: 60 } };
+  global.licksNotifyBpmChange = (bpm) => { notified.push(bpm); };
+  try {
+    st.stState.running = false;
+    st.stState.startBpm = 60; st.stState.currentBpm = 60; st.stState.targetBpm = 200;
+    _setOptionInputs({ start: '80' });
+    st.stOnOptionsChanged();
+    assert.equal(st.stState.startBpm, 80);
+    assert.equal(st.stState.currentBpm, 80); // live tempo adopts the edit
+    assert.deepEqual(notified, [80]);        // and the lick is told so it persists
+  } finally {
+    delete global.licksState;
+    delete global.licksNotifyBpmChange;
+  }
+});
+
+test('stOnOptionsChanged without an active lick leaves the live tempo alone', () => {
+  st.stState.running = false;
+  st.stState.startBpm = 60; st.stState.currentBpm = 100; st.stState.targetBpm = 200;
+  _setOptionInputs({ start: '80' });
+  st.stOnOptionsChanged();
+  assert.equal(st.stState.startBpm, 80);
+  assert.equal(st.stState.currentBpm, 100); // standalone Speed Trainer behavior unchanged
+});
+
+test('stOnOptionsChanged mid-run does not override the tempo being practiced', () => {
+  const notified = [];
+  global.licksState = { activeLick: { id: 'L1', lastBpm: 100 } };
+  global.licksNotifyBpmChange = (bpm) => { notified.push(bpm); };
+  try {
+    st.stState.running = true;
+    st.stState.startBpm = 60; st.stState.currentBpm = 100; st.stState.targetBpm = 200;
+    _setOptionInputs({ start: '80' });
+    st.stOnOptionsChanged();
+    assert.equal(st.stState.currentBpm, 100); // the running tempo stays the truth
+    assert.deepEqual(notified, []);
+  } finally {
+    st.stState.running = false;
+    delete global.licksState;
+    delete global.licksNotifyBpmChange;
+  }
+});

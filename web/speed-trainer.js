@@ -109,11 +109,27 @@ function initSpeedPage() {
 // structural changes take effect the next time you hit Start.
 function stOnOptionsChanged() {
   const wasRunning = stState.running;
+  const prevStartBpm = stState.startBpm;
   stReadOptionsFromUI();
   if (!wasRunning) stState.currentBpm = Math.min(stState.currentBpm, stState.targetBpm);
   stPrefsSave(); // after the currentBpm clamp above, so the persisted tempo matches
   stRenderBeatRow();
   stUpdateDisplay();
+  // Editing Start BPM while a lick is being practiced is a tempo decision for
+  // that lick: without this the edit only reaches the global st_prefs, which
+  // practiceLick then clobbers on the next visit when it reseeds startBpm from
+  // the lick's saved last_practiced_bpm — so the edit silently reverted.
+  // Adopt it as the live tempo too, so the big BPM box and the auto-logged
+  // session agree with what was just typed. Only when stopped: mid-run the
+  // current tempo is the truth and startBpm only matters for the next session,
+  // which the lick-side autosave below already covers.
+  if (!wasRunning && stState.startBpm !== prevStartBpm
+      && typeof licksState !== 'undefined' && licksState.activeLick) {
+    stState.currentBpm = stState.startBpm;
+    stPrefsSave();
+    stUpdateDisplay();
+    stNotifyLickBpm();
+  }
 }
 
 function stRenderBeatRow() {
@@ -288,5 +304,5 @@ function stChartWindowMs() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { stState, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage };
+  module.exports = { stState, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage, stOnOptionsChanged };
 }

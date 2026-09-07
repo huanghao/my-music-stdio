@@ -8,11 +8,11 @@ from pathlib import Path
 
 import httpx
 import mido
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import Body, FastAPI, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional
 
 import src.prefs as prefs
 import src.audio_devices as audio_devices
@@ -21,6 +21,7 @@ from src.player import Player
 import src.gen_accompaniment_midi as gen
 from src.agent_api import cancel_agent_runs, router as agent_router
 from src.materials_store import LocalFlatMaterialsStore
+import src.user_state as user_state
 
 logging.basicConfig(
     level=logging.INFO,
@@ -204,6 +205,21 @@ def api_get_prefs():
 @app.put("/api/prefs")
 def api_put_prefs(updates: dict):
     return prefs.save(updates)
+
+
+@app.get("/api/state/{key}")
+def api_get_state(key: str):
+    if key not in user_state.KEYS:
+        raise HTTPException(status_code=404, detail="Unknown state key")
+    return user_state.get(key)
+
+
+@app.put("/api/state/{key}")
+def api_put_state(key: str, value: Any = Body(...)):
+    if key not in user_state.KEYS:
+        raise HTTPException(status_code=404, detail="Unknown state key")
+    user_state.set(key, value)
+    return {"ok": True}
 
 
 @app.get("/api/accompaniments")

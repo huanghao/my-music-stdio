@@ -219,11 +219,21 @@ function ddPrefsSave() {
   }));
 }
 
-function ddStatsLoad() {
-  try { ddState.stats = JSON.parse(localStorage.getItem(DD_STATS_KEY)) || {}; } catch (_) { ddState.stats = {}; }
+// Practice history (long-term per-target-root correct/total) lives
+// server-side — see src/user_state.py — so it survives clearing browser
+// data or switching machines, unlike the prefs above.
+async function ddStatsLoad() {
+  try {
+    const r = await fetch('/api/state/dd_stats');
+    ddState.stats = (r.ok ? await r.json() : null) || {};
+  } catch (_) { ddState.stats = {}; }
 }
 
-function ddStatsSave() { localStorage.setItem(DD_STATS_KEY, JSON.stringify(ddState.stats)); }
+function ddStatsSave() {
+  fetch('/api/state/dd_stats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ddState.stats),
+  }).catch(() => {});
+}
 
 function ddRenderOptions() {
   document.getElementById('dd-direction').value = ddState.direction;
@@ -382,9 +392,9 @@ function ddOnOptionsChanged() {
   ddNextQuestion();
 }
 
-function initDomDrillPage() {
+async function initDomDrillPage() {
   ddPrefsLoad();
-  ddStatsLoad();
+  await ddStatsLoad();
   ddRenderOptions();
   ddUpdateStatsRow();
   ddRenderRootStats();

@@ -159,11 +159,20 @@ function kdPrefsSave() {
   }));
 }
 
-function kdStatsLoad() {
-  try { kdState.stats = JSON.parse(localStorage.getItem(KD_STATS_KEY)) || {}; } catch (_) { kdState.stats = {}; }
+// Practice history lives server-side — see src/user_state.py — so it
+// survives clearing browser data or switching machines, unlike the prefs above.
+async function kdStatsLoad() {
+  try {
+    const r = await fetch('/api/state/kd_stats');
+    kdState.stats = (r.ok ? await r.json() : null) || {};
+  } catch (_) { kdState.stats = {}; }
 }
 
-function kdStatsSave() { localStorage.setItem(KD_STATS_KEY, JSON.stringify(kdState.stats)); }
+function kdStatsSave() {
+  fetch('/api/state/kd_stats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(kdState.stats),
+  }).catch(() => {});
+}
 
 function kdRenderOptions() {
   document.getElementById('kd-direction').value = kdState.direction;
@@ -281,9 +290,9 @@ function kdOnOptionsChanged() {
   kdNextQuestion();
 }
 
-function initKeyDrillPage() {
+async function initKeyDrillPage() {
   kdPrefsLoad();
-  kdStatsLoad();
+  await kdStatsLoad();
   kdRenderOptions();
   kdUpdateStatsRow();
   kdRenderKeyStats();

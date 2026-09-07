@@ -349,16 +349,20 @@ function fbEarRefreshDiagrams() {
 }
 
 // ── Ear Training per-interval stats ──────────────────────────────────────
+// Practice history lives server-side — see src/user_state.py — so it
+// survives clearing browser data or switching machines.
 
-const FB_EAR_STATS_KEY = 'fb_ear_stats';
-
-function fbEarLoadStats() {
-  try { fbState.ear.stats = JSON.parse(localStorage.getItem(FB_EAR_STATS_KEY)) || {}; }
-  catch (_) { fbState.ear.stats = {}; }
+async function fbEarLoadStats() {
+  try {
+    const r = await fetch('/api/state/fb_ear_stats');
+    fbState.ear.stats = (r.ok ? await r.json() : null) || {};
+  } catch (_) { fbState.ear.stats = {}; }
 }
 
 function fbEarSaveStats() {
-  localStorage.setItem(FB_EAR_STATS_KEY, JSON.stringify(fbState.ear.stats));
+  fetch('/api/state/fb_ear_stats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fbState.ear.stats),
+  }).catch(() => {});
 }
 
 // ── Scale / mode switches ──────────────────────────────────────────────────
@@ -605,7 +609,7 @@ if (typeof module !== 'undefined' && module.exports) {
     FB_INTERVAL_NAMES, FB_EAR_SCALES, FB_EAR_INTERVAL_HINTS, FB_EAR_RANGE_BASE, FB_EAR_RANGE_LABELS, fbEarIntervalName,
     fbEarPossibleIntervals, fbEarAdjacentIntervals, fbEarAudioCtx, fbEarGetAudioCtx, fbEarPlaySequence, fbEarPlayNotesFor,
     fbEarPlayCurrent, fbEarPlayScaffold, fbRenderEarOptions, fbRenderEarScaleDiagram, fbEarDotClicked, fbEarRenderDiagramFor,
-    fbEarRefreshDiagrams, FB_EAR_STATS_KEY, fbEarLoadStats, fbEarSaveStats, fbEarSetScale, fbEarSetMode,
+    fbEarRefreshDiagrams, fbEarLoadStats, fbEarSaveStats, fbEarSetScale, fbEarSetMode,
     fbRenderEarStats, fbEarClearTimeout, fbEarSetAutoAdvance, fbEarManualNext, fbEarPickOrder, fbEarPickPair,
     fbEarTwoNext, fbEarTwoAnswer, fbEarThreeNext, fbEarRenderThreeStep, fbEarThreeAnswer,
   };

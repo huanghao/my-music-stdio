@@ -6,18 +6,42 @@
 
 这是一条不可妥协的规则：每当你在任何页面新增交互选项（input、select、checkbox 等），都必须同步实现持久化。
 
-### 现有机制
+### 判断新状态该落哪：localStorage vs 后端
+
+两条腿：**纯 UI 便利状态**（丢了不心疼，换设备/清缓存重新选一次成本很低——上次选项、面板展开/收起、音量、播放位置）留在 `localStorage`；**练习数据**（统计、历史、用户手动整理的顺序——丢了是真的损失，且应该跨设备/浏览器一致）必须走后端 `src/user_state.py` 的 `/api/state/{key}`（GET 返回当前值或 `null`，PUT 整体覆盖）。新增一个 key 时，先在 `src/user_state.py` 的 `KEYS` 里注册，再照下表任一现成模式实现前端读写。
+
+### localStorage（纯 UI 便利状态，现有机制）
 
 | 页面 | localStorage key | 实现位置 |
 |------|-----------------|---------|
 | Vamp、Jam | `mps_last_selection` | `app.js` `loadLastSelection()` / `saveLastSelection()` |
-| Fretboard（全部模式） | `fb_prefs` | `fb-prefs.js` `fbPrefsLoad()` / `fbPrefsSave()` |
+| 当前页面 / 底部 transport 播放位置 | `mps_current_page` / `transport_pos` | `app.js` |
+| Fretboard（全部模式，含 Chord Match 选项） | `fb_prefs` / `fb_chordid_prefs` | `fb-prefs.js` `fbPrefsLoad()` / `fbPrefsSave()`；`chord-id.js` |
+| Fretboard 主音量 / 各音色音量 | `fb_master_volume` / `fb_sound_volumes` | `fb-audio.js` |
 | Speed Trainer | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
+| Progression Lab | `pl_prefs` | `progression-lab.js` |
+| Agent 助教面板选项 | `mps_agent_prefs` | `agent-assistant.js` |
+| 练习计时器运行状态 | `pt_state` | `practice-timer.js` |
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
 | Lick 详情 Sessions 列表展开/收起 | `lick_sessions_open` | `licks.js` `licksSessionsOpen()` / `licksSessionsOnToggle()`（全局布尔，默认收起） |
-| Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` / `dd_stats` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` / `ddStatsLoad()` / `ddStatsSave()` |
+| Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` |
+| Key Drill（方向、聚焦调） | `kd_prefs` | `key-drill.js` `kdPrefsLoad()` / `kdPrefsSave()` |
+| Song Loop | `sl_prefs` / 每首曲子的 url 专属 state | `song-loop.js`（url 专属 state 走后端 `/api/materials/{id}/state`，localStorage 只是迁移前的一次性种子） |
+
+### 后端 `/api/state/{key}`（练习数据，`src/user_state.py`）
+
+| 数据 | key | 实现位置 |
+|------|-----|---------|
+| Dom Drill 练习统计（按 target root） | `dd_stats` | `dom-drill.js` `ddStatsLoad()` / `ddStatsSave()`（async） |
+| Key Drill 练习统计（按 key） | `kd_stats` | `key-drill.js` `kdStatsLoad()` / `kdStatsSave()`（async） |
+| Fretboard 和弦练习统计 | `fb_chord_stats` | `fb-chord.js` `fbChordLoadStats()` / `fbChordSaveStats()`（async） |
+| Fretboard 视唱练耳统计 | `fb_ear_stats` | `fb-ear.js` `fbEarLoadStats()` / `fbEarSaveStats()`（async） |
+| Fretboard 音高练习统计 | `fb_pitch_stats` | `fb-pitch.js` `fbPitchLoadStats()` / `fbPitchSaveStats()`（async） |
+| Lick 列表手动排序 | `licks_order` | `licks.js` `licksOrderLoad()` / `licksOrderSave()`（async） |
+
+以上 load 函数都是 async（fetch `/api/state/{key}`），调用方要 `await` 完再渲染依赖它的 UI；save 是 fire-and-forget（失败只是这次没存上，不阻塞交互，也不重试——下次操作会再存一次）。
 
 ### 实现模式
 

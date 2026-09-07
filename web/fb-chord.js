@@ -128,7 +128,6 @@ const FB_CHORD_WRONG_SIM = 0.68;
 const FB_CHORD_MATCH_HOLD_FRAMES = 15;   // ~0.25s sustained — chords need a beat to ring out
 const FB_CHORD_WRONG_HOLD_FRAMES = 15;
 const FB_CHORD_WRONG_MSG_COOLDOWN_MS = 900;
-const FB_CHORD_STATS_KEY = 'fb_chord_stats';
 const FB_CHORD_MIN_HZ = 70, FB_CHORD_MAX_HZ = 1200, FB_CHORD_NOISE_FLOOR_DB = -70;
 
 // Movable barre-chord voicings for Learn Mode, keyed by shape family then
@@ -375,12 +374,18 @@ function fbRenderChordShapeDiagrams(chord) {
   }
 }
 
-function fbChordLoadStats() {
-  try { fbState.chord.stats = JSON.parse(localStorage.getItem(FB_CHORD_STATS_KEY)) || {}; }
-  catch (_) { fbState.chord.stats = {}; }
+// Practice history lives server-side — see src/user_state.py — so it
+// survives clearing browser data or switching machines.
+async function fbChordLoadStats() {
+  try {
+    const r = await fetch('/api/state/fb_chord_stats');
+    fbState.chord.stats = (r.ok ? await r.json() : null) || {};
+  } catch (_) { fbState.chord.stats = {}; }
 }
 function fbChordSaveStats() {
-  localStorage.setItem(FB_CHORD_STATS_KEY, JSON.stringify(fbState.chord.stats));
+  fetch('/api/state/fb_chord_stats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fbState.chord.stats),
+  }).catch(() => {});
 }
 
 function fbChordSymbol(root, quality) {
@@ -974,7 +979,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FB_CHORD_QUALITIES, FB_CHORD_QUALITY_LABELS, FB_CHORD_DEGREE_LABELS, fbChordFormula, FB_CHORD_NOTATION_STYLES, fbChordDisplaySymbol,
     fbShapeDegreeLabels, FB_CHORD_GROUPS, FB_CHORD_MATCH_SIM, FB_CHORD_WRONG_SIM, FB_CHORD_MATCH_HOLD_FRAMES, FB_CHORD_WRONG_HOLD_FRAMES,
-    FB_CHORD_WRONG_MSG_COOLDOWN_MS, FB_CHORD_STATS_KEY, FB_CHORD_MIN_HZ, FB_MOVABLE_SHAPES, FB_SKIP_E_SHAPE, FB_NOBARRE_QUALITIES,
+    FB_CHORD_WRONG_MSG_COOLDOWN_MS, FB_CHORD_MIN_HZ, FB_MOVABLE_SHAPES, FB_SKIP_E_SHAPE, FB_NOBARRE_QUALITIES,
     FB_SHELL_PATTERNS, FB_SHELL9_PATTERNS, FB_SHELL9_QUALITIES, fbRenderChordShapeDiagrams, fbChordLoadStats, fbChordSaveStats,
     fbChordSymbol, fbChordGroupState, fbRenderChordOptions, fbChordToggleGroup, fbChordToggleQuality, fbChordSetSource,
     fbChordResetStats, fbChordTemplate, fbCosineSim, FB_CHORD_MIN_TONE_PRESENCE, fbChordCoverageOk, fbChordEnabledPool,

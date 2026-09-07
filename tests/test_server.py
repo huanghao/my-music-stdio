@@ -542,3 +542,26 @@ def test_material_rename_rejects_blank_name_and_unknown_id(client):
     ).json()
     assert client.put(f"{body['url']}/filename", json={"filename": "   "}).status_code == 400
     assert client.put("/api/materials/nope.pdf/filename", json={"filename": "x"}).status_code == 404
+
+
+def test_state_get_missing_key_returns_null(client):
+    r = client.get("/api/state/dd_stats")
+    assert r.status_code == 200
+    assert r.json() is None
+
+
+def test_state_put_then_get_roundtrip(client):
+    r = client.put("/api/state/fb_chord_stats", json={"C_major": {"correct": 2, "total": 3}})
+    assert r.status_code == 200
+    r = client.get("/api/state/fb_chord_stats")
+    assert r.json() == {"C_major": {"correct": 2, "total": 3}}
+
+
+def test_state_put_accepts_list_value(client):
+    client.put("/api/state/licks_order", json=["a", "b", "c"])
+    assert client.get("/api/state/licks_order").json() == ["a", "b", "c"]
+
+
+def test_state_rejects_unknown_key(client):
+    assert client.get("/api/state/not_a_real_key").status_code == 404
+    assert client.put("/api/state/not_a_real_key", json={}).status_code == 404

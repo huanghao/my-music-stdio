@@ -710,24 +710,26 @@ async function licksSaveEmbedSizes(lick, batch) {
 
 // ── List page ──
 
-// Manual list order, persisted locally (not server data — it's a per-device
-// UI preference, same pattern as everything else in fb_prefs/st_prefs).
+// Manual list order — see src/user_state.py — so it survives clearing
+// browser data or switching machines, same as the practice stats below.
 // Licks not yet in the saved order (new, or created before this existed)
 // are shown first, in the server's default (most-recently-updated) order,
 // so a freshly created lick is easy to find; drag it wherever it belongs.
-const LICKS_ORDER_KEY = 'licks_order';
-
-function licksOrderLoad() {
-  try { return JSON.parse(localStorage.getItem(LICKS_ORDER_KEY)) || []; }
-  catch (_) { return []; }
+async function licksOrderLoad() {
+  try {
+    const r = await fetch('/api/state/licks_order');
+    return (r.ok ? await r.json() : null) || [];
+  } catch (_) { return []; }
 }
 
 function licksOrderSave(ids) {
-  localStorage.setItem(LICKS_ORDER_KEY, JSON.stringify(ids));
+  fetch('/api/state/licks_order', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids),
+  }).catch(() => {});
 }
 
-function licksApplyOrder(licks) {
-  const order = licksOrderLoad();
+async function licksApplyOrder(licks) {
+  const order = await licksOrderLoad();
   const byId = new Map(licks.map(l => [l.id, l]));
   const ordered = order.map(id => byId.get(id)).filter(Boolean);
   const orderedIds = new Set(ordered.map(l => l.id));
@@ -739,7 +741,7 @@ async function loadLicks() {
   const el = document.getElementById('licks-list');
   if (!el) return;
   el.innerHTML = '<p class="empty-state">Loading…</p>';
-  const licks = licksApplyOrder(await api('/api/licks'));
+  const licks = await licksApplyOrder(await api('/api/licks'));
   if (!licks.length) {
     el.innerHTML = '<p class="empty-state">No licks yet — click "+ New Lick" to start tracking.</p>';
     return;

@@ -8,7 +8,6 @@ const FB_MATCH_HOLD_FRAMES = 12;  // ~0.2s at 60fps — avoids false triggers on
 const FB_WRONG_HOLD_FRAMES = 10;  // ~0.17s of a stable wrong note before we say something
 const FB_WRONG_MSG_COOLDOWN_MS = 700;
 const FB_METER_HOLD_MS = 1200; // how long a reading lingers after the note decays into silence
-const FB_PITCH_STATS_KEY = 'fb_pitch_note_stats';
 
 function fbRenderPitchMeter(r, held) {
   const meter = document.getElementById('fb-pitch-meter');
@@ -33,12 +32,18 @@ document.addEventListener('visibilitychange', () => {
   });
 });
 
-function fbPitchLoadStats() {
-  try { fbState.pitch.stats = JSON.parse(localStorage.getItem(FB_PITCH_STATS_KEY)) || {}; }
-  catch (_) { fbState.pitch.stats = {}; }
+// Practice history lives server-side — see src/user_state.py — so it
+// survives clearing browser data or switching machines.
+async function fbPitchLoadStats() {
+  try {
+    const r = await fetch('/api/state/fb_pitch_stats');
+    fbState.pitch.stats = (r.ok ? await r.json() : null) || {};
+  } catch (_) { fbState.pitch.stats = {}; }
 }
 function fbPitchSaveStats() {
-  localStorage.setItem(FB_PITCH_STATS_KEY, JSON.stringify(fbState.pitch.stats));
+  fetch('/api/state/fb_pitch_stats', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(fbState.pitch.stats),
+  }).catch(() => {});
 }
 
 function fbRenderPitchOptions() {
@@ -299,7 +304,7 @@ function fbPitchOnMatch() {
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    FB_MATCH_CENTS_TOLERANCE, FB_MATCH_HOLD_FRAMES, FB_WRONG_HOLD_FRAMES, FB_WRONG_MSG_COOLDOWN_MS, FB_METER_HOLD_MS, FB_PITCH_STATS_KEY,
+    FB_MATCH_CENTS_TOLERANCE, FB_MATCH_HOLD_FRAMES, FB_WRONG_HOLD_FRAMES, FB_WRONG_MSG_COOLDOWN_MS, FB_METER_HOLD_MS,
     fbRenderPitchMeter, fbPitchLoadStats, fbPitchSaveStats, fbRenderPitchOptions, fbRenderPitchBoard, fbPitchToggleString,
     fbPitchResetStats, fbStringMidis, fbPitchAllowedMidis, FB_NATURAL_NOTE_NAMES, fbPitchPickTarget, fbRenderPitchStats,
     fbRenderPitchStatsTable, fbPitchNewNote, fbPitchStart, fbPitchStop, fbPitchOnFrame, fbPitchOnWrong,

@@ -102,13 +102,12 @@ function fbEnsurePrefsLoaded() {
   fbApplyDiagramSize();  // apply saved diagram size as CSS variable
 }
 
-function initFretboardPage() {
+async function initFretboardPage() {
   if (fbState.inited) return;
   fbState.inited = true;
   fbEnsurePrefsLoaded();
-  fbPitchLoadStats();
   fbRenderEarOptions();
-  fbEarLoadStats();
+  await Promise.all([fbPitchLoadStats(), fbEarLoadStats()]);
   fbEarTwoNext();
   fbEarThreeNext();
   fbEarSetMode(fbState.ear.mode);
@@ -127,11 +126,11 @@ function initFretboardPage() {
 // Chord Match used to be one of Fretboard's tabs (fbShowMode('chord')); it's
 // now a standalone top-level page so it isn't also nested a level down —
 // same fbState.chord / fbMic underneath, just its own page lifecycle.
-function initChordMatchPage() {
+async function initChordMatchPage() {
   if (fbState.chordInited) return;
   fbState.chordInited = true;
   fbEnsurePrefsLoaded();
-  fbChordLoadStats();
+  await fbChordLoadStats();
   fbRenderChordOptions();
   fbChordNewChord();
   fbRenderChordStatsTable();

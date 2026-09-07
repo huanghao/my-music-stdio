@@ -16,9 +16,9 @@
 
 const PT_PRESET_MIN = [5, 10, 15];
 const PT_STATE_KEY = 'pt_state';
-// Cap how many completed blocks we keep around — this is a lightweight
-// local log, not a real database; a few hundred is more history than the
-// "today total" / future autofill use cases need.
+// Cap how many completed blocks we keep around — this is a lightweight log
+// (src/user_state.py's pt_blocks key), not a real database; a few hundred
+// is more history than the "today total" / autofill use cases need.
 const PT_MAX_BLOCKS = 200;
 
 const ptState = {
@@ -76,16 +76,42 @@ function ptSaveState() {
     localStorage.setItem(PT_STATE_KEY, JSON.stringify({
       running: ptState.running, paused: ptState.paused,
       endAt: ptState.endAt, remainingSec: ptState.remainingSec, totalSec: ptState.totalSec,
-      linked: ptState.linked, context: ptState.context, blocks: ptState.blocks.slice(-PT_MAX_BLOCKS),
+      linked: ptState.linked, context: ptState.context,
     }));
   } catch (_) { /* localStorage full/unavailable — timer still works this session */ }
+}
+
+// Completed blocks are a real practice-time log (not a UI preference), and
+// feed Licks' session-duration autofill — see src/user_state.py. Kept
+// separate from ptSaveState()/ptLoadState() above (which fire on every
+// start/pause/resume) since blocks only actually change on ptComplete().
+function ptSaveBlocks() {
+  fetch('/api/state/pt_blocks', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ptState.blocks.slice(-PT_MAX_BLOCKS)),
+  }).catch(() => {});
+}
+
+async function ptLoadBlocks() {
+  try {
+    const r = await fetch('/api/state/pt_blocks');
+    const server = r.ok ? await r.json() : null;
+    if (Array.isArray(server)) { ptState.blocks = server; return; }
+  } catch (_) { /* fall through to the legacy localStorage copy below */ }
+  // One-time migration source: pre-migration installs kept blocks inside
+  // PT_STATE_KEY. Only reached when the server has nothing yet.
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(PT_STATE_KEY)); } catch (_) { saved = null; }
+  if (saved && Array.isArray(saved.blocks) && saved.blocks.length) {
+    ptState.blocks = saved.blocks;
+    ptSaveBlocks();
+  }
 }
 
 function ptLoadState() {
   let saved;
   try { saved = JSON.parse(localStorage.getItem(PT_STATE_KEY)); } catch (_) { saved = null; }
   if (!saved) return;
-  if (Array.isArray(saved.blocks)) ptState.blocks = saved.blocks;
   if (saved.context && typeof saved.context === 'object') ptState.context = saved.context;
   if (typeof saved.linked === 'boolean') ptState.linked = saved.linked;
   // Only resume an in-progress countdown if it hasn't already elapsed while
@@ -233,6 +259,7 @@ function ptComplete() {
     context: ptState.context,
   });
   ptSaveState();
+  ptSaveBlocks();
   ptRender();
   ptBeep();
   ptStopLinkedMetronome(); // "end together" — the countdown reaching 0 on its own is as much an "end" as ✕/metronome-Stop
@@ -353,8 +380,9 @@ function ptRender() {
   if (typeof transportApplyPos === 'function') transportApplyPos();
 }
 
-function ptInit() {
+async function ptInit() {
   ptLoadState();
+  await ptLoadBlocks();
   ptRender();
   if (ptState.running) ptEnsureTicking();
 }

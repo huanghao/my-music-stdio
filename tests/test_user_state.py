@@ -26,3 +26,9 @@ def test_set_preserves_other_keys(isolated_data_dir):
     isolated_data_dir.set("licks_order", ["lick1", "lick2"])
     assert isolated_data_dir.get("dd_stats") == {"a": 1}
     assert isolated_data_dir.get("licks_order") == ["lick1", "lick2"]
+
+
+def test_pt_blocks_roundtrip(isolated_data_dir):
+    blocks = [{"durationSec": 300, "completedAt": "2026-09-07T12:00:00.000Z", "context": None}]
+    isolated_data_dir.set("pt_blocks", blocks)
+    assert isolated_data_dir.get("pt_blocks") == blocks

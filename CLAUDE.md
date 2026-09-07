@@ -20,8 +20,8 @@
 | Fretboard 主音量 / 各音色音量 | `fb_master_volume` / `fb_sound_volumes` | `fb-audio.js` |
 | Speed Trainer | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
 | Progression Lab | `pl_prefs` | `progression-lab.js` |
-| Agent 助教面板选项 | `mps_agent_prefs` | `agent-assistant.js` |
-| 练习计时器运行状态 | `pt_state` | `practice-timer.js` |
+| Agent 助教面板选项（对话历史在后端 `agent-sessions/`，划词笔记 `marks` 是短期数据，划词后最终会进对话 session，故意不迁） | `mps_agent_prefs` | `agent-assistant.js` |
+| 练习计时器运行状态（倒计时进度/暂停/联动开关；完成的计时块 `blocks` 已搬后端，见下表 `pt_blocks`） | `pt_state` | `practice-timer.js` |
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
@@ -40,6 +40,7 @@
 | Fretboard 视唱练耳统计 | `fb_ear_stats` | `fb-ear.js` `fbEarLoadStats()` / `fbEarSaveStats()`（async） |
 | Fretboard 音高练习统计 | `fb_pitch_stats` | `fb-pitch.js` `fbPitchLoadStats()` / `fbPitchSaveStats()`（async） |
 | Lick 列表手动排序 | `licks_order` | `licks.js` `licksOrderLoad()` / `licksOrderSave()`（async） |
+| 练习计时器完成的计时块（时长+完成时间+关联 lick，Licks session 时长自动填写靠它） | `pt_blocks` | `practice-timer.js` `ptLoadBlocks()` / `ptSaveBlocks()`（async，与 `pt_state` 分开存取——后者每次开始/暂停都存，前者只在计时块完成时变） |
 
 以上 load 函数都是 async（fetch `/api/state/{key}`），调用方要 `await` 完再渲染依赖它的 UI；save 是 fire-and-forget（失败只是这次没存上，不阻塞交互，也不重试——下次操作会再存一次）。
 

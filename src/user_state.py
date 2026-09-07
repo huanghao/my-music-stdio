@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 # Keys this store accepts: the practice stats + lick ordering formerly kept
 # only in localStorage (see CLAUDE.md's localStorage table for what stays
 # client-side).
-KEYS = {"dd_stats", "fb_chord_stats", "fb_ear_stats", "fb_pitch_stats", "kd_stats", "licks_order"}
+KEYS = {
+    "dd_stats", "fb_chord_stats", "fb_ear_stats", "fb_pitch_stats", "kd_stats", "licks_order",
+    "pt_blocks",
+}
 
 
 def _path() -> Path:

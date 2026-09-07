@@ -4,10 +4,12 @@
 跨 app 共享的"单文件可复制"模块，靠 spawn claude/kc CLI 二进制拿模型回复。
 2026-08-30 起 my-music-stdio 从这个共享模式里 fork 出来，改成用 pydantic-ai
 直连各家的 Anthropic 协议兼容端点（不再套 CLI 壳），配置也搬到本项目自己的
-~/.config/my-music-stdio/agent-backends.yaml，不再读/写共享的
-~/.config/agent-backends.yaml——避免把这里的 schema 变更（provider/model/
-api_key 取代 command/env/shim）传染给还在用旧 CLI-shim 约定的其它 app。
-以后这个文件不再需要跟 pylab 的版本保持字节级同步。
+配置文件，不再读/写共享的 ~/.config/agent-backends.yaml——避免把这里的
+schema 变更（provider/model/api_key 取代 command/env/shim）传染给还在用旧
+CLI-shim 约定的其它 app。以后这个文件不再需要跟 pylab 的版本保持字节级同步。
+2026-09-07 起这份配置又从 ~/.config/my-music-stdio/ 搬进 data_dir()（见
+CONFIG_PATH/_migrate_agent_backends_config），理由同 soundfonts：跟其它状态
+放一起，换机器复制 data_dir() 就带上，不用另外记。
 
 核心原则（借鉴 pi/dsh 这类 agent harness）："错误即数据，不抛异常"——
 stream_parts() 无论是 provider 不可用、鉴权失败、网络错误还是模型调用中途
@@ -65,6 +67,7 @@ from pydantic_ai_harness.compaction._summarizing_compaction import (
 )
 
 from src import prefs
+from src.data_dir import data_dir
 from src.gen_accompaniment_midi import parse_chord as _parse_chord
 from src.materials_store import LocalFlatMaterialsStore
 from src.pdf_text import read_material_pdf
@@ -113,7 +116,25 @@ class _StripNativeToolParts(AbstractCapability):
         request_context.messages = cleaned
         return request_context
 
-CONFIG_PATH = Path.home() / ".config" / "my-music-stdio" / "agent-backends.yaml"
+_OLD_CONFIG_PATH = Path.home() / ".config" / "my-music-stdio" / "agent-backends.yaml"
+
+
+def _migrate_agent_backends_config() -> Path:
+    """One-time move of the provider config out of ~/.config and into
+    data_dir(), so it isn't silently left behind when only that directory
+    gets copied to a new machine — same reasoning as prefs.py's soundfonts
+    migration."""
+    new_path = data_dir() / "agent-backends.yaml"
+    if _OLD_CONFIG_PATH.exists() and not new_path.exists():
+        try:
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+            _OLD_CONFIG_PATH.rename(new_path)
+        except OSError as e:
+            logger.warning("Could not migrate %s to %s: %s", _OLD_CONFIG_PATH, new_path, e)
+    return new_path
+
+
+CONFIG_PATH = _migrate_agent_backends_config()
 _ZSHRC_LOCAL = Path.home() / ".zshrc.local"  # 环境变量没 export 到当前进程时的兜底来源
 
 # codex provider：直接读 Codex CLI 自己的登录态（同一个 OAuth 账号），只读不写、

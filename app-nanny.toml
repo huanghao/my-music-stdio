@@ -1,6 +1,6 @@
 name    = "my-music-stdio"
-command = "/Users/huanghao/workspace/my-music-stdio/.venv/bin/python -m uvicorn src.server:app --port ${PORT:-3050} --reload"
 restart = "on-failure"
 
-[ports]
-PORT = 3050
+[processes.main]
+command = "/Users/huanghao/workspace/my-music-stdio/.venv/bin/python -m uvicorn src.server:app --port ${PORT:-3050} --reload"
+port    = 3050

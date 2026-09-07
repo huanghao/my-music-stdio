@@ -31,14 +31,13 @@ import re
 from datetime import UTC, datetime
 from pathlib import Path
 
+from src.data_dir import data_dir
+
 logger = logging.getLogger(__name__)
 
-# 与 prefs.py / agent_ledger.py 同一个 Application Support base（已知的重复，
-# 见架构 review 记录）；环境变量覆盖用于测试隔离（kolab 的 KOLAB_DATA_DIR 同款）。
+# 与 prefs.py / agent_ledger.py 共用 data_dir.py 的同一个数据根目录；
+# 环境变量覆盖用于测试隔离（kolab 的 KOLAB_DATA_DIR 同款）。
 SESSIONS_DIR_ENV = "MMS_AGENT_SESSIONS_DIR"
-_DEFAULT_DIR = (
-    Path.home() / "Library" / "Application Support" / "MyMusicStdio" / "agent-sessions"
-)
 
 # 前端 agentNewSessionId() 生成的 base36 id 也落在这个字符集内，所以
 # 客户端生成的 id 可以直接当服务端 session id 用，无需映射层。
@@ -53,7 +52,8 @@ def is_valid_id(session_id: str) -> bool:
 
 
 def _dir() -> Path:
-    d = Path(os.environ.get(SESSIONS_DIR_ENV) or _DEFAULT_DIR).expanduser()
+    override = os.environ.get(SESSIONS_DIR_ENV)
+    d = Path(override).expanduser() if override else data_dir() / "agent-sessions"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

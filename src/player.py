@@ -9,7 +9,9 @@ import mido
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SOUNDFONT = str(Path("~/music-practice/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2").expanduser())
+DEFAULT_SOUNDFONT = str(
+    Path("~/workspace/my-store/my-music-stdio-data/soundfonts/Timbres of Heaven (XGM) 4.00(G).sf2").expanduser()
+)
 
 # pyfluidsynth needs libfluidsynth.dylib resolvable via ctypes.
 # On macOS with Homebrew, it lives in /opt/homebrew/lib but is not on the

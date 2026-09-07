@@ -201,7 +201,6 @@ const ddState = {
 };
 
 const DD_PREFS_KEY = 'dd_prefs';
-const DD_STATS_KEY = 'dd_stats';
 
 function ddPrefsLoad() {
   let saved = {};

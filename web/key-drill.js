@@ -139,7 +139,6 @@ const kdState = {
 };
 
 const KD_PREFS_KEY = 'kd_prefs';
-const KD_STATS_KEY = 'kd_stats';
 
 function kdPrefsLoad() {
   let saved = {};

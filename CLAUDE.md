@@ -39,7 +39,6 @@
 | Fretboard 和弦练习统计 | `fb_chord_stats` | `fb-chord.js` `fbChordLoadStats()` / `fbChordSaveStats()`（async） |
 | Fretboard 视唱练耳统计 | `fb_ear_stats` | `fb-ear.js` `fbEarLoadStats()` / `fbEarSaveStats()`（async） |
 | Fretboard 音高练习统计 | `fb_pitch_stats` | `fb-pitch.js` `fbPitchLoadStats()` / `fbPitchSaveStats()`（async） |
-| Lick 列表手动排序 | `licks_order` | `licks.js` `licksOrderLoad()` / `licksOrderSave()`（async） |
 | 练习计时器完成的计时块（时长+完成时间+关联 lick，Licks session 时长自动填写靠它） | `pt_blocks` | `practice-timer.js` `ptLoadBlocks()` / `ptSaveBlocks()`（async，与 `pt_state` 分开存取——后者每次开始/暂停都存，前者只在计时块完成时变） |
 
 以上 load 函数都是 async（fetch `/api/state/{key}`），调用方要 `await` 完再渲染依赖它的 UI；save 是 fire-and-forget（失败只是这次没存上，不阻塞交互，也不重试——下次操作会再存一次）。

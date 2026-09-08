@@ -1,9 +1,9 @@
 """Server-side storage for small per-page state that used to live only in
-browser localStorage — practice stats and lick ordering. Moved here so it
-survives clearing browser data, switching browsers, or migrating machines,
-same as everything else under data_dir(). Page-level UI conveniences (last
-selection, panel open/closed, volume) are deliberately NOT moved here — they
-stay in localStorage, cheap to lose.
+browser localStorage — practice stats and manual sort orders. Moved here so
+it survives clearing browser data, switching browsers, or migrating
+machines, same as everything else under data_dir(). Page-level UI
+conveniences (last selection, panel open/closed, volume) are deliberately
+NOT moved here — they stay in localStorage, cheap to lose.
 
 One shared JSON file, atomic write (temp file + rename) so a crash mid-write
 can't corrupt every key's data at once — same reasoning as
@@ -18,11 +18,11 @@ from src.data_dir import data_dir
 
 logger = logging.getLogger(__name__)
 
-# Keys this store accepts: the practice stats + lick ordering formerly kept
-# only in localStorage (see CLAUDE.md's localStorage table for what stays
+# Keys this store accepts: the practice stats formerly kept only in
+# localStorage (see CLAUDE.md's localStorage table for what stays
 # client-side).
 KEYS = {
-    "dd_stats", "fb_chord_stats", "fb_ear_stats", "fb_pitch_stats", "kd_stats", "licks_order",
+    "dd_stats", "fb_chord_stats", "fb_ear_stats", "fb_pitch_stats", "kd_stats",
     "pt_blocks",
 }
 

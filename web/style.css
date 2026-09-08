@@ -1070,25 +1070,21 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* ── Lick Tracker ────────────────────────────────────────────────────────── */
 
-#licks-list { max-width: 720px; }
+#licks-list { max-width: 520px; }
 
 .lick-card {
   display: flex; align-items: center; gap: 10px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+  border: 1px solid var(--border); border-radius: 8px;
   padding: 14px 16px; margin-bottom: 8px; cursor: pointer;
   transition: box-shadow 0.15s;
 }
 .lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-.lick-card.dragging { opacity: 0.4; }
-.lick-drag-handle {
-  flex-shrink: 0; cursor: grab; color: var(--text-faint); font-size: 16px;
-  padding: 0 2px; line-height: 1; user-select: none;
-}
-.lick-drag-handle:active { cursor: grabbing; }
 .lick-card-body { flex: 1; min-width: 0; }
 .lick-card-title { font-size: 15px; font-weight: 600; color: var(--text); }
-.lick-card-meta  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
-.lick-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* The one thing this list is scanned for: what's stale. Bolder/darker than
+   the BPM line below it (see .lick-card-meta), which is secondary context. */
+.lick-card-last  { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-top: 2px; }
+.lick-card-meta  { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
 .lick-list-summary { font-size: 12px; color: var(--text-faint); margin-bottom: 12px; }
 
 /* Practice heatmap (GitHub-style calendar) */

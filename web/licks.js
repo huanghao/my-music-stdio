@@ -710,38 +710,38 @@ async function licksSaveEmbedSizes(lick, batch) {
 
 // ── List page ──
 
-// Manual list order — see src/user_state.py — so it survives clearing
-// browser data or switching machines, same as the practice stats below.
-// Licks not yet in the saved order (new, or created before this existed)
-// are shown first, in the server's default (most-recently-updated) order,
-// so a freshly created lick is easy to find; drag it wherever it belongs.
-async function licksOrderLoad() {
-  try {
-    const r = await fetch('/api/state/licks_order');
-    return (r.ok ? await r.json() : null) || [];
-  } catch (_) { return []; }
+// Sort by most-recently-practiced first — this list doubles as "what should
+// I practice", so surfacing what's fresh (and letting what's stale sink)
+// needs no manual reordering. Licks with no sessions yet sort last (nothing
+// to rank them by).
+function licksSortByLast(licks) {
+  return [...licks].sort((a, b) => {
+    if (!a.last_date && !b.last_date) return 0;
+    if (!a.last_date) return 1;
+    if (!b.last_date) return -1;
+    return b.last_date.localeCompare(a.last_date);
+  });
 }
 
-function licksOrderSave(ids) {
-  fetch('/api/state/licks_order', {
-    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(ids),
-  }).catch(() => {});
-}
-
-async function licksApplyOrder(licks) {
-  const order = await licksOrderLoad();
-  const byId = new Map(licks.map(l => [l.id, l]));
-  const ordered = order.map(id => byId.get(id)).filter(Boolean);
-  const orderedIds = new Set(ordered.map(l => l.id));
-  const unordered = licks.filter(l => !orderedIds.has(l.id));
-  return [...unordered, ...ordered];
+// Card background darkens the longer it's been since last practiced — a
+// glance should be enough to spot what hasn't been touched today, without
+// turning this into a second heatmap. Practiced today stays plain; older
+// than a week (or never practiced) is the darkest tier.
+function licksStalenessBg(lastDateIso) {
+  if (!lastDateIso) return 'var(--bg-faint)';
+  const last = new Date(lastDateIso), now = new Date();
+  const isToday = last.getFullYear() === now.getFullYear()
+    && last.getMonth() === now.getMonth() && last.getDate() === now.getDate();
+  if (isToday) return 'var(--bg-card)';
+  const days = (now.getTime() - last.getTime()) / 86400000;
+  return days < 7 ? 'var(--bg-subtle)' : 'var(--bg-faint)';
 }
 
 async function loadLicks() {
   const el = document.getElementById('licks-list');
   if (!el) return;
   el.innerHTML = '<p class="empty-state">Loading…</p>';
-  const licks = await licksApplyOrder(await api('/api/licks'));
+  const licks = licksSortByLast(await api('/api/licks'));
   if (!licks.length) {
     el.innerHTML = '<p class="empty-state">No licks yet — click "+ New Lick" to start tracking.</p>';
     return;
@@ -757,55 +757,19 @@ async function loadLicks() {
       ${mostRecent ? `&nbsp;·&nbsp; last practice: ${timeAgo(mostRecent)}` : ''}
     </p>`;
   el.innerHTML = summary + licks.map(l => {
-    const lastBpm  = l.last_bpm  ? `${l.last_bpm} BPM` : 'no sessions yet';
-    const lastDate = l.last_date ? timeAgo(l.last_date) : '—';
-    const count    = l.session_count || 0;
+    const lastLabel = l.last_date ? `Last: ${timeAgo(l.last_date)}` : 'Never practiced';
+    const bpmLabel  = l.last_bpm ? `${l.last_bpm} BPM` : '';
     return `
-      <div class="lick-card" data-lick-id="${l.id}" onclick="navOpenLick('${l.id}')" ondragover="licksDragOver(event)">
-        <span class="lick-drag-handle" draggable="true" title="Drag to reorder"
-          onclick="event.stopPropagation()" ondragstart="licksDragStart(event)" ondragend="licksDragEnd(event)">⠿</span>
+      <div class="lick-card" data-lick-id="${l.id}" onclick="navOpenLick('${l.id}')" style="background:${licksStalenessBg(l.last_date)}">
         <div class="lick-card-body">
           <div class="lick-card-title">${htmlEsc(l.title)}</div>
-          <div class="lick-card-meta">${lastBpm} &nbsp;·&nbsp; last: ${lastDate} &nbsp;·&nbsp; ${count} session${count !== 1 ? 's' : ''}</div>
-        </div>
-        <div class="lick-card-actions">
-          <button class="btn btn-ghost btn-sm danger" onclick="event.stopPropagation(); deleteLick('${l.id}')">Delete</button>
+          <div class="lick-card-last">${lastLabel}</div>
+          ${bpmLabel ? `<div class="lick-card-meta">${bpmLabel}</div>` : ''}
         </div>
       </div>`;
   }).join('');
   // Render the practice heatmap below the list (non-blocking)
   renderLickHeatmap();
-}
-
-// ── Drag-to-reorder (list page) ──
-// The drag handle starts the native HTML5 drag; dragover on any other card
-// live-reorders the DOM (insert before/after based on cursor position
-// relative to the target's vertical midpoint), and dragend persists
-// whatever order the cards ended up in.
-
-function licksDragStart(e) {
-  const card = e.target.closest('.lick-card');
-  card.classList.add('dragging');
-  e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', card.dataset.lickId); // Firefox requires data to be set to allow the drag
-}
-
-function licksDragOver(e) {
-  e.preventDefault();
-  const dragging = document.querySelector('.lick-card.dragging');
-  const target = e.currentTarget;
-  if (!dragging || dragging === target) return;
-  const rect = target.getBoundingClientRect();
-  const before = (e.clientY - rect.top) < rect.height / 2;
-  const wantedNext = before ? target : target.nextSibling;
-  if (dragging.nextSibling === wantedNext) return; // already in place — skip the reflow
-  target.parentNode.insertBefore(dragging, wantedNext);
-}
-
-function licksDragEnd(e) {
-  e.target.closest('.lick-card').classList.remove('dragging');
-  const ids = [...document.querySelectorAll('#licks-list .lick-card')].map(el => el.dataset.lickId);
-  licksOrderSave(ids);
 }
 
 // ── Practice heatmap ──
@@ -1659,7 +1623,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
     licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
-    licksApplyOrder, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
+    licksSortByLast, licksStalenessBg, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,
     licksAgentContext,
   };

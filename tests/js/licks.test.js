@@ -1,16 +1,13 @@
 // licks.js is a plain browser <script> — stub just enough DOM to load it
 // (it registers a DOMContentLoaded listener at module scope, mirroring
 // fretboard.test.js's test setup), plus a fake localStorage (still used by
-// per-device UI prefs like audio speed) and a fake fetch for licksApplyOrder
-// (licks_order lives server-side — see src/user_state.py).
+// per-device UI prefs like audio speed).
 global.document = { addEventListener() {} };
 let _fakeStore = {};
 global.localStorage = {
   getItem(k) { return Object.prototype.hasOwnProperty.call(_fakeStore, k) ? _fakeStore[k] : null; },
   setItem(k, v) { _fakeStore[k] = v; },
 };
-let _fakeOrder = null;
-global.fetch = async () => ({ ok: true, json: async () => _fakeOrder });
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -139,16 +136,21 @@ test('licksMaterialLinkMarkdown sanitizes a filename with Markdown-breaking char
   );
 });
 
-test('licksApplyOrder: unordered (new) licks come first, then saved order, deleted ids are dropped', async () => {
-  _fakeOrder = ['b', 'a'];
-  const licksIn = [{ id: 'a' }, { id: 'c' }, { id: 'b' }];
-  assert.deepEqual((await licks.licksApplyOrder(licksIn)).map(l => l.id), ['c', 'b', 'a']);
+test('licksSortByLast: most-recently-practiced first, never-practiced sink to the bottom', () => {
+  const licksIn = [
+    { id: 'never' },
+    { id: 'old', last_date: '2026-01-01T00:00:00Z' },
+    { id: 'new', last_date: '2026-06-01T00:00:00Z' },
+  ];
+  assert.deepEqual(licks.licksSortByLast(licksIn).map(l => l.id), ['new', 'old', 'never']);
 });
 
-test('licksApplyOrder: falls back to server order entirely when nothing saved yet', async () => {
-  _fakeOrder = null;
-  const licksIn = [{ id: 'x' }, { id: 'y' }];
-  assert.deepEqual((await licks.licksApplyOrder(licksIn)).map(l => l.id), ['x', 'y']);
+test('licksStalenessBg: today stays plain, a week+ (or never) is the darkest tier', () => {
+  const now = Date.now();
+  assert.equal(licks.licksStalenessBg(new Date(now).toISOString()), 'var(--bg-card)');
+  assert.equal(licks.licksStalenessBg(new Date(now - 3 * 86400000).toISOString()), 'var(--bg-subtle)');
+  assert.equal(licks.licksStalenessBg(new Date(now - 10 * 86400000).toISOString()), 'var(--bg-faint)');
+  assert.equal(licks.licksStalenessBg(null), 'var(--bg-faint)');
 });
 
 test('timeAgo renders relative phrases for recent timestamps', () => {

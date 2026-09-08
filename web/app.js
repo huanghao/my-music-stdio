@@ -319,6 +319,7 @@ function showPage(name) {
         && typeof licksState !== 'undefined' && licksState.activeLick)
     || (document.getElementById('page-lick-edit')?.classList.contains('active')
         && typeof licksState !== 'undefined' && licksState.activeLick);
+  let endPracticePromise = null;
   if (name !== 'speed' && name !== 'lick-edit' && leavingSpeedPanel) {
     stStop();
     // Navigating away (to anywhere but the standalone Speed Trainer page,
@@ -326,7 +327,7 @@ function showPage(name) {
     // is the "I'm done" signal now that there's no manual Stop button:
     // auto-log and clear the active lick with zero clicks required.
     if (typeof licksState !== 'undefined' && licksState.activeLick && typeof licksEndPractice === 'function') {
-      licksEndPractice();
+      endPracticePromise = licksEndPractice();
     }
   }
   // The lick notes' inline audio players live inside the lick detail /
@@ -342,7 +343,10 @@ function showPage(name) {
   document.querySelectorAll('.nav-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.page === name);
   });
-  if (name === 'licks')     loadLicks();
+  // Wait for the just-triggered auto-log (if any) to finish saving before
+  // fetching the list — otherwise the session just practiced can lose the
+  // race against this GET and appear missing until the next reload.
+  if (name === 'licks')     (endPracticePromise || Promise.resolve()).then(loadLicks);
   if (name === 'prefs')     { renderPrefsForm(); fbRenderSoundVolumePrefs(); initMaterialsPrefsSection(); }
   if (name === 'fretboard') initFretboardPage();
   if (name === 'chordmatch') initChordMatchPage();

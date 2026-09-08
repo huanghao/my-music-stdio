@@ -1070,21 +1070,28 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* ── Lick Tracker ────────────────────────────────────────────────────────── */
 
-#licks-list { max-width: 520px; }
+#licks-list { max-width: 560px; }
 
+/* One row per lick: title on the left fills the space, last-practiced +
+   BPM sit on the right — the list is scanned for "when did I last touch
+   this", not read top-to-bottom, so that's the side that should catch the
+   eye first. */
 .lick-card {
-  display: flex; align-items: center; gap: 10px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
   border: 1px solid var(--border); border-radius: 8px;
-  padding: 14px 16px; margin-bottom: 8px; cursor: pointer;
+  padding: 12px 16px; margin-bottom: 8px; cursor: pointer;
   transition: box-shadow 0.15s;
 }
 .lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-.lick-card-body { flex: 1; min-width: 0; }
-.lick-card-title { font-size: 15px; font-weight: 600; color: var(--text); }
-/* The one thing this list is scanned for: what's stale. Bolder/darker than
-   the BPM line below it (see .lick-card-meta), which is secondary context. */
-.lick-card-last  { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-top: 2px; }
-.lick-card-meta  { font-size: 12px; color: var(--text-faint); margin-top: 1px; }
+.lick-card-title {
+  font-size: 15px; font-weight: 600; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.lick-card-right { display: flex; align-items: baseline; gap: 8px; flex-shrink: 0; }
+/* The one thing this list is scanned for: what's stale. Bold + full-strength
+   ink so it reads at a glance next to the faint BPM alongside it. */
+.lick-card-last { font-size: 13px; font-weight: 600; color: var(--text); }
+.lick-card-bpm  { font-size: 12px; color: var(--text-faint); }
 .lick-list-summary { font-size: 12px; color: var(--text-faint); margin-bottom: 12px; }
 
 /* Practice heatmap (GitHub-style calendar) */

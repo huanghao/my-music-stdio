@@ -145,12 +145,14 @@ test('licksSortByLast: most-recently-practiced first, never-practiced sink to th
   assert.deepEqual(licks.licksSortByLast(licksIn).map(l => l.id), ['new', 'old', 'never']);
 });
 
-test('licksStalenessBg: today stays plain, a week+ (or never) is the darkest tier', () => {
+test('licksStalenessBg: today stays plain white, 2+ weeks (or never) gets the strongest amber tint', () => {
   const now = Date.now();
+  const strong = 'color-mix(in srgb, var(--warn-bg) 60%, var(--warn) 40%)';
   assert.equal(licks.licksStalenessBg(new Date(now).toISOString()), 'var(--bg-card)');
-  assert.equal(licks.licksStalenessBg(new Date(now - 3 * 86400000).toISOString()), 'var(--bg-subtle)');
-  assert.equal(licks.licksStalenessBg(new Date(now - 10 * 86400000).toISOString()), 'var(--bg-faint)');
-  assert.equal(licks.licksStalenessBg(null), 'var(--bg-faint)');
+  assert.equal(licks.licksStalenessBg(new Date(now - 3 * 86400000).toISOString()), 'var(--warn-bg)');
+  assert.equal(licks.licksStalenessBg(new Date(now - 10 * 86400000).toISOString()), 'var(--warn-bg)');
+  assert.equal(licks.licksStalenessBg(new Date(now - 20 * 86400000).toISOString()), strong);
+  assert.equal(licks.licksStalenessBg(null), strong);
 });
 
 test('timeAgo renders relative phrases for recent timestamps', () => {

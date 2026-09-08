@@ -723,18 +723,21 @@ function licksSortByLast(licks) {
   });
 }
 
-// Card background darkens the longer it's been since last practiced — a
-// glance should be enough to spot what hasn't been touched today, without
-// turning this into a second heatmap. Practiced today stays plain; older
-// than a week (or never practiced) is the darkest tier.
+// Card background warms up the longer it's been since last practiced —
+// reusing the app's existing amber "needs attention" tint (--warn-bg, the
+// same one draft/streak UI uses) rather than a gray shade, so it actually
+// stands out against the neutral page/card grays instead of blending into
+// them. Practiced today stays plain white; 2+ weeks (or never practiced)
+// gets the strongest tint. Only two tiers beyond "today" — enough to catch
+// the eye without turning into a second heatmap.
 function licksStalenessBg(lastDateIso) {
-  if (!lastDateIso) return 'var(--bg-faint)';
+  if (!lastDateIso) return 'color-mix(in srgb, var(--warn-bg) 60%, var(--warn) 40%)';
   const last = new Date(lastDateIso), now = new Date();
   const isToday = last.getFullYear() === now.getFullYear()
     && last.getMonth() === now.getMonth() && last.getDate() === now.getDate();
   if (isToday) return 'var(--bg-card)';
   const days = (now.getTime() - last.getTime()) / 86400000;
-  return days < 7 ? 'var(--bg-subtle)' : 'var(--bg-faint)';
+  return days < 14 ? 'var(--warn-bg)' : 'color-mix(in srgb, var(--warn-bg) 60%, var(--warn) 40%)';
 }
 
 async function loadLicks() {
@@ -757,14 +760,14 @@ async function loadLicks() {
       ${mostRecent ? `&nbsp;·&nbsp; last practice: ${timeAgo(mostRecent)}` : ''}
     </p>`;
   el.innerHTML = summary + licks.map(l => {
-    const lastLabel = l.last_date ? `Last: ${timeAgo(l.last_date)}` : 'Never practiced';
+    const lastLabel = l.last_date ? timeAgo(l.last_date) : 'never practiced';
     const bpmLabel  = l.last_bpm ? `${l.last_bpm} BPM` : '';
     return `
       <div class="lick-card" data-lick-id="${l.id}" onclick="navOpenLick('${l.id}')" style="background:${licksStalenessBg(l.last_date)}">
-        <div class="lick-card-body">
-          <div class="lick-card-title">${htmlEsc(l.title)}</div>
-          <div class="lick-card-last">${lastLabel}</div>
-          ${bpmLabel ? `<div class="lick-card-meta">${bpmLabel}</div>` : ''}
+        <div class="lick-card-title">${htmlEsc(l.title)}</div>
+        <div class="lick-card-right">
+          <span class="lick-card-last">${lastLabel}</span>
+          ${bpmLabel ? `<span class="lick-card-bpm">${bpmLabel}</span>` : ''}
         </div>
       </div>`;
   }).join('');

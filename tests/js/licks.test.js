@@ -145,14 +145,13 @@ test('licksSortByLast: most-recently-practiced first, never-practiced sink to th
   assert.deepEqual(licks.licksSortByLast(licksIn).map(l => l.id), ['new', 'old', 'never']);
 });
 
-test('licksStalenessBg: today stays plain white, 2+ weeks (or never) gets the strongest amber tint', () => {
+test('licksStalenessAccent: today has no accent, 2+ weeks (or never) gets the amber "needs attention" accent', () => {
   const now = Date.now();
-  const strong = 'color-mix(in srgb, var(--warn-bg) 60%, var(--warn) 40%)';
-  assert.equal(licks.licksStalenessBg(new Date(now).toISOString()), 'var(--bg-card)');
-  assert.equal(licks.licksStalenessBg(new Date(now - 3 * 86400000).toISOString()), 'var(--warn-bg)');
-  assert.equal(licks.licksStalenessBg(new Date(now - 10 * 86400000).toISOString()), 'var(--warn-bg)');
-  assert.equal(licks.licksStalenessBg(new Date(now - 20 * 86400000).toISOString()), strong);
-  assert.equal(licks.licksStalenessBg(null), strong);
+  assert.equal(licks.licksStalenessAccent(new Date(now).toISOString()), 'transparent');
+  assert.equal(licks.licksStalenessAccent(new Date(now - 3 * 86400000).toISOString()), 'var(--border-muted)');
+  assert.equal(licks.licksStalenessAccent(new Date(now - 10 * 86400000).toISOString()), 'var(--border-muted)');
+  assert.equal(licks.licksStalenessAccent(new Date(now - 20 * 86400000).toISOString()), 'var(--warn)');
+  assert.equal(licks.licksStalenessAccent(null), 'var(--warn)');
 });
 
 test('timeAgo renders relative phrases for recent timestamps', () => {

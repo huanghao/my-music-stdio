@@ -368,7 +368,7 @@ input[type="number"] { width: 64px; text-align: center; }
 
 /* Fretboard trainer */
 .fb-tabs-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-.fb-tabs { display: flex; gap: 2px; background: var(--bg-page); border-radius: 6px; padding: 2px; width: fit-content; }
+.fb-tabs { display: flex; flex-wrap: wrap; gap: 2px; background: var(--bg-page); border-radius: 6px; padding: 2px; width: fit-content; }
 .fb-ref-link { font-size: 12px; color: var(--primary); text-decoration: none; }
 .fb-ref-link:hover { text-decoration: underline; }
 .fb-tab {
@@ -845,6 +845,13 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   padding: 20px; margin-bottom: 12px;
 }
+.st-beat-row { display: flex; gap: 10px; margin-bottom: 14px; }
+.st-beat-dot {
+  width: 18px; height: 18px; border-radius: 50%; background: var(--bg-raised);
+  border: 1px solid var(--border-dim); transition: background 0.05s, transform 0.05s;
+}
+.st-beat-dot.active { background: var(--primary-lt); transform: scale(1.15); }
+.st-beat-dot.downbeat.active { background: var(--primary); }
 .st-bpm-row { display: flex; align-items: center; gap: 10px; }
 .st-bpm-unit { font-size: 12px; color: var(--text-muted); }
 .st-bpm-current {
@@ -852,15 +859,8 @@ input[type="number"] { width: 64px; text-align: center; }
   border: none; background: none; width: 160px; padding: 0;
 }
 .st-bpm-current:focus { outline: none; background: var(--bg-subtle); border-radius: 6px; }
-.st-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; }
-.st-beat-row { display: flex; gap: 10px; }
-.st-beat-dot {
-  width: 18px; height: 18px; border-radius: 50%; background: var(--bg-raised);
-  border: 1px solid var(--border-dim); transition: background 0.05s, transform 0.05s;
-}
-.st-beat-dot.active { background: var(--primary-lt); transform: scale(1.15); }
-.st-beat-dot.downbeat.active { background: var(--primary); }
-.st-progress { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+.st-rhythm-row { display: flex; gap: 16px; margin-top: 14px; }
+.st-rhythm-row .st-field-wide { flex: 1; max-width: 220px; }
 
 /* Grid instead of flex-wrap: each field gets a uniform cell (label caption
    above a full-width input) so the row count and gap are deliberate — with
@@ -876,7 +876,7 @@ input[type="number"] { width: 64px; text-align: center; }
 .st-field-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
 .st-field input, .st-field select { width: 100%; font-size: 13px; padding: 4px 6px; }
 .st-field-wide { grid-column: span 2; }
-.st-auto-advance-label {
+.st-auto-advance-label, .st-bounce-label {
   grid-column: 1 / -1; display: flex; align-items: center; gap: 6px;
   font-size: 12px; color: var(--text-dim);
 }

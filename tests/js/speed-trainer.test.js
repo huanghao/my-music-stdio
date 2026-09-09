@@ -72,6 +72,41 @@ test('stAdjustBpm moves by a signed delta and is not clamped to targetBpm (unlik
   assert.equal(st.stState.currentBpm, 60);
 });
 
+test('stBumpUp clamps at targetBpm and stays there when bounceMode is off (unchanged default behavior)', () => {
+  st.stState.bounceMode = false;
+  st.stState.rampDirection = 1;
+  st.stState.startBpm = 80; st.stState.targetBpm = 90; st.stState.stepBpm = 5;
+  st.stState.currentBpm = 87;
+  st.stBumpUp();
+  assert.equal(st.stState.currentBpm, 90); // clamped, not 92
+  st.stBumpUp();
+  assert.equal(st.stState.currentBpm, 90); // stays put — no direction to reverse into
+  assert.equal(st.stState.rampDirection, 1);
+});
+
+test('stBumpUp reverses direction at both ends and loops when bounceMode is on', () => {
+  st.stState.bounceMode = true;
+  st.stState.rampDirection = 1;
+  st.stState.startBpm = 80; st.stState.targetBpm = 90; st.stState.stepBpm = 5;
+  st.stState.currentBpm = 80;
+  st.stBumpUp(); // 80 -> 85
+  assert.equal(st.stState.currentBpm, 85);
+  assert.equal(st.stState.rampDirection, 1);
+  st.stBumpUp(); // 85 -> 90 (hits Target, flips direction)
+  assert.equal(st.stState.currentBpm, 90);
+  assert.equal(st.stState.rampDirection, -1);
+  st.stBumpUp(); // 90 -> 85 (descending now)
+  assert.equal(st.stState.currentBpm, 85);
+  assert.equal(st.stState.rampDirection, -1);
+  st.stBumpUp(); // 85 -> 80 (hits Start, flips direction back)
+  assert.equal(st.stState.currentBpm, 80);
+  assert.equal(st.stState.rampDirection, 1);
+  st.stBumpUp(); // loops again: 80 -> 85
+  assert.equal(st.stState.currentBpm, 85);
+  assert.equal(st.stState.rampDirection, 1);
+  st.stState.bounceMode = false; // reset for other tests
+});
+
 test('stChartWindowMs scales with tempo and beats-per-bar (last N bars, not a fixed duration)', () => {
   st.stState.currentBpm = 120;
   st.stState.beatsPerBar = 4;

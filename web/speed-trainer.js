@@ -19,6 +19,8 @@ const stState = {
   startBpm: 60, targetBpm: 120, stepBpm: 4,
   beatsPerBar: 4, subdivision: 1, // ticks per beat: 1=quarter, 2=eighth, 4=sixteenth
   autoAdvance: false, autoAdvanceBars: 4,
+  bounceMode: false, // once Target is reached, ratchet back down to Start instead of stopping there (see stBumpUp) — loops indefinitely until Stop
+  rampDirection: 1, // 1 = ratcheting up toward targetBpm, -1 = ratcheting back down toward startBpm (bounceMode only). Not persisted — every Start begins ascending fresh (see stStart).
   currentBpm: 60,
   running: false,
   audioCtx: null, timerId: null,
@@ -39,6 +41,7 @@ function stPrefsLoad() {
   if (Number.isFinite(saved.subdivision))     stState.subdivision     = saved.subdivision;
   if (typeof saved.autoAdvance === 'boolean') stState.autoAdvance     = saved.autoAdvance;
   if (Number.isFinite(saved.autoAdvanceBars)) stState.autoAdvanceBars = saved.autoAdvanceBars;
+  if (typeof saved.bounceMode === 'boolean')  stState.bounceMode      = saved.bounceMode;
   // The live tempo is persisted too, so a revisit picks up where the last
   // session left off instead of snapping back to Start BPM.
   if (Number.isFinite(saved.currentBpm)) {
@@ -56,6 +59,7 @@ function stApplyStateToUI() {
   document.getElementById('st-subdivision').value       = stState.subdivision;
   document.getElementById('st-auto-advance').checked    = stState.autoAdvance;
   document.getElementById('st-auto-advance-bars').value = stState.autoAdvanceBars;
+  document.getElementById('st-bounce').checked          = stState.bounceMode;
 }
 
 function stPrefsSave() {
@@ -63,7 +67,8 @@ function stPrefsSave() {
     startBpm: stState.startBpm, targetBpm: stState.targetBpm,
     stepBpm: stState.stepBpm, beatsPerBar: stState.beatsPerBar,
     subdivision: stState.subdivision, autoAdvance: stState.autoAdvance,
-    autoAdvanceBars: stState.autoAdvanceBars, currentBpm: stState.currentBpm,
+    autoAdvanceBars: stState.autoAdvanceBars, bounceMode: stState.bounceMode,
+    currentBpm: stState.currentBpm,
   }));
 }
 
@@ -75,6 +80,7 @@ function stReadOptionsFromUI() {
   stState.subdivision = parseInt(document.getElementById('st-subdivision').value) || 1;
   stState.autoAdvance = document.getElementById('st-auto-advance').checked;
   stState.autoAdvanceBars = Math.max(1, parseInt(document.getElementById('st-auto-advance-bars').value) || 4);
+  stState.bounceMode = document.getElementById('st-bounce').checked;
 }
 
 function initSpeedPage() {
@@ -99,6 +105,7 @@ function initSpeedPage() {
     });
     document.getElementById('st-auto-advance').addEventListener('change', stOnOptionsChanged);
     document.getElementById('st-auto-advance-bars').addEventListener('change', stOnOptionsChanged);
+    document.getElementById('st-bounce').addEventListener('change', stOnOptionsChanged);
   }
 
   stRenderBeatRow();
@@ -150,10 +157,6 @@ function stFlashBeat(beatIndexInBar, isDownbeat) {
 
 function stUpdateDisplay() {
   document.getElementById('st-bpm-current').value = stState.currentBpm;
-  const progress = document.getElementById('st-progress');
-  progress.textContent = stState.running
-    ? `${stState.barsCompletedAtCurrentBpm} bar${stState.barsCompletedAtCurrentBpm === 1 ? '' : 's'} at this tempo`
-    : (stState.currentBpm >= stState.targetBpm ? "At target tempo — nice." : 'Stopped');
 }
 
 function stScheduleClick(tickIndex, time) {
@@ -238,6 +241,7 @@ function stStart() {
   stPrefsSave(); // the clamp above may have moved the persisted tempo
   stState.tickIndex = 0;
   stState.barsCompletedAtCurrentBpm = 0;
+  stState.rampDirection = 1; // every Start begins ascending toward Target, regardless of which way a previous bounce run ended
   stState.nextTickTime = stState.audioCtx.currentTime + 0.05;
   stState.running = true;
   if (typeof setTransportState === 'function') setTransportState('playing');
@@ -269,10 +273,23 @@ function stNotifyLickBpm() {
 }
 
 // Manual "I nailed it, next tempo" — also called by auto-advance once enough
-// bars have passed at the current tempo. Clamped to the configured target —
-// this is specifically the ramp-toward-target ratchet.
+// bars have passed at the current tempo. Ratchets toward stState.targetBpm
+// while rampDirection is 1 (the normal case). With bounceMode on, reaching
+// Target flips the direction and this same function starts ratcheting back
+// down toward startBpm instead of just clamping there forever — and reaching
+// Start flips it again, so a bounce run keeps looping (80→90→80→90→…) until
+// Stop is pressed; see stStart(), which always resets rampDirection to 1.
 function stBumpUp() {
-  stState.currentBpm = Math.min(stState.targetBpm, stState.currentBpm + stState.stepBpm);
+  const step = stState.rampDirection === -1 ? -stState.stepBpm : stState.stepBpm;
+  let next = stState.currentBpm + step;
+  if (stState.rampDirection !== -1 && next >= stState.targetBpm) {
+    next = stState.targetBpm;
+    if (stState.bounceMode) stState.rampDirection = -1;
+  } else if (stState.rampDirection === -1 && next <= stState.startBpm) {
+    next = stState.startBpm;
+    stState.rampDirection = 1;
+  }
+  stState.currentBpm = next;
   stState.barsCompletedAtCurrentBpm = 0;
   stPrefsSave();
   stUpdateDisplay();
@@ -305,5 +322,5 @@ function stChartWindowMs() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { stState, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage, stOnOptionsChanged };
+  module.exports = { stState, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage, stOnOptionsChanged, stBumpUp };
 }

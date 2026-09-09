@@ -845,12 +845,6 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   padding: 20px; margin-bottom: 12px;
 }
-.st-settings {
-  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
-  font-size: 12px; color: var(--text-dim);
-  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
-}
-.st-auto-advance-label { flex-basis: 100%; }
 .st-bpm-row { display: flex; align-items: center; gap: 10px; }
 .st-bpm-unit { font-size: 12px; color: var(--text-muted); }
 .st-bpm-current {
@@ -858,14 +852,34 @@ input[type="number"] { width: 64px; text-align: center; }
   border: none; background: none; width: 160px; padding: 0;
 }
 .st-bpm-current:focus { outline: none; background: var(--bg-subtle); border-radius: 6px; }
-.st-beat-row { display: flex; justify-content: flex-start; gap: 12px; margin: 14px 0 12px; }
+.st-meta-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 12px; }
+.st-beat-row { display: flex; gap: 10px; }
 .st-beat-dot {
-  width: 22px; height: 22px; border-radius: 50%; background: var(--bg-raised);
+  width: 18px; height: 18px; border-radius: 50%; background: var(--bg-raised);
   border: 1px solid var(--border-dim); transition: background 0.05s, transform 0.05s;
 }
 .st-beat-dot.active { background: var(--primary-lt); transform: scale(1.15); }
 .st-beat-dot.downbeat.active { background: var(--primary); }
-.st-progress { font-size: 12px; color: var(--text-muted); }
+.st-progress { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+
+/* Grid instead of flex-wrap: each field gets a uniform cell (label caption
+   above a full-width input) so the row count and gap are deliberate — with
+   flex-wrap, a field wrapping to its own line under a narrow container
+   (common here, since the panel is capped to the detail page's content
+   width) left large accidental-looking gaps instead of a tight grid. */
+.st-settings {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 12px 16px; align-items: end;
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.st-field { display: flex; flex-direction: column; gap: 4px; }
+.st-field-label { font-size: 10.5px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.st-field input, .st-field select { width: 100%; font-size: 13px; padding: 4px 6px; }
+.st-field-wide { grid-column: span 2; }
+.st-auto-advance-label {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-dim);
+}
 
 /* Key Drill */
 .kd-intro { font-size: 12.5px; color: var(--text-muted); max-width: 640px; margin-bottom: 14px; }

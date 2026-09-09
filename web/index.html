@@ -433,16 +433,18 @@
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
     </div>
-    <div class="st-beat-row" id="st-beat-row"></div>
-    <div class="st-progress" id="st-progress"></div>
+    <div class="st-meta-row">
+      <div class="st-beat-row" id="st-beat-row"></div>
+      <div class="st-progress" id="st-progress"></div>
+    </div>
   </div>
 
   <div class="st-settings">
-    <label>Start <input type="number" id="st-start-bpm" min="20" max="300" value="60" class="w-[64px]!"></label>
-    <label>Target <input type="number" id="st-target-bpm" min="20" max="300" value="120" class="w-[64px]!"></label>
-    <label>Step <input type="number" id="st-step-bpm" min="1" max="30" value="4" class="w-[56px]!"> BPM</label>
-    <label>Beats/bar <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[56px]!"></label>
-    <label>Subdivision
+    <label class="st-field"><span class="st-field-label">Start</span><input type="number" id="st-start-bpm" min="20" max="300" value="60"></label>
+    <label class="st-field"><span class="st-field-label">Target</span><input type="number" id="st-target-bpm" min="20" max="300" value="120"></label>
+    <label class="st-field"><span class="st-field-label">Step</span><input type="number" id="st-step-bpm" min="1" max="30" value="4"></label>
+    <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4"></label>
+    <label class="st-field st-field-wide"><span class="st-field-label">Subdivision</span>
       <select id="st-subdivision">
         <option value="1" selected>Quarter notes</option>
         <option value="2">Eighth notes</option>

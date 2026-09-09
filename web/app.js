@@ -164,7 +164,7 @@ function initToolsMenu() {
 
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
-const NAV_PAGES = ['vamp', 'jam', 'licks', 'fretboard', 'chordmatch', 'speed', 'songloop', 'progressions', 'prefs'];
+const NAV_PAGES = ['vamp', 'jam', 'licks', 'tuner', 'fretboard', 'chordmatch', 'songloop', 'progressions', 'prefs'];
 
 async function init() {
   transportLoadPos();  // restore the floating pill's last position before anything registers a transport
@@ -300,27 +300,27 @@ window.addEventListener('popstate', (e) => {
 
 // ── Page nav ──
 function showPage(name) {
-  // Fretboard and Chord Match are separate pages that both drive the same
-  // shared mic (fbMic) — release it when leaving whichever one currently
-  // owns it, regardless of which of the two we're navigating away from.
+  // Fretboard, Chord Match and Tuner are separate pages that all drive the
+  // same shared mic (fbMic) — release it when leaving whichever one
+  // currently owns it, regardless of which of the three we're navigating
+  // away from.
   const leavingMicPage = (name !== 'fretboard' && document.getElementById('page-fretboard')?.classList.contains('active'))
-    || (name !== 'chordmatch' && document.getElementById('page-chordmatch')?.classList.contains('active'));
+    || (name !== 'chordmatch' && document.getElementById('page-chordmatch')?.classList.contains('active'))
+    || (name !== 'tuner' && document.getElementById('page-tuner')?.classList.contains('active'));
   if (leavingMicPage) fbLeavePage();
-  // The metronome panel (#st-panel) can currently be hosted on either the
-  // standalone Speed Trainer page or embedded in an actively-practiced
-  // Lick's detail page (see licksSyncPracticePanelHome) — stop it when
-  // leaving whichever one is currently hosting it. The lick editor page
-  // counts as a host too: it's a side-trip from the detail page, not the end
-  // of practice (editing notes must not stop the metronome or auto-log the
-  // session), so it's exempt as a *destination* alongside 'speed' — but
-  // leaving the editor for anywhere else still ends practice here.
-  const leavingSpeedPanel = document.getElementById('page-speed')?.classList.contains('active')
-    || (document.getElementById('page-lick-detail')?.classList.contains('active')
+  // The metronome panel (#st-panel) is only ever hosted embedded in an
+  // actively-practiced Lick's detail page (see licksSyncPracticePanelHome)
+  // — stop it when leaving that page. The lick editor page counts as a host
+  // too: it's a side-trip from the detail page, not the end of practice
+  // (editing notes must not stop the metronome or auto-log the session), so
+  // it's exempt as a *destination* — but leaving the editor for anywhere
+  // else still ends practice here.
+  const leavingSpeedPanel = (document.getElementById('page-lick-detail')?.classList.contains('active')
         && typeof licksState !== 'undefined' && licksState.activeLick)
     || (document.getElementById('page-lick-edit')?.classList.contains('active')
         && typeof licksState !== 'undefined' && licksState.activeLick);
   let endPracticePromise = null;
-  if (name !== 'speed' && name !== 'lick-edit' && leavingSpeedPanel) {
+  if (name !== 'lick-edit' && leavingSpeedPanel) {
     stStop();
     // Navigating away (to anywhere but the standalone Speed Trainer page,
     // which keeps hosting the same practice — see licksSyncPracticePanelHome)
@@ -348,14 +348,14 @@ function showPage(name) {
   // race against this GET and appear missing until the next reload.
   if (name === 'licks')     (endPracticePromise || Promise.resolve()).then(loadLicks);
   if (name === 'prefs')     { renderPrefsForm(); fbRenderSoundVolumePrefs(); initMaterialsPrefsSection(); }
+  if (name === 'tuner') initTunerPage();
   if (name === 'fretboard') initFretboardPage();
   if (name === 'chordmatch') initChordMatchPage();
-  if (name === 'speed')     { initSpeedPage(); renderActiveLickBanner(); }
   if (name === 'songloop')  initSongLoopPage();
   if (name === 'progressions') initProgressionLabPage();
   if (name === 'keydrill') initKeyDrillPage();
   if (name === 'domdrill') initDomDrillPage();
-  // Move the metronome panel back to its standalone-page home if it was
+  // Move the metronome panel back to its parked (hidden) home if it was
   // embedded in a Lick detail page we're now navigating away from.
   if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();
   updateTransportForPage(name);  // point the bottom transport bar at this page's action
@@ -1001,10 +1001,10 @@ function updateTransportForPage(name) {
   switch (name) {
     case 'vamp':      registerTransport({ kind: 'playback', label: 'Vamp',          play: vampPlay,      stop: vampStop,      pause: vampPause,      resume: vampResume }); break;
     case 'jam':       registerTransport({ kind: 'playback', label: 'Jam',           play: jamPlay,       stop: jamStop,       pause: jamPause,       resume: jamResume }); break;
-    case 'speed':     registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart,       stop: stStop }); break;
     case 'songloop':  registerTransport({ kind: 'playback', label: 'Song Loop',     play: slPlay,        stop: slStop,        pause: slPause,        resume: slPlay }); break;
     case 'fretboard':   fbRenderControlAction(); break; // fretboard registers per active sub-mode
     case 'chordmatch':  fbRenderControlAction(); break;
+    case 'tuner':       fbRenderControlAction(); break;
     case 'lick-edit':
       // Editing the lick currently being practiced keeps the Speed Trainer
       // transport (the metronome may still be running — side-trip exemption,

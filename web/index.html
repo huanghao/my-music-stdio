@@ -121,9 +121,9 @@
   <span class="nav-sep"></span>
   <!-- Practice tools -->
   <button class="nav-btn"        data-page="licks"      onclick="navGoToPage('licks')">Licks</button>
+  <button class="nav-btn"        data-page="tuner"      onclick="navGoToPage('tuner')">Tuner</button>
   <button class="nav-btn"        data-page="fretboard"  onclick="navGoToPage('fretboard')">Fretboard</button>
   <button class="nav-btn"        data-page="chordmatch" onclick="navGoToPage('chordmatch')">Chord Match</button>
-  <button class="nav-btn"        data-page="speed"      onclick="navGoToPage('speed')">Speed Trainer</button>
   <button class="nav-btn"        data-page="songloop"   onclick="navGoToPage('songloop')">Song Loop</button>
   <button class="nav-btn"        data-page="progressions" onclick="navGoToPage('progressions')">Progressions</button>
   <button class="nav-btn"        data-page="keydrill"   onclick="navGoToPage('keydrill')">Key Drill</button>
@@ -160,7 +160,6 @@
   <div class="fb-tabs-row">
     <div class="fb-tabs">
       <button class="fb-tab active" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
-      <button class="fb-tab" data-fbmode="tuner" onclick="fbShowMode('tuner')">Tuner</button>
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
       <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
       <button class="fb-tab" data-fbmode="seq" onclick="fbShowMode('seq')">Scale Sequences</button>
@@ -180,17 +179,6 @@
     </div>
     <div class="fb-feedback" id="fb-pitch-feedback"></div>
     <div class="fb-stats-table-wrap" id="fb-pitch-stats-table"></div>
-  </div>
-
-  <!-- Tuner (mic-based, auto-detects nearest string) -->
-  <div class="fb-panel" id="fb-tuner">
-    <div class="fb-options" id="fb-tuner-options"></div>
-    <div class="fb-tuner-strings" id="fb-tuner-strings"></div>
-    <div class="fb-pitch-meter" id="fb-tuner-meter"></div>
-    <div class="fb-caged-answer">
-      <button class="btn btn-ghost btn-sm" onclick="fbTunerReset()">Reset</button>
-    </div>
-    <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
   </div>
 
   <!-- Ear Training: interval recognition within a pentatonic/blues scale -->
@@ -331,6 +319,22 @@
 
 </div>
 
+<!-- TUNER PAGE (mic-based, auto-detects nearest string) — promoted to its own
+     top-level page since it's used constantly and has nothing to do with the
+     fretboard; still shares fbState.tuner/fbMic with the fb-*.js modules
+     since the underlying drill logic didn't need to move. -->
+<div class="page" id="page-tuner">
+  <div class="page-header"><h2 class="page-title">Tuner</h2></div>
+
+  <div class="fb-options" id="fb-tuner-options"></div>
+  <div class="fb-tuner-strings" id="fb-tuner-strings"></div>
+  <div class="fb-pitch-meter" id="fb-tuner-meter"></div>
+  <div class="fb-caged-answer">
+    <button class="btn btn-ghost btn-sm" onclick="fbTunerReset()">Reset</button>
+  </div>
+  <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
+</div>
+
 <!-- CHORD MATCH PAGE (mic-based chord sight-reading: strum the named chord,
      get confirmation) — promoted to its own top-level page so it isn't also
      nested as a Fretboard sub-tab; still shares fbState.chord/fbMic with the
@@ -407,52 +411,48 @@
   </div>
 </div>
 
-<div class="page" id="page-speed">
-  <div class="page-header"><h2 class="page-title">Speed Trainer</h2></div>
-
-  <!-- #st-panel is the metronome's actual DOM — its natural home is right
-       here, but licksSyncPracticePanelHome() (licks.js) relocates it into a
-       Lick's detail page automatically whenever that lick is open (opening
-       a lick IS starting practice — see practiceLick), so there's nothing
-       to click to reveal it. See that function's comment for the full
-       relocation contract. -->
-  <div id="st-panel-home">
-  <div id="st-panel">
+<!-- #st-panel is the metronome's actual DOM. There's no standalone Speed
+     Trainer page any more — licksSyncPracticePanelHome() (licks.js) mounts
+     it directly into a Lick's detail page whenever that lick is open
+     (opening a lick IS starting practice — see practiceLick) and parks it
+     back here, hidden, whenever it isn't. See that function's comment for
+     the full relocation contract. -->
+<div id="st-panel-home" class="hidden">
+<div id="st-panel" class="st-panel-card">
   <div class="st-active-lick-banner hidden" id="st-active-lick-banner"></div>
 
-  <div class="st-options">
-    <label>Start BPM: <input type="number" id="st-start-bpm" min="20" max="300" value="60" class="w-[72px]!"></label>
-    <label>Target BPM: <input type="number" id="st-target-bpm" min="20" max="300" value="120" class="w-[72px]!"></label>
-    <label>Step: <input type="number" id="st-step-bpm" min="1" max="30" value="4" class="w-[64px]!"> BPM</label>
-    <label>Beats/bar: <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
-    <label>Subdivision:
+  <div class="st-live">
+    <div class="st-bpm-row">
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-5)">−5</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-1)">−</button>
+      <input type="number" class="st-bpm-current" id="st-bpm-current" min="20" max="300" value="60"
+        onchange="stSetCurrentBpm(this.value)">
+      <span class="st-bpm-unit">BPM</span>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(1)">+</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
+      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
+    </div>
+    <div class="st-beat-row" id="st-beat-row"></div>
+    <div class="st-progress" id="st-progress"></div>
+  </div>
+
+  <div class="st-settings">
+    <label>Start <input type="number" id="st-start-bpm" min="20" max="300" value="60" class="w-[64px]!"></label>
+    <label>Target <input type="number" id="st-target-bpm" min="20" max="300" value="120" class="w-[64px]!"></label>
+    <label>Step <input type="number" id="st-step-bpm" min="1" max="30" value="4" class="w-[56px]!"> BPM</label>
+    <label>Beats/bar <input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[56px]!"></label>
+    <label>Subdivision
       <select id="st-subdivision">
         <option value="1" selected>Quarter notes</option>
         <option value="2">Eighth notes</option>
         <option value="4">Sixteenth notes</option>
       </select>
     </label>
-    <label><input type="checkbox" id="st-auto-advance"> Auto-advance every
-      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" class="w-[56px]!"> bars</label>
+    <label class="st-auto-advance-label"><input type="checkbox" id="st-auto-advance"> Auto-advance every
+      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" class="w-[48px]!"> bars</label>
   </div>
-
-  <div class="st-display">
-    <div class="st-bpm-row">
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-1)">−</button>
-      <input type="number" class="st-bpm-current" id="st-bpm-current" min="20" max="300" value="60"
-        onchange="stSetCurrentBpm(this.value)">
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(1)">+</button>
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-5)">−5</button>
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
-      <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
-    </div>
-    <div class="st-beat-row" id="st-beat-row"></div>
-    <div class="st-progress" id="st-progress"></div>
-  </div>
-  </div>
-  </div>
-
+</div>
 </div>
 
 <!-- KEY DRILL PAGE -->

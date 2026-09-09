@@ -87,10 +87,11 @@ function initSpeedPage() {
   // The option inputs live in static HTML (unlike most other panels in this
   // app, which re-render their controls via innerHTML on every visit) — they
   // never get destroyed/recreated, so attaching listeners here needs a guard.
-  // Without one, revisiting this page via showPage('speed') would silently
-  // stack a fresh, duplicate set of listeners onto the same elements every
-  // single time (an accumulating leak — each stacked listener still fires,
-  // still holds its closure alive, and is never released for the rest of the tab's life).
+  // Without one, calling this again every time practiceLick() opens a lick
+  // would silently stack a fresh, duplicate set of listeners onto the same
+  // elements every single time (an accumulating leak — each stacked listener
+  // still fires, still holds its closure alive, and is never released for
+  // the rest of the tab's life).
   if (!stState.inited) {
     stState.inited = true;
     ['st-start-bpm', 'st-target-bpm', 'st-step-bpm', 'st-beats-per-bar', 'st-subdivision'].forEach(id => {

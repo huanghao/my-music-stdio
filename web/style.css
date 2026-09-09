@@ -838,17 +838,21 @@ input[type="number"] { width: 64px; text-align: center; }
   display: flex; gap: 16px;
 }
 
-/* Speed Trainer */
-.st-options {
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 14px; margin-bottom: 16px; display: flex; flex-wrap: wrap;
-  gap: 16px; align-items: center; font-size: 12px; color: var(--text-dim);
-}
-.st-display {
+/* Speed Trainer — one card: the live display (big BPM + beat dots, what you
+   actually watch while practicing) on top, the ramp/rhythm settings (set
+   once, rarely touched again) below a divider. */
+.st-panel-card {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
   padding: 20px; margin-bottom: 12px;
 }
+.st-settings {
+  display: flex; flex-wrap: wrap; gap: 14px; align-items: center;
+  font-size: 12px; color: var(--text-dim);
+  margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);
+}
+.st-auto-advance-label { flex-basis: 100%; }
 .st-bpm-row { display: flex; align-items: center; gap: 10px; }
+.st-bpm-unit { font-size: 12px; color: var(--text-muted); }
 .st-bpm-current {
   font-family: Georgia, serif; font-size: 64px; font-weight: 700; color: var(--text); line-height: 1;
   border: none; background: none; width: 160px; padding: 0;
@@ -1229,12 +1233,10 @@ input[type="number"] { width: 64px; text-align: center; }
 /* Practice panel, embedded directly under the notes (see
    licksSyncPracticePanelHome) — the practicing flow is score + metronome on
    one screen, with chart/sessions history below. Capped to match the rest
-   of the detail page's content width instead of stretching the #st-panel
-   cards (.st-options/.st-display/.st-active-lick-banner) edge to edge,
-   which is fine on the standalone Speed Trainer page but not here. Margins
-   only apply when the panel is actually embedded: the slot is an empty div
-   when not practicing, and a bare margin would leave a permanent gap
-   between notes and chart. */
+   of the detail page's content width instead of stretching #st-panel edge
+   to edge. Margins only apply when the panel is actually embedded: the slot
+   is an empty div when not practicing, and a bare margin would leave a
+   permanent gap between notes and chart. */
 #lick-practice-slot { max-width: 720px; }
 #lick-practice-slot:not(:empty) { margin: 20px 0; }
 

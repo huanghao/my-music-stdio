@@ -1,5 +1,11 @@
 # Code Health Review Log
 
+## 2026-09-18 `licks_order` 测试仍断言已移除的后端状态键
+- 位置：`tests/test_server.py:560`、`src/user_state.py:22`
+- 问题：`test_state_put_accepts_list_value` 仍向 `/api/state/licks_order` 写入并读取，但 `823b878` 已移除手动排序及对应的 `user_state.KEYS` 条目；当前测试结果为 185 通过、1 失败，接口按设计返回 `Unknown state key`。
+- 建议：删除该过时测试，或若产品仍需持久化手动排序，则恢复对应 API 和前端行为；需要先确认产品口径。
+- 风险：直接改测试会掩盖产品行为变化，直接恢复功能又会违背最近的“按 last 自动排序”决策。
+
 ## 2026-08-31 前端「今天」用 toISOString().slice(0,10)（UTC 日历日），与本地日边界差 8 小时
 - 位置：`web/practice-timer.js:53`（`ptTodayTotalSec`）、`web/licks.js:871`（练习热力图单元格 key）
 - 问题：命中经验库 [tz] 检测签名。`ptTodayTotalSec` 的「今日总时长」在 UTC 零点（北京 8:00）而非本地午夜 rollover；热力图里 cell key 是本地午夜的 Date 转 toISOString（UTC+8 下退一天），而 session 的 `s.date` 是服务端 UTC 时间戳——晚上 8 点到午夜之间的练习会落到后一天的格子上。两处均为存量代码（不在本轮 diff 内），故只记录不直接改。

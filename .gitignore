@@ -1,5 +1,13 @@
 output/
 tmp/
+
+# Local OMR experiments: source scores and generated recognition results can
+# be large and may be copyright-protected. Keep only scripts and reports in git.
+experiments/drum-omr/input/*
+!experiments/drum-omr/input/README.md
+experiments/drum-omr/runs/*
+!experiments/drum-omr/runs/README.md
+
 ########## Python START ##########
 # Byte-compiled / optimized / DLL files
 __pycache__/

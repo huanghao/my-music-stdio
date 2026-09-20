@@ -409,7 +409,7 @@ async function initDomDrillPage() {
     document.addEventListener('keydown', (e) => {
       if (e.key !== ' ' && e.key !== 'Enter') return;
       const btn = document.getElementById('dd-continue-btn');
-      if (btn && !btn.classList.contains('hidden') && document.getElementById('page-domdrill').classList.contains('active')) {
+      if (btn && !btn.classList.contains('hidden') && document.getElementById('fb-domdrill').classList.contains('active')) {
         e.preventDefault();
         ddNextQuestion();
       }

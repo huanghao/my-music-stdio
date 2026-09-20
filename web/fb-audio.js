@@ -369,13 +369,12 @@ function fbMicDrillHandlers(mode) {
 const FB_MIC_DRILL_LABELS = { pitch: 'Pitch Match', tuner: 'Tuner', chord: 'Chord Match', bend: 'Bend & Vibrato', seq: 'Scale Sequences' };
 function fbRenderControlAction() {
   if (typeof registerTransport !== 'function') return; // app.js not loaded (e.g. unit tests)
-  // Chord Match is a separate page from Fretboard now, but still drives the
-  // same mic-drill transport pattern — its mode is implied by which page is
-  // active, not read from fbState.activeMode (that only ever varies across
-  // Fretboard's own remaining tabs).
-  const onChordMatch = document.getElementById('page-chordmatch')?.classList.contains('active');
+  // Chord Match is back on the Fretboard tab strip, so its mode is just
+  // fbState.activeMode like every other tab. Tuner is still a separate page
+  // from Fretboard, so it's implied by which page is active instead.
+  const onTuner = document.getElementById('page-tuner')?.classList.contains('active');
   const onFretboard = document.getElementById('page-fretboard')?.classList.contains('active');
-  const mode = onChordMatch ? 'chord' : (onFretboard ? fbState.activeMode : null);
+  const mode = onTuner ? 'tuner' : (onFretboard ? fbState.activeMode : null);
   const handlers = mode ? fbMicDrillHandlers(mode) : null;
   if (!handlers) { clearTransport(); return; }
   registerTransport({

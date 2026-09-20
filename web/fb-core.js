@@ -55,7 +55,7 @@ function fbBarreFretFor(rootNote, shapeLetter) {
 
 const fbState = {
   inited: false,
-  chordInited: false,
+  tunerInited: false,
   prefsLoaded: false,
   activeMode: 'pitch',
   pitch: { target: null, matches: 0, total: 0, streak: 0, matched: false, startTime: 0,

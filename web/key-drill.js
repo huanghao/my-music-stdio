@@ -306,7 +306,7 @@ async function initKeyDrillPage() {
     document.addEventListener('keydown', (e) => {
       if (e.key !== ' ' && e.key !== 'Enter') return;
       const btn = document.getElementById('kd-continue-btn');
-      if (btn && !btn.classList.contains('hidden') && document.getElementById('page-keydrill').classList.contains('active')) {
+      if (btn && !btn.classList.contains('hidden') && document.getElementById('fb-keydrill').classList.contains('active')) {
         e.preventDefault();
         kdNextQuestion();
       }

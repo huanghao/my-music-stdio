@@ -123,11 +123,8 @@
   <button class="nav-btn"        data-page="licks"      onclick="navGoToPage('licks')">Licks</button>
   <button class="nav-btn"        data-page="tuner"      onclick="navGoToPage('tuner')">Tuner</button>
   <button class="nav-btn"        data-page="fretboard"  onclick="navGoToPage('fretboard')">Fretboard</button>
-  <button class="nav-btn"        data-page="chordmatch" onclick="navGoToPage('chordmatch')">Chord Match</button>
   <button class="nav-btn"        data-page="songloop"   onclick="navGoToPage('songloop')">Song Loop</button>
   <button class="nav-btn"        data-page="progressions" onclick="navGoToPage('progressions')">Progressions</button>
-  <button class="nav-btn"        data-page="keydrill"   onclick="navGoToPage('keydrill')">Key Drill</button>
-  <button class="nav-btn"        data-page="domdrill"   onclick="navGoToPage('domdrill')">Dom Drill</button>
   <span class="nav-sep"></span>
   <!-- Settings -->
   <button class="nav-btn"        data-page="prefs"      onclick="navGoToPage('prefs')">Preferences</button>
@@ -159,12 +156,117 @@
 <div class="page" id="page-fretboard">
   <div class="fb-tabs-row">
     <div class="fb-tabs">
+      <button class="fb-tab" data-fbmode="chord" onclick="fbShowMode('chord')">Chord Match</button>
+      <button class="fb-tab" data-fbmode="keydrill" onclick="fbShowMode('keydrill')">Key Drill</button>
+      <button class="fb-tab" data-fbmode="domdrill" onclick="fbShowMode('domdrill')">Dom Drill</button>
       <button class="fb-tab active" data-fbmode="pitch" onclick="fbShowMode('pitch')">Pitch Match</button>
       <button class="fb-tab" data-fbmode="ear" onclick="fbShowMode('ear')">Ear Training</button>
       <button class="fb-tab" data-fbmode="bend" onclick="fbShowMode('bend')">Bend &amp; Vibrato</button>
       <button class="fb-tab" data-fbmode="seq" onclick="fbShowMode('seq')">Scale Sequences</button>
       <button class="fb-tab" data-fbmode="chordid" onclick="fbShowMode('chordid')">Chord ID</button>
     </div>
+  </div>
+
+  <!-- Chord Match (mic-based chord sight-reading: strum the named chord, get
+       confirmation) — moved back onto the Fretboard tab strip (was briefly
+       its own top-level page); same fbState.chord/fbMic underneath. -->
+  <div class="fb-panel" id="fb-chord">
+    <div class="fb-options" id="fb-chord-options"></div>
+    <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
+
+    <div id="fb-chord-exam-panel">
+      <div class="fb-stats" id="fb-chord-stats"></div>
+      <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
+      <div class="fb-pitch-target" id="fb-chord-target"></div>
+      <div class="fb-chord-formula" id="fb-chord-formula"></div>
+      <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
+      <div class="fb-caged-answer">
+        <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
+        <button class="btn btn-ghost btn-sm hidden" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()">🔊 Preview progression</button>
+      </div>
+      <div class="fb-feedback" id="fb-chord-feedback"></div>
+      <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
+      <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
+    </div>
+  </div>
+
+  <!-- Key Drill: 看和弦秒答级数 / 看级数秒答和弦. See key-drill.js. -->
+  <div class="fb-panel" id="fb-keydrill">
+    <div class="kd-intro">看和弦秒答级数，看级数秒答和弦——练到像乘法口诀表一样条件反射。出题按常用调的实际使用频率加权，越常用的调（G/C/D/A/E）出现越多。</div>
+
+    <div class="kd-options">
+      <label>方向
+        <select id="kd-direction">
+          <option value="mixed">混合（两个方向都练）</option>
+          <option value="chordToDegree">看和弦猜级数</option>
+          <option value="degreeToChord">看级数猜和弦</option>
+        </select>
+      </label>
+      <label>练习范围
+        <select id="kd-focus-key"></select>
+      </label>
+    </div>
+
+    <div class="kd-stats-row">
+      <span>本次正确率 <b id="kd-session-stat">0 / 0</b></span>
+      <span>连对 <b id="kd-streak">0</b></span>
+      <span>反应时限 <b id="kd-time-limit">5.0s</b></span>
+    </div>
+
+    <div class="kd-card">
+      <div class="kd-key-label" id="kd-key-label"></div>
+      <div class="kd-timer-bar"><div class="kd-timer-fill" id="kd-timer-fill"></div></div>
+      <div class="kd-prompt" id="kd-prompt"></div>
+      <div class="kd-choices" id="kd-choices"></div>
+      <div class="kd-feedback" id="kd-feedback"></div>
+      <button type="button" class="kd-continue-btn hidden" id="kd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+    </div>
+
+    <div class="kd-keystats-title">各调正确率（按常用度排序）</div>
+    <div class="kd-keystats" id="kd-keystats"></div>
+  </div>
+
+  <!-- Dom Drill: dominant⇄target reflex (V/x and V7→I), key-agnostic — one
+       step on the circle of fifths in either direction. See dom-drill.js.
+       Reuses Key Drill's kd-* card/quiz CSS classes verbatim; only the
+       circle reference below has its own styles. -->
+  <div class="fb-panel" id="fb-domdrill">
+    <div class="kd-intro">看到目标和弦秒答它的属七和弦（V7），看到属七和弦秒答它解决到谁、秒答它的 3 音和 ♭7 音（导音对）——练的就是五度圈上的一格：找属 = 顺时针一格，解决 = 逆时针一格。出题按该根音在流行/摇滚里被当做目标的常见度加权。</div>
+
+    <div class="kd-options">
+      <label>方向
+        <select id="dd-direction">
+          <option value="mixed">混合（三种都练）</option>
+          <option value="targetToDom">看目标找属和弦</option>
+          <option value="domToTarget">看属和弦找解决目标</option>
+          <option value="guideTones">属和弦的 3 音 / ♭7 音（导音对）</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="dd-show-circle"> 显示五度圈参照</label>
+    </div>
+
+    <div class="kd-stats-row">
+      <span>本次正确率 <b id="dd-session-stat">0 / 0</b></span>
+      <span>连对 <b id="dd-streak">0</b></span>
+      <span>反应时限 <b id="dd-time-limit">5s</b></span>
+    </div>
+
+    <div class="kd-card">
+      <div class="kd-key-label" id="dd-dir-label"></div>
+      <div class="kd-timer-bar"><div class="kd-timer-fill" id="dd-timer-fill"></div></div>
+      <div class="kd-prompt" id="dd-prompt"></div>
+      <div class="kd-choices" id="dd-choices"></div>
+      <div class="kd-feedback" id="dd-feedback"></div>
+      <button type="button" class="kd-continue-btn hidden" id="dd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
+    </div>
+
+    <div id="dd-circle-wrap">
+      <svg id="dd-circle" class="dd-circle" viewBox="0 0 240 240" width="240" height="240"></svg>
+      <div class="dd-circle-caption">顺时针一格 = 这个和弦的属（V）· 逆时针一格 = 属和弦的解决目标</div>
+    </div>
+
+    <div class="kd-keystats-title">各目标根音正确率（按五度圈顺序）</div>
+    <div class="kd-keystats" id="dd-rootstats"></div>
   </div>
 
   <!-- Pitch Match (mic ear training) -->
@@ -335,33 +437,6 @@
   <div class="fb-feedback" id="fb-tuner-hint">Tip: open string or the 12th-fret harmonic both work — the harmonic often gives a cleaner, more stable reading since it has fewer overtones muddying the fundamental.</div>
 </div>
 
-<!-- CHORD MATCH PAGE (mic-based chord sight-reading: strum the named chord,
-     get confirmation) — promoted to its own top-level page so it isn't also
-     nested as a Fretboard sub-tab; still shares fbState.chord/fbMic with the
-     fb-*.js modules since the underlying drill logic didn't need to move. -->
-<div class="page" id="page-chordmatch">
-  <div class="page-header"><h2 class="page-title">Chord Match</h2></div>
-
-  <div class="fb-options" id="fb-chord-options"></div>
-  <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
-
-  <div id="fb-chord-exam-panel">
-    <div class="fb-stats" id="fb-chord-stats"></div>
-    <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
-    <div class="fb-pitch-target" id="fb-chord-target"></div>
-    <div class="fb-chord-formula" id="fb-chord-formula"></div>
-    <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
-    <div class="fb-caged-answer">
-      <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
-      <button class="btn btn-ghost btn-sm hidden" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()">🔊 Preview progression</button>
-    </div>
-    <div class="fb-feedback" id="fb-chord-feedback"></div>
-    <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
-    <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
-  </div>
-</div>
-
-<!-- SPEED TRAINER PAGE -->
 <!-- LICKS LIST PAGE -->
 <div class="page" id="page-licks">
   <div class="page-header">
@@ -421,7 +496,10 @@
 <div id="st-panel" class="st-panel-card">
   <div class="st-active-lick-banner hidden" id="st-active-lick-banner"></div>
 
+  <!-- 动态圆点 + BPM 调节 + 节拍本身（Beats/bar、Subdivision）—— 这些是
+       "节拍器"这一层的东西，练习中一直在看/碰，分割线以上。 -->
   <div class="st-live">
+    <div class="st-beat-row" id="st-beat-row"></div>
     <div class="st-bpm-row">
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-5)">−5</button>
@@ -433,109 +511,29 @@
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
     </div>
-    <div class="st-meta-row">
-      <div class="st-beat-row" id="st-beat-row"></div>
-      <div class="st-progress" id="st-progress"></div>
+    <div class="st-rhythm-row">
+      <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
+      <label class="st-field st-field-wide"><span class="st-field-label">Subdivision</span>
+        <select id="st-subdivision">
+          <option value="1" selected>Quarter notes</option>
+          <option value="2">Eighth notes</option>
+          <option value="4">Sixteenth notes</option>
+        </select>
+      </label>
     </div>
   </div>
 
+  <!-- 动态提速（练到多快、怎么涨、涨完要不要折返）—— 设定一次基本不动，
+       分割线以下。 -->
   <div class="st-settings">
     <label class="st-field"><span class="st-field-label">Start</span><input type="number" id="st-start-bpm" min="20" max="300" value="60"></label>
     <label class="st-field"><span class="st-field-label">Target</span><input type="number" id="st-target-bpm" min="20" max="300" value="120"></label>
     <label class="st-field"><span class="st-field-label">Step</span><input type="number" id="st-step-bpm" min="1" max="30" value="4"></label>
-    <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4"></label>
-    <label class="st-field st-field-wide"><span class="st-field-label">Subdivision</span>
-      <select id="st-subdivision">
-        <option value="1" selected>Quarter notes</option>
-        <option value="2">Eighth notes</option>
-        <option value="4">Sixteenth notes</option>
-      </select>
-    </label>
     <label class="st-auto-advance-label"><input type="checkbox" id="st-auto-advance"> Auto-advance every
       <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" class="w-[48px]!"> bars</label>
+    <label class="st-bounce-label"><input type="checkbox" id="st-bounce"> Bounce back to Start once Target is reached (loops)</label>
   </div>
 </div>
-</div>
-
-<!-- KEY DRILL PAGE -->
-<div class="page" id="page-keydrill">
-  <div class="page-header"><h2 class="page-title">Key Drill</h2></div>
-  <div class="kd-intro">看和弦秒答级数，看级数秒答和弦——练到像乘法口诀表一样条件反射。出题按常用调的实际使用频率加权，越常用的调（G/C/D/A/E）出现越多。</div>
-
-  <div class="kd-options">
-    <label>方向
-      <select id="kd-direction">
-        <option value="mixed">混合（两个方向都练）</option>
-        <option value="chordToDegree">看和弦猜级数</option>
-        <option value="degreeToChord">看级数猜和弦</option>
-      </select>
-    </label>
-    <label>练习范围
-      <select id="kd-focus-key"></select>
-    </label>
-  </div>
-
-  <div class="kd-stats-row">
-    <span>本次正确率 <b id="kd-session-stat">0 / 0</b></span>
-    <span>连对 <b id="kd-streak">0</b></span>
-    <span>反应时限 <b id="kd-time-limit">5.0s</b></span>
-  </div>
-
-  <div class="kd-card">
-    <div class="kd-key-label" id="kd-key-label"></div>
-    <div class="kd-timer-bar"><div class="kd-timer-fill" id="kd-timer-fill"></div></div>
-    <div class="kd-prompt" id="kd-prompt"></div>
-    <div class="kd-choices" id="kd-choices"></div>
-    <div class="kd-feedback" id="kd-feedback"></div>
-    <button type="button" class="kd-continue-btn hidden" id="kd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
-  </div>
-
-  <div class="kd-keystats-title">各调正确率（按常用度排序）</div>
-  <div class="kd-keystats" id="kd-keystats"></div>
-</div>
-
-<!-- DOM DRILL PAGE: dominant⇄target reflex (V/x and V7→I), key-agnostic —
-     one step on the circle of fifths in either direction. See dom-drill.js.
-     Reuses Key Drill's kd-* card/quiz CSS classes verbatim; only the circle
-     reference below has its own styles. -->
-<div class="page" id="page-domdrill">
-  <div class="page-header"><h2 class="page-title">Dom Drill</h2></div>
-  <div class="kd-intro">看到目标和弦秒答它的属七和弦（V7），看到属七和弦秒答它解决到谁、秒答它的 3 音和 ♭7 音（导音对）——练的就是五度圈上的一格：找属 = 顺时针一格，解决 = 逆时针一格。出题按该根音在流行/摇滚里被当做目标的常见度加权。</div>
-
-  <div class="kd-options">
-    <label>方向
-      <select id="dd-direction">
-        <option value="mixed">混合（三种都练）</option>
-        <option value="targetToDom">看目标找属和弦</option>
-        <option value="domToTarget">看属和弦找解决目标</option>
-        <option value="guideTones">属和弦的 3 音 / ♭7 音（导音对）</option>
-      </select>
-    </label>
-    <label><input type="checkbox" id="dd-show-circle"> 显示五度圈参照</label>
-  </div>
-
-  <div class="kd-stats-row">
-    <span>本次正确率 <b id="dd-session-stat">0 / 0</b></span>
-    <span>连对 <b id="dd-streak">0</b></span>
-    <span>反应时限 <b id="dd-time-limit">5s</b></span>
-  </div>
-
-  <div class="kd-card">
-    <div class="kd-key-label" id="dd-dir-label"></div>
-    <div class="kd-timer-bar"><div class="kd-timer-fill" id="dd-timer-fill"></div></div>
-    <div class="kd-prompt" id="dd-prompt"></div>
-    <div class="kd-choices" id="dd-choices"></div>
-    <div class="kd-feedback" id="dd-feedback"></div>
-    <button type="button" class="kd-continue-btn hidden" id="dd-continue-btn">继续 → <span class="kd-continue-hint">（或按空格/回车）</span></button>
-  </div>
-
-  <div id="dd-circle-wrap">
-    <svg id="dd-circle" class="dd-circle" viewBox="0 0 240 240" width="240" height="240"></svg>
-    <div class="dd-circle-caption">顺时针一格 = 这个和弦的属（V）· 逆时针一格 = 属和弦的解决目标</div>
-  </div>
-
-  <div class="kd-keystats-title">各目标根音正确率（按五度圈顺序）</div>
-  <div class="kd-keystats" id="dd-rootstats"></div>
 </div>
 
 <!-- SONG LOOP PAGE -->

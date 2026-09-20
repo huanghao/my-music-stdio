@@ -111,13 +111,14 @@ function fbPrefsLoad() {
     if (Number.isFinite(saved.iv.width)) fbState.iv.width = saved.iv.width;
     if (Number.isFinite(saved.iv.height)) fbState.iv.height = saved.iv.height;
   }
-  // 'chord' deliberately excluded — Chord Match moved off the Fretboard tab
-  // strip onto its own page, so a stale saved 'chord' (from before that
-  // change) must fall through to the default 'pitch' rather than restore a
-  // mode fbShowMode can no longer find a tab/panel for. 'iv' is excluded for
-  // the same reason — Interval Shapes moved off the tab strip entirely, onto
-  // its own page-independent floating panel (see fbIvInit).
-  if (['pitch', 'tuner', 'ear', 'bend', 'seq', 'chordid'].includes(saved.activeMode)) {
+  // 'tuner' deliberately excluded — Tuner moved off the Fretboard tab strip
+  // onto its own page, so a stale saved 'tuner' (from before that change)
+  // must fall through to the default 'pitch' rather than restore a mode
+  // fbShowMode can no longer find a tab/panel for. 'iv' is excluded for the
+  // same reason — Interval Shapes moved off the tab strip entirely, onto its
+  // own page-independent floating panel (see fbIvInit). 'chord', 'keydrill'
+  // and 'domdrill' are back on/added to the tab strip, so they're allowed.
+  if (['pitch', 'ear', 'bend', 'seq', 'chordid', 'chord', 'keydrill', 'domdrill'].includes(saved.activeMode)) {
     fbState.activeMode = saved.activeMode;
   }
 }

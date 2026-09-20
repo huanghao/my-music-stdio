@@ -90,11 +90,11 @@ function fbRenderDeviceBar() {
 }
 
 // fb_prefs bundles every drill's settings (pitch/chord/ear/bend/seq) into one
-// blob, but Fretboard and Chord Match are now separate pages that can be
-// visited in either order — this makes sure the blob loads exactly once
-// regardless of which page gets there first, so a later visit to the other
-// page doesn't re-run fbPrefsLoad() and clobber any in-memory state (stats,
-// unsaved option changes) accumulated since the first load.
+// blob, but Fretboard and Tuner are separate pages that can be visited in
+// either order — this makes sure the blob loads exactly once regardless of
+// which page gets there first, so a later visit to the other page doesn't
+// re-run fbPrefsLoad() and clobber any in-memory state (stats, unsaved
+// option changes) accumulated since the first load.
 function fbEnsurePrefsLoaded() {
   if (fbState.prefsLoaded) return;
   fbState.prefsLoaded = true;
@@ -107,14 +107,16 @@ async function initFretboardPage() {
   fbState.inited = true;
   fbEnsurePrefsLoaded();
   fbRenderEarOptions();
-  await Promise.all([fbPitchLoadStats(), fbEarLoadStats()]);
+  await Promise.all([fbPitchLoadStats(), fbEarLoadStats(), fbChordLoadStats()]);
   fbEarTwoNext();
   fbEarThreeNext();
   fbEarSetMode(fbState.ear.mode);
   fbRenderPitchOptions();
   fbPitchNewNote();
   fbRenderPitchStatsTable();
-  fbRenderTunerStrings();
+  fbRenderChordOptions();
+  fbChordNewChord();
+  fbRenderChordStatsTable();
   fbBendInit();
   fbRenderSeqOptions();
   fbSeqBuild();
@@ -123,17 +125,15 @@ async function initFretboardPage() {
   fbShowMode(fbState.activeMode);
 }
 
-// Chord Match used to be one of Fretboard's tabs (fbShowMode('chord')); it's
-// now a standalone top-level page so it isn't also nested a level down —
-// same fbState.chord / fbMic underneath, just its own page lifecycle.
-async function initChordMatchPage() {
-  if (fbState.chordInited) return;
-  fbState.chordInited = true;
+// Tuner used to be one of Fretboard's tabs (fbShowMode('tuner')); it's now a
+// standalone top-level page — too commonly used, and unrelated to the
+// fretboard itself — same fbState.tuner / fbMic underneath, just its own
+// page lifecycle.
+function initTunerPage() {
+  if (fbState.tunerInited) return;
+  fbState.tunerInited = true;
   fbEnsurePrefsLoaded();
-  await fbChordLoadStats();
-  fbRenderChordOptions();
-  fbChordNewChord();
-  fbRenderChordStatsTable();
+  fbRenderTunerStrings();
   fbRenderControlAction(); // register this page's mic drill on the shared transport bar
 }
 
@@ -149,12 +149,18 @@ function fbShowMode(mode) {
   document.querySelectorAll('.fb-panel').forEach(p => p.classList.remove('active'));
   document.getElementById('fb-' + mode).classList.add('active');
   fbState.activeMode = mode;
+  // Key Drill / Dom Drill aren't part of the shared fb_prefs blob (their own
+  // localStorage keys, see kd-prefs/dd-prefs.js) and, like when they were
+  // standalone pages, re-init on every visit to this tab so their stats
+  // table reflects anything practiced since the last visit.
+  if (mode === 'keydrill' && typeof initKeyDrillPage === 'function') initKeyDrillPage();
+  if (mode === 'domdrill' && typeof initDomDrillPage === 'function') initDomDrillPage();
   fbRenderControlAction();
   fbPrefsSave();
 }
 
-// releases the mic when navigating away from Fretboard or Chord Match
-// entirely (see showPage()'s leavingMicPage check in app.js)
+// releases the mic when navigating away from Fretboard or Tuner entirely
+// (see showPage()'s leavingMicPage check in app.js)
 function fbLeavePage() {
   if (fbMic.listening) fbMicStop();
 }
@@ -175,7 +181,7 @@ fbSeqNewSequence          = guarded(fbSeqNewSequence);
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FB_INTERFACE_RE, FB_BUILTIN_RE, fbDedupDevices, fbDeviceScore, fbPickPreferredDevice, fbDeviceWatchInited,
-    fbWatchDeviceChanges, fbRenderDeviceBar, fbEnsurePrefsLoaded, initFretboardPage, initChordMatchPage, fbShowMode,
-    fbLeavePage,
+    fbWatchDeviceChanges, fbRenderDeviceBar, fbEnsurePrefsLoaded, initFretboardPage, initTunerPage,
+    fbShowMode, fbLeavePage,
   };
 }

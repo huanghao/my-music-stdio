@@ -66,12 +66,34 @@ body {
 .page { display: none; padding: 16px 24px 60px; }
 .page.active { display: block; }
 
+/* Narrow screens: the nav scrolls sideways instead of wrapping, and the
+   page gutter shrinks so content keeps the width it has on desktop. */
+@media (max-width: 640px) {
+  .page { padding: 12px 16px 48px; }
+  .nav { overflow-x: auto; scrollbar-width: none; padding: 0 12px; }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-btn, .nav-title { flex-shrink: 0; }
+}
+
+/* Respect the OS setting: keep state changes, drop the motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 .btn {
-  padding: 7px 16px; border-radius: 6px; border: none;
+  padding: 7px 16px; border-radius: var(--rad-md); border: none;
   cursor: pointer; font-size: 13px; font-weight: 500;
-  transition: opacity 0.1s; white-space: nowrap;
+  transition: opacity 0.15s, transform 0.08s, box-shadow 0.15s; white-space: nowrap;
 }
 .btn:hover { opacity: 0.85; }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--primary-lt); outline-offset: 2px; }
+.btn:disabled { opacity: 0.45; cursor: default; }
 .btn-primary { background: var(--primary); color: var(--text-inverse); }
 .btn-stop    { background: var(--danger-dark); color: var(--text-inverse); }
 .btn-ghost        { background: none; border: 1px solid var(--border-dim); color: var(--text-dim); }
@@ -1092,6 +1114,9 @@ input[type="number"] { width: 64px; text-align: center; }
 .page-title {
   font-family: var(--font-display); font-size: var(--fs-display);
   font-weight: 700; letter-spacing: -0.01em; line-height: 1.2; color: var(--text);
+}
+@media (max-width: 640px) {
+  .page-title { font-size: var(--fs-display-sm); }
 }
 
 /* Back-navigation row (e.g. "← Licks" above a detail view) */

@@ -121,6 +121,7 @@
   --fs-xl:   18px;
   --fs-2xl:  20px;
   --fs-display: 26px;  /* page titles — the one display-level size */
+  --fs-display-sm: 22px;  /* same, on narrow screens */
 
   /* font families — Plex Sans for UI, Plex Mono for numbers/timers,
      Source Serif 4 for display headings (both loaded in index.html) */

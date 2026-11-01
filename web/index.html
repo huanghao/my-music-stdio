@@ -95,6 +95,7 @@
       --text-lg: var(--fs-lg);
       --text-xl: var(--fs-xl);
       --text-2xl: var(--fs-2xl);
+      --text-display: var(--fs-display);
       --shadow-sm: var(--elev-sm);
       --shadow-md: var(--elev-md);
       --shadow-lg: var(--elev-lg);
@@ -114,7 +115,7 @@
 <body>
 
 <nav class="nav">
-  <span class="nav-title">🎵</span>
+  <span class="nav-title" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></span>
   <!-- Backing tracks -->
   <button class="nav-btn active" data-page="vamp"      onclick="navGoToPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"        onclick="navGoToPage('jam')">Jam</button>

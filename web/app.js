@@ -230,13 +230,17 @@ document.addEventListener('visibilitychange', function() {
 // URL shape (hash-based — no server routing changes, works with the
 // existing single-page index.html):
 //   #/<page>                                  top-level page, e.g. #/fretboard
-//   #/licks/<lickId>                          a Lick's detail/practice view
-//   #/licks/<lickId>/edit                     that Lick's full-page notes editor
+//   #/licks/<title-slug>?id=<lickId>           a Lick's detail/practice view
+//   #/licks/<title-slug>/edit?id=<lickId>      that Lick's full-page notes editor
 //   #/songloop?url=<enc>&label=<enc>          a loaded Song Loop track
 
 function navHashFor(route) {
   if (route.lickId) {
-    return `#/licks/${encodeURIComponent(route.lickId)}${route.lickEdit ? '/edit' : ''}`;
+    const lick = typeof licksState !== 'undefined' ? licksState.licksById[route.lickId] : null;
+    const title = route.lickTitle || lick?.title || route.lickId;
+    const slug = title.trim().replace(/[^\w\u4e00-\u9fff-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || route.lickId;
+    const id = new URLSearchParams({ id: route.lickId });
+    return `#/licks/${encodeURIComponent(slug)}${route.lickEdit ? '/edit' : ''}?${id}`;
   }
   if (route.page === 'songloop' && route.songUrl) {
     const params = new URLSearchParams({ url: route.songUrl });
@@ -251,7 +255,13 @@ function navParseHash(hash) {
   const [pathPart, queryPart] = raw.split('?');
   const segments = pathPart.split('/').filter(Boolean);
   const route = { page: segments[0] || 'vamp' };
-  if (route.page === 'licks' && segments[1]) route.lickId = decodeURIComponent(segments[1]);
+  if (route.page === 'licks' && segments[1]) {
+    const params = new URLSearchParams(queryPart || '');
+    // New URLs show the current title as a readable slug while preserving
+    // the immutable storage id in the query. Older #/licks/<id> links remain
+    // valid and are canonicalized after the lick record loads.
+    route.lickId = params.get('id') || decodeURIComponent(segments[1]);
+  }
   if (route.lickId && segments[2] === 'edit') route.lickEdit = true;
   if (route.page === 'songloop' && queryPart) {
     const params = new URLSearchParams(queryPart);
@@ -293,6 +303,12 @@ function navigateTo(route) {
 function navGoToPage(page) { return navigateTo({ page }); }
 function navOpenLick(lickId) { return navigateTo({ page: 'licks', lickId }); }
 function navOpenLickEdit(lickId) { return navigateTo({ page: 'licks', lickId, lickEdit: true }); }
+
+function navCanonicalizeLickUrl(lickId, title, lickEdit = false) {
+  if (!location.hash.startsWith('#/licks/')) return;
+  const route = { page: 'licks', lickId, lickTitle: title, lickEdit };
+  history.replaceState(route, '', navHashFor(route));
+}
 
 window.addEventListener('popstate', (e) => {
   navApplyRoute(e.state || navParseHash(location.hash));

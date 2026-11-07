@@ -20,6 +20,8 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+!web/vendor/pdfjs/build/
+!web/vendor/pdfjs/build/*.mjs
 develop-eggs/
 dist/
 downloads/

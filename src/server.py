@@ -2,6 +2,9 @@ import json
 import logging
 import re
 import shutil
+import tempfile
+from functools import wraps
+from threading import RLock
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +16,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from typing import Any, Optional
+
+from src.lick_models import LickBody, LickTrainingUpdate
 
 import src.prefs as prefs
 import src.audio_devices as audio_devices
@@ -67,11 +72,6 @@ class VolumeBody(BaseModel):
 class LickSession(BaseModel):
     bpm: float = Field(ge=20.0, le=300.0)
     duration_min: float = Field(ge=0.5, le=180.0)
-
-class LickBody(BaseModel):
-    title: str = "Untitled"
-    notes: str = ""
-    target_bpm: Optional[float] = Field(default=None, ge=20.0, le=300.0)
 
 class LickBpmUpdate(BaseModel):
     bpm: float = Field(ge=20.0, le=300.0)
@@ -167,11 +167,30 @@ def _attachment_path(lick_id: str, filename: str) -> Path:
         raise HTTPException(status_code=400, detail="Invalid attachment filename")
     return p
 
+_lick_write_lock = RLock()
+
+
+def _locked_lick_write(func):
+    @wraps(func)
+    def locked(*args, **kwargs):
+        with _lick_write_lock:
+            return func(*args, **kwargs)
+    return locked
+
+
 def _write_lick(lick_id: str, data: dict) -> None:
     d = _lick_path(lick_id)
     d.mkdir(parents=True, exist_ok=True)
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
-    (d / "lick.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
+    # Lists/readers must never see a partly written record.
+    with tempfile.NamedTemporaryFile(mode="w", dir=d, delete=False, encoding="utf-8") as f:
+        temporary = Path(f.name)
+        try:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+            f.flush()
+            temporary.replace(d / "lick.json")
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 # ── Materials library ──
@@ -183,10 +202,6 @@ def _write_lick(lick_id: str, data: dict) -> None:
 # (src/materials_store.py) — routes below only see that interface.
 
 MAX_MATERIAL_BYTES = 100 * 1024 * 1024  # 100MB — generous for backing-track audio
-
-def _materials_dir() -> Path:
-    return Path(prefs.load()["materials_dir"]).expanduser()
-
 # Lesson videos (1080p, tens of minutes) are far bigger than audio/PDF; the Lick notes
 # play them inline with <video> (web/licks.js licksIsVideoFileUrl).
 MAX_VIDEO_MATERIAL_BYTES = 1024 * 1024 * 1024
@@ -195,6 +210,10 @@ VIDEO_MATERIAL_EXTS = (".mp4", ".webm", ".mov", ".m4v")
 
 def _material_size_limit(filename: str) -> int:
     return MAX_VIDEO_MATERIAL_BYTES if filename.lower().endswith(VIDEO_MATERIAL_EXTS) else MAX_MATERIAL_BYTES
+
+def _materials_dir() -> Path:
+    return Path(prefs.load()["materials_dir"]).expanduser()
+
 _materials_store = LocalFlatMaterialsStore(_materials_dir)
 
 
@@ -392,6 +411,7 @@ def api_list_all_lick_sessions():
 
 
 @app.post("/api/licks")
+@_locked_lick_write
 def api_create_lick(lick: LickBody):
     data = lick.model_dump()
     data["sessions"] = []
@@ -414,14 +434,25 @@ def api_get_lick(lick_id: str):
 
 
 @app.put("/api/licks/{lick_id}")
+@_locked_lick_write
 def api_update_lick(lick_id: str, lick: LickBody):
     data = _read_lick(lick_id)
-    data.update(lick.model_dump())
+    data.update(lick.model_dump(exclude_unset=True))
+    _write_lick(lick_id, data)
+    return {**data, "id": lick_id}
+
+
+@app.put("/api/licks/{lick_id}/practice-plan")
+@_locked_lick_write
+def api_update_lick_training(lick_id: str, body: LickTrainingUpdate):
+    data = _read_lick(lick_id)
+    data.update(body.model_dump(exclude_unset=True))
     _write_lick(lick_id, data)
     return {**data, "id": lick_id}
 
 
 @app.delete("/api/licks/{lick_id}")
+@_locked_lick_write
 def api_delete_lick(lick_id: str):
     p = _lick_path(lick_id)
     if not p.exists():
@@ -431,6 +462,7 @@ def api_delete_lick(lick_id: str):
 
 
 @app.post("/api/licks/{lick_id}/sessions")
+@_locked_lick_write
 def api_add_lick_session(lick_id: str, session: LickSession):
     data = _read_lick(lick_id)
     data.setdefault("sessions", []).append({
@@ -443,6 +475,7 @@ def api_add_lick_session(lick_id: str, session: LickSession):
 
 
 @app.post("/api/licks/{lick_id}/bpm")
+@_locked_lick_write
 def api_update_lick_bpm(lick_id: str, body: LickBpmUpdate):
     """Auto-save hook: called (debounced) whenever the Speed Trainer's tempo
     changes while a lick is being actively practiced, so live progress isn't
@@ -458,6 +491,7 @@ def api_update_lick_bpm(lick_id: str, body: LickBpmUpdate):
 
 
 @app.post("/api/licks/{lick_id}/metronome_linked")
+@_locked_lick_write
 def api_update_lick_metronome_linked(lick_id: str, body: LickMetronomeLinkUpdate):
     """Whether this lick's practice timer is linked to the metronome's
     Play/Stop (see ptToggleLinked/licksNotifyLinkedChange in

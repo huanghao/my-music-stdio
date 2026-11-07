@@ -440,11 +440,15 @@
 
 <!-- LICKS LIST PAGE -->
 <div class="page" id="page-licks">
-  <div class="page-header">
+  <div class="page-header max-w-[960px]!">
     <h2 class="page-title">Licks</h2>
     <button class="btn btn-primary" onclick="newLick()">+ New Lick</button>
   </div>
-  <div id="licks-list"></div>
+  <div class="flex flex-wrap items-center gap-3 mb-5 max-w-[960px]">
+    <input class="flex-1 min-w-[180px]" id="licks-search" type="search" placeholder="搜索练习或课程集…" aria-label="搜索练习" oninput="licksFilterList()">
+    <div class="pl-lookup-tabs mb-0!" id="licks-type-tabs" role="group" aria-label="按类型筛选"></div>
+  </div>
+  <div id="licks-list" class="max-w-[960px]"></div>
   <div id="lick-heatmap"></div>
 </div>
 
@@ -478,6 +482,7 @@
     <button type="button" class="btn btn-ghost btn-sm" title="共享材料库，多个 Lick 可以引用同一份文件" onclick="openMaterialPicker()">📎 Attach material (PDF/Audio)</button>
     <span id="lick-edit-image-status" class="lick-edit-image-status"></span>
   </div>
+  <div id="lick-course-editor"></div>
   <div class="lick-editor-body">
     <div id="lick-editor-edit-pane" class="lick-editor-edit-pane">
       <textarea id="lick-edit-notes" placeholder="Markdown 笔记 —— 右侧点一下即插入资源写法，不用背语法"></textarea>
@@ -501,7 +506,7 @@
        "节拍器"这一层的东西，练习中一直在看/碰，分割线以上。 -->
   <div class="st-live">
     <div class="st-beat-row" id="st-beat-row"></div>
-    <div class="st-bpm-row">
+    <div class="st-bpm-row flex-wrap sm:flex-nowrap gap-1.5! sm:gap-2.5!">
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-5)">−5</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-1)">−</button>
@@ -512,13 +517,15 @@
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
     </div>
-    <div class="st-rhythm-row">
+    <div class="st-rhythm-row flex-wrap sm:flex-nowrap">
       <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
       <label class="st-field st-field-wide"><span class="st-field-label">Subdivision</span>
         <select id="st-subdivision">
           <option value="1" selected>Quarter notes</option>
           <option value="2">Eighth notes</option>
+          <option value="3">Triplets · 三连音</option>
           <option value="4">Sixteenth notes</option>
+          <option value="6">Sextuplets · 六连音</option>
         </select>
       </label>
     </div>
@@ -526,13 +533,17 @@
 
   <!-- 动态提速（练到多快、怎么涨、涨完要不要折返）—— 设定一次基本不动，
        分割线以下。 -->
+  <div id="lick-plan-cycles" class="hidden flex flex-wrap gap-3 items-center mt-3 text-sm">
+    <label>一轮 <input class="w-14! px-1.5! py-1!" id="lick-loop-bars" type="number" min="1" max="128" value="4" onchange="licksPlanCyclesChanged()"> 小节</label>
+    <label>每档练 <input class="w-14! px-1.5! py-1!" id="lick-rounds-per-step" type="number" min="1" max="32" value="2" onchange="licksPlanCyclesChanged()"> 轮后提速</label>
+    <span class="text-fg-muted">配置随本课自动保存</span>
+  </div>
   <div class="st-settings">
     <label class="st-field"><span class="st-field-label">Start</span><input type="number" id="st-start-bpm" min="20" max="300" value="60"></label>
     <label class="st-field"><span class="st-field-label">Target</span><input type="number" id="st-target-bpm" min="20" max="300" value="120"></label>
     <label class="st-field"><span class="st-field-label">Step</span><input type="number" id="st-step-bpm" min="1" max="30" value="4"></label>
-    <label class="st-auto-advance-label"><input type="checkbox" id="st-auto-advance"> Auto-advance every
-      <input type="number" id="st-auto-advance-bars" min="1" max="64" value="4" class="w-[48px]!"> bars</label>
-    <label class="st-bounce-label"><input type="checkbox" id="st-bounce"> Bounce back to Start once Target is reached (loops)</label>
+    <label class="st-auto-advance-label"><input type="checkbox" id="st-auto-advance"> 自动提速 <span id="st-legacy-bars">every <input type="number" id="st-auto-advance-bars" min="1" max="4096" value="4" class="w-[48px]!"> bars</span></label>
+    <label class="st-bounce-label max-sm:items-start!"><input type="checkbox" id="st-bounce"> Bounce back to Start once Target is reached (loops)</label>
   </div>
 </div>
 </div>
@@ -984,6 +995,7 @@
 <script src="speed-trainer.js"></script>
 <script src="song-loop.js"></script>
 <script src="licks.js"></script>
+<script src="lick-courses.js"></script>
 <script src="progression-lab.js"></script>
 <script src="key-drill.js"></script>
 <script src="dom-drill.js"></script>

@@ -138,6 +138,7 @@ function stOnOptionsChanged() {
     stUpdateDisplay();
     stNotifyLickBpm();
   }
+  if (typeof licksNotifyPlanChange === 'function') licksNotifyPlanChange();
 }
 
 function stRenderBeatRow() {
@@ -239,6 +240,7 @@ function stStart() {
   if (stState.audioCtx.state === 'suspended') stState.audioCtx.resume();
   stState.currentBpm = Math.min(Math.max(stState.currentBpm, stState.startBpm), stState.targetBpm);
   stPrefsSave(); // the clamp above may have moved the persisted tempo
+  stNotifyLickBpm();
   stState.tickIndex = 0;
   stState.barsCompletedAtCurrentBpm = 0;
   stState.rampDirection = 1; // every Start begins ascending toward Target, regardless of which way a previous bounce run ended

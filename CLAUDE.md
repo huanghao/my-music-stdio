@@ -22,6 +22,7 @@
 | Progression Lab | `pl_prefs` | `progression-lab.js` |
 | Agent 助教面板选项（对话历史在后端 `agent-sessions/`，划词笔记 `marks` 是短期数据，划词后最终会进对话 session，故意不迁） | `mps_agent_prefs` | `agent-assistant.js` |
 | 练习计时器运行状态（倒计时进度/暂停/联动开关；完成的计时块 `blocks` 已搬后端，见下表 `pt_blocks`） | `pt_state` | `practice-timer.js` |
+| Licks 课程列表筛选、课程集/参考资料/编辑器展开状态、示范视频位置与速度 | `lick_course_ui` | `lick-courses.js` `licksCourseUiLoad()` / `licksCourseUiSave()`（只存界面偏好；每课训练配置仍存后端 Lick） |
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |

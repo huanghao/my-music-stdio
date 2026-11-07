@@ -28,7 +28,7 @@ function licksAgentContext(lick) {
   const seen = new Set();
   const re = /\/api\/materials\/([\w.-]+\.pdf)\b/gi;
   let m;
-  while ((m = re.exec(lick?.notes || '')) !== null) {
+  while ((m = re.exec((lick?.notes || '') + '\n' + (lick?.pdf_url || ''))) !== null) {
     if (seen.has(m[1])) continue;
     seen.add(m[1]);
     pdfMaterials.push({ material_id: m[1], filename: m[1].replace(/^\d+_/, '') });
@@ -238,8 +238,8 @@ function licksTitleParts(title) {
 // found/rewritten safely (see licksFindLinkAt); the caller then keeps the
 // resize as a view-only tweak.
 function licksRewriteLinkSize(notes, idx, sizes) {
-  const w = Number.isFinite(sizes.w) ? Math.round(sizes.w) : null;
-  const h = Number.isFinite(sizes.h) ? Math.round(sizes.h) : null;
+  const w = Number.isFinite(sizes.w) && sizes.w > 0 ? Math.round(sizes.w) : null;
+  const h = Number.isFinite(sizes.h) && sizes.h > 0 ? Math.round(sizes.h) : null;
   if (w === null && h === null) return null;
   const found = licksFindLinkAt(notes, idx);
   if (!found) return null;
@@ -432,7 +432,7 @@ function licksPdfEmbedHtml(href, dir, mlIdx) {
   // for wider). `h` overrides the fixed 600px iframe height for the same
   // reason — a much wider embed with the old fixed height would letterbox.
   const styleAttr = dir.w ? ` style="max-width:${dir.w}px"` : '';
-  const h = Number.isFinite(dir.h) ? Math.max(100, Math.round(dir.h)) : null;
+  const h = Number.isFinite(dir.h) && dir.h > 0 ? Math.max(200, Math.round(dir.h)) : null;
   const src = licksPdfViewerSrc(href, licksPdfFrag(page, dir.y));
   const dataAttrs = ` data-href="${htmlEsc(href)}" data-src="${htmlEsc(src)}" data-page="${page}"` +
     (h ? ` data-h="${h}"` : '');
@@ -822,38 +822,7 @@ function licksStalenessAccent(lastDateIso) {
 }
 
 async function loadLicks() {
-  const el = document.getElementById('licks-list');
-  if (!el) return;
-  el.innerHTML = '<p class="empty-state">Loading…</p>';
-  const licks = licksSortByLast(await api('/api/licks'));
-  if (!licks.length) {
-    el.innerHTML = '<p class="empty-state">No licks yet — click "+ New Lick" to start tracking.</p>';
-    return;
-  }
-  licks.forEach(l => { licksState.licksById[l.id] = l; });
-  const totalSessions = licks.reduce((sum, l) => sum + (l.session_count || 0), 0);
-  const mostRecent = licks
-    .map(l => l.last_date).filter(Boolean).sort().pop();
-  const summary = totalSessions === 0 ? '' : `
-    <p class="lick-list-summary">
-      ${licks.length} lick${licks.length !== 1 ? 's' : ''} &nbsp;·&nbsp;
-      ${totalSessions} session${totalSessions !== 1 ? 's' : ''} total
-      ${mostRecent ? `&nbsp;·&nbsp; last practice: ${timeAgo(mostRecent)}` : ''}
-    </p>`;
-  el.innerHTML = summary + licks.map(l => {
-    const lastLabel = l.last_date ? timeAgo(l.last_date) : 'never practiced';
-    const bpmLabel  = l.last_bpm ? `${l.last_bpm} BPM` : '';
-    return `
-      <div class="lick-card" data-lick-id="${l.id}" onclick="navOpenLick('${l.id}')" style="border-left-color:${licksStalenessAccent(l.last_date)}">
-        <div class="lick-card-title">${htmlEsc(l.title)}</div>
-        <div class="lick-card-right">
-          <span class="lick-card-last">${lastLabel}</span>
-          ${bpmLabel ? `<span class="lick-card-bpm">${bpmLabel}</span>` : ''}
-        </div>
-      </div>`;
-  }).join('');
-  // Render the practice heatmap below the list (non-blocking)
-  renderLickHeatmap();
+  return licksLoadCourseList();
 }
 
 // ── Practice heatmap ──
@@ -977,8 +946,10 @@ async function newLick() {
 
 async function openLick(id) {
   const lick = await api(`/api/licks/${id}`);
+  if (lick.collection && !lickCatalog.length) await licksLoadCatalog();
   licksState.currentLick = lick;
   licksState.licksById[id] = lick;
+  if (typeof navCanonicalizeLickUrl === 'function') navCanonicalizeLickUrl(id, lick.title, false);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-lick-detail').classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -1005,8 +976,7 @@ function renderLickDetail(lick) {
   licksDisconnectEmbedResizes();
   const sessions = lick.sessions || [];
   const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
-  const targetLine = lick.target_bpm
-    ? `<span class="lick-target">目标 ${lick.target_bpm} BPM</span>` : '';
+  const targetLine = `<span class="lick-target" id="lick-detail-target">${lick.target_bpm ? `个人目标 ${lick.target_bpm} BPM` : '个人目标未设置'}</span>`;
   // Live progress: the tempo auto-saved while practicing (see
   // licksNotifyBpmChange) can be ahead of the last formally logged session —
   // surface that explicitly so "did my 95 BPM actually get saved?" has a
@@ -1016,10 +986,12 @@ function renderLickDetail(lick) {
     : '';
 
   el.innerHTML = `
-    <div class="lick-detail-header">
+    ${licksCourseNavHtml(lick)}
+    <div class="lick-detail-header gap-2">
       <div>
-        <h2 class="lick-detail-title" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
+        <h2 class="lick-detail-title break-words" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
         ${targetLine}
+        ${licksTypeSwitchHtml(lick)}
       </div>
       <div class="row-actions">
         <button class="btn btn-ghost btn-sm" onclick="navOpenLickEdit('${lick.id}')">Edit</button>
@@ -1029,12 +1001,14 @@ function renderLickDetail(lick) {
     </div>
 
     ${liveNote}
+    ${licksScoreHtml(lick)}
     ${lick.notes ? `<div class="lick-notes-md">${licksRenderNotes(lick.notes)}</div>` : ''}
 
     <!-- Practice slot lives directly under the notes: while practicing, the
          flow is score + metronome together, with the chart/sessions history
          below as reference. Empty when not practicing — no visual change. -->
     <div id="lick-practice-slot"></div>
+    ${licksReferenceHtml(lick)}
 
     <div class="lick-chart-wrap" id="lick-chart-wrap">
       ${renderLickChart(sessions, lick.target_bpm)}
@@ -1062,6 +1036,7 @@ function renderLickDetail(lick) {
       </div>
     </details>
   `;
+  licksRestoreCourseDetailUi(lick);
   licksSyncPracticePanelHome();
   licksWatchEmbedResizes(el);
 }
@@ -1174,7 +1149,10 @@ function lickEditorPrefsSave() {
 
 async function openLickEditor(id) {
   const lick = await api(`/api/licks/${id}`);
-  licksState.editor = { id };
+  licksState.licksById[id] = lick;
+  if (typeof navCanonicalizeLickUrl === 'function') navCanonicalizeLickUrl(id, lick.title, true);
+  licksState.editor = { id, lick };
+  licksRenderCourseEditor(lick);
   document.getElementById('lick-edit-title').value = lick.title || '';
   document.getElementById('lick-edit-notes').value = lick.notes || '';
   document.getElementById('lick-edit-target-bpm').value = lick.target_bpm ?? '';
@@ -1367,7 +1345,12 @@ async function saveLickEdit() {
   const rawBpm = document.getElementById('lick-edit-target-bpm').value;
   const target_bpm = rawBpm !== '' ? parseFloat(rawBpm) : null;
   try {
-    await api(`/api/licks/${id}`, 'PUT', { title, notes, target_bpm });
+    await lickPlanSave.catch(() => {});
+    const extra = licksReadCourseEditor(licksState.licksById[id] || licksState.editor.lick);
+    if (target_bpm != null && target_bpm < extra.practice_plan.start_bpm) throw new Error('目标 BPM 不能低于起始 BPM');
+    const saved = await api(`/api/licks/${id}`, 'PUT', { title, notes, target_bpm, ...extra });
+    licksState.licksById[id] = saved;
+    await licksLoadCatalog();
     licksState.editor = null;
     // Back to the detail page — navOpenLick re-fetches and re-renders it (so
     // the just-saved notes show up), and practice picks up where it was: the
@@ -1402,7 +1385,7 @@ function licksPickPracticeBpm(lick) {
   const sessions = lick.sessions || [];
   if (sessions.length) return sessions[sessions.length - 1].bpm;
   if (Number.isFinite(lick.last_bpm)) return lick.last_bpm;
-  return 60;
+  return lick.practice_plan?.start_bpm ?? 60;
 }
 
 // Starts (or resumes) practicing a lick in-place: the metronome panel
@@ -1415,6 +1398,9 @@ function licksPickPracticeBpm(lick) {
 // lick's detail page and wanting to practice it are the same intent, so
 // there's no separate "Practice Now" button gating the panel any more.
 async function practiceLick(id) {
+  await licksFlushBpmSave();
+  await lickPlanSave.catch(() => {});
+  if (stState.running) stStop();
   // Switching to a different lick than the one currently active implicitly
   // ends that practice — auto-log it (see licksAutoLogSession) before losing
   // track of it.
@@ -1446,8 +1432,7 @@ async function practiceLick(id) {
   // Pre-load the metronome with the lick's last practiced BPM — must come
   // after initSpeedPage(), which reloads stState.startBpm/currentBpm from
   // the global Speed Trainer prefs and would otherwise clobber this.
-  stState.startBpm = bpm;
-  stState.currentBpm = bpm;
+  licksApplyPracticePlan(cached, bpm);
   stApplyStateToUI();
   // stApplyStateToUI only syncs the option inputs (start/target/step/...) —
   // the big current-BPM box is written by stUpdateDisplay(), whose last call
@@ -1506,6 +1491,7 @@ function licksSyncPracticePanelHome() {
   }
   const target = document.getElementById(onActiveLickDetail ? 'lick-practice-slot' : 'st-panel-home');
   if (target && panel.parentElement !== target) target.appendChild(panel);
+  licksSyncPlanVisibility(onActiveLickDetail);
   // Banner visibility depends on where the panel just landed (hidden when
   // embedded in the detail page) — re-evaluate after every move.
   renderActiveLickBanner();
@@ -1528,6 +1514,8 @@ function licksSyncPracticePanelHome() {
 // implicitly ends: navigating away from the Lick detail/Speed Trainer pages
 // (see showPage in app.js) or switching to a different lick (practiceLick).
 async function licksEndPractice() {
+  await licksFlushBpmSave();
+  await lickPlanSave.catch(() => {});
   await licksAutoLogSession(licksState.activeLick);
   licksState.activeLick = null;
   if (typeof ptClearContext === 'function') ptClearContext();
@@ -1584,18 +1572,26 @@ function renderActiveLickBanner() {
 // request per tick — only the value it settles on after 1.5s of quiet gets
 // saved.
 let _licksBpmSaveTimer = null;
+let _licksBpmPending = null;
+let _licksBpmSavePromise = Promise.resolve();
+function licksFlushBpmSave() {
+  clearTimeout(_licksBpmSaveTimer);
+  const pending = _licksBpmPending;
+  _licksBpmPending = null;
+  if (pending) {
+    _licksBpmSavePromise = _licksBpmSavePromise.catch(() => {}).then(() =>
+      api(`/api/licks/${encodeURIComponent(pending.id)}/bpm`, 'POST', { bpm: pending.bpm }));
+  }
+  return _licksBpmSavePromise.catch(e => setStatus('练习速度保存失败：' + e.message));
+}
 function licksNotifyBpmChange(bpm) {
   const a = licksState.activeLick;
   if (!a || !Number.isFinite(bpm)) return;
   a.lastBpm = bpm;
+  licksState.licksById[a.id] = { ...licksState.licksById[a.id], last_practiced_bpm: bpm };
+  _licksBpmPending = { id: a.id, bpm };
   clearTimeout(_licksBpmSaveTimer);
-  _licksBpmSaveTimer = setTimeout(() => {
-    api(`/api/licks/${a.id}/bpm`, 'POST', { bpm })
-      .then(() => {
-        licksState.licksById[a.id] = { ...(licksState.licksById[a.id] || {}), last_practiced_bpm: bpm };
-      })
-      .catch(() => { /* best-effort background autosave — not worth surfacing an error for this */ });
-  }, 1500);
+  _licksBpmSaveTimer = setTimeout(licksFlushBpmSave, 1500);
 }
 
 // Suggested session duration: rounds a timed total (seconds, from the

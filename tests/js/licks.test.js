@@ -116,6 +116,70 @@ test('a Markdown link to an uploaded mp4 renders a <video controls> player', () 
   assert.match(html, /<div class="lick-video-embed" data-ml-idx="0"/); // resizable like other video embeds
 });
 
+test('licksParseClock / licksVideoSeekSpec read #t= start[,end] as seconds or m:ss', () => {
+  assert.equal(licks.licksParseClock('226'), 226);
+  assert.equal(licks.licksParseClock('3:46'), 226);
+  assert.equal(licks.licksParseClock('1:02:03'), 3723);
+  assert.equal(licks.licksParseClock('12.5'), 12.5);
+  assert.equal(licks.licksParseClock('abc'), null);
+  assert.deepEqual(licks.licksVideoSeekSpec('/api/materials/a.mp4#t=226'), { base: '/api/materials/a.mp4', start: 226, end: null });
+  assert.deepEqual(licks.licksVideoSeekSpec('/api/materials/a.mp4#t=3:46,11:00'), { base: '/api/materials/a.mp4', start: 226, end: 660 });
+  assert.deepEqual(licks.licksVideoSeekSpec('/api/materials/a.mp4#t=,30'), { base: '/api/materials/a.mp4', start: 0, end: 30 });
+  assert.equal(licks.licksVideoSeekSpec('/api/materials/a.mp4'), null);          // plain link → embed
+  assert.equal(licks.licksVideoSeekSpec('/api/materials/a.mp4#t=nope'), null);
+  assert.equal(licks.licksVideoSeekSpec('/api/materials/a.mp4#t=60,30'), null);   // end before start
+  assert.equal(licks.licksVideoSeekSpec('/api/materials/a.mp3#t=5'), null);       // not a video file
+});
+
+test('a #t= link to an uploaded video renders a seek link, not a second player, and is skipped by the ordinals', () => {
+  global.htmlEsc = global.htmlEsc || ((v) => String(v));
+  const notes = '[教学](/api/materials/l.mp4) [第一句](/api/materials/l.mp4#t=3:46,11:00) [yt](https://youtu.be/keQUk4VQCi4)';
+  const html = marked.parse(notes);
+  assert.equal((html.match(/<video /g) || []).length, 1);
+  assert.match(html, /class="lick-seek" data-video-url="\/api\/materials\/l\.mp4" data-t="226" data-end="660"/);
+  // the YouTube link is resizable ordinal #1 (the seek link isn't counted)
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 1, { w: 500 }),
+    '[教学](/api/materials/l.mp4) [第一句](/api/materials/l.mp4#t=3:46,11:00) [yt](https://youtu.be/keQUk4VQCi4 "w=500")'
+  );
+});
+
+test('licksSeekVideo jumps + plays the matching player, stops at the segment end, and a manual seek cancels the stop', () => {
+  const handlers = {};
+  const video = {
+    currentTime: 0, paused: true, played: 0, pauses: 0,
+    getAttribute: (n) => (n === 'src' ? '/api/materials/l.mp4' : null),
+    addEventListener: (ev, fn) => { handlers[ev] = fn; },
+    play() { this.played++; return Promise.resolve(); },
+    pause() { this.pauses++; },
+    scrollIntoView() {},
+  };
+  const scope = { querySelectorAll: () => [video] };
+  const link = (t, end) => ({ closest: () => scope, dataset: { videoUrl: '/api/materials/l.mp4', t: String(t), ...(end != null ? { end: String(end) } : {}) } });
+  let prevented = 0;
+  const ev = { preventDefault() { prevented++; } };
+
+  assert.equal(licks.licksSeekVideo(ev, link(226, 660)), false);
+  assert.equal(prevented, 1);
+  assert.equal(video.currentTime, 226);
+  assert.equal(video.played, 1);
+  handlers.seeking();                       // our own seek firing 'seeking'
+  video.currentTime = 659; handlers.timeupdate();
+  assert.equal(video.pauses, 0);
+  video.currentTime = 660.2; handlers.timeupdate();
+  assert.equal(video.pauses, 1);            // stopped at the end of the segment
+
+  licks.licksSeekVideo(ev, link(226, 660));
+  handlers.seeking();                       // consumed own seek
+  handlers.seeking();                       // user drags the bar → auto-stop cancelled
+  video.currentTime = 700; handlers.timeupdate();
+  assert.equal(video.pauses, 1);
+
+  // no player for that file in this block → let the link open normally
+  const none = { closest: () => ({ querySelectorAll: () => [] }), dataset: { videoUrl: '/x.mp4', t: '5' } };
+  assert.equal(licks.licksSeekVideo(ev, none), true);
+});
+
 test('an uploaded mp4 link takes part in drag-resize write-back (w= in the notes) and the ordinals', () => {
   const notes = '[课程](/api/materials/lesson.mp4) then [yt](https://youtu.be/keQUk4VQCi4)';
   assert.equal(

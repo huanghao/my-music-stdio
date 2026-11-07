@@ -92,6 +92,57 @@ function licksIsVideoFileUrl(url) {
   return !!url && /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url);
 }
 
+// "226" / "3:46" / "1:02:03" / "12.5" → seconds, or null when it isn't a clock value.
+function licksParseClock(s) {
+  if (!/^\d+(?::\d{1,2}){0,2}(?:\.\d+)?$/.test(s)) return null;
+  return s.split(':').reduce((acc, p) => acc * 60 + Number(p), 0);
+}
+
+// A video-file link with a media-fragment time, `[第一句](video.mp4#t=226)` or
+// `#t=3:46,11:00` (start,end), is a *seek link*: it doesn't embed a second
+// player, it jumps the page's existing player for that file (see
+// licksSeekVideo). Returns {base, start, end|null}, or null for a plain link.
+function licksVideoSeekSpec(url) {
+  if (!licksIsVideoFileUrl(url)) return null;
+  const m = url.match(/^([^#]*)#t=([^,]*)(?:,(.*))?$/);
+  if (!m) return null;
+  const start = m[2] === '' ? 0 : licksParseClock(m[2]);
+  const end = m[3] === undefined ? null : licksParseClock(m[3]);
+  if (start === null || (m[3] !== undefined && end === null)) return null;
+  if (end !== null && end <= start) return null;
+  return { base: m[1], start, end };
+}
+
+// Click handler for seek links: finds the embedded <video> of that file in the
+// same notes block, jumps there and plays. With an end time, playback stops at
+// the end of that segment (a manual drag of the progress bar cancels the stop).
+// No matching player on the page (e.g. the video link isn't in these notes):
+// returns true so the link opens normally in a new tab — the browser honours #t=.
+function licksSeekVideo(ev, a) {
+  const scope = a.closest('.lick-notes-md') || document;
+  const v = [...scope.querySelectorAll('video')].find((el) => el.getAttribute('src') === a.dataset.videoUrl);
+  if (!v) return true;
+  ev.preventDefault();
+  const t = parseFloat(a.dataset.t);
+  const end = a.dataset.end !== undefined ? parseFloat(a.dataset.end) : null;
+  v._segEnd = Number.isFinite(end) ? end : null;
+  if (!v._segWatch) {
+    v._segWatch = true;
+    v.addEventListener('timeupdate', () => {
+      if (v._segEnd != null && v.currentTime >= v._segEnd) { v.pause(); v._segEnd = null; }
+    });
+    v.addEventListener('seeking', () => {
+      if (v._ownSeek) v._ownSeek = false; else v._segEnd = null;
+    });
+  }
+  v._ownSeek = Math.abs(v.currentTime - t) > 0.01; // a no-op seek fires no 'seeking' event
+  v.currentTime = t;
+  const p = v.play();
+  if (p && p.catch) p.catch(() => {});
+  if (v.scrollIntoView) v.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  return false;
+}
+
 // A link's title text doubles as preview-control directives instead of a
 // plain tooltip, e.g. [demo](url "w=300") or [score](url "page=2,y=0.4") —
 // comma-separated key=value pairs. Returns {} (meaning: "just a normal
@@ -129,8 +180,9 @@ function licksFindLinkAt(notes, idx) {
   try {
     marked.walkTokens(marked.lexer(notes), (t) => {
       if (t.type !== 'link' || !t.raw) return;
+      // Seek links (video.mp4#t=…) render no embed, so they're not in the ordinals.
       if (licksYoutubeId(t.href) || licksBilibiliId(t.href) || licksIsPdfUrl(t.href)
-          || licksIsVideoFileUrl(t.href)) links.push(t);
+          || (licksIsVideoFileUrl(t.href) && !licksVideoSeekSpec(t.href))) links.push(t);
     });
   } catch (e) {
     console.warn('licksFindLinkAt: failed to lex notes:', e);
@@ -242,6 +294,13 @@ if (typeof marked !== 'undefined') {
         // menu, fullscreen). preload="metadata" so a note with a big lesson
         // video only fetches the header until you press play; the server
         // answers Range requests, so seeking doesn't download everything.
+        const seek = isVideoFile ? licksVideoSeekSpec(href) : null;
+        if (seek) {
+          return `<a href="${htmlEsc(href)}" target="_blank" rel="noopener" class="lick-seek" ` +
+            `data-video-url="${htmlEsc(seek.base)}" data-t="${seek.start}"` +
+            `${seek.end !== null ? ` data-end="${seek.end}"` : ''} ` +
+            `onclick="return licksSeekVideo(event, this)"${titleAttr}>${text}</a>`;
+        }
         // Wrapped in .lick-video-embed so it drag-resizes (w= written back to the
         // notes) exactly like the YouTube/Bilibili embeds; the <video> fills the
         // 16:9 box (letterboxed if the file isn't 16:9).
@@ -1646,7 +1705,7 @@ if (typeof guarded === 'function') {
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksIsVideoFileUrl, licksParseLinkDirectives,
+    licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksIsVideoFileUrl, licksParseClock, licksVideoSeekSpec, licksSeekVideo, licksParseLinkDirectives,
     licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksSortByLast, licksStalenessAccent, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,

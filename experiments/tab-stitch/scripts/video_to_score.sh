@@ -7,7 +7,7 @@
 set -euo pipefail
 V=$1; OUT=$2; Y0=$3; H=$4; FPS=${5:-4}
 HERE=$(cd "$(dirname "$0")" && pwd)
-export PYTHONPATH=$HERE MAXOV=${MAXOV:-1500} MIN_NCC=${MIN_NCC:-0.55} REG_BELOW=${REG_BELOW:-8}
+export PYTHONPATH=$HERE MAXOV=${MAXOV:-2400} MIN_NCC=${MIN_NCC:-0.55} REG_BELOW=${REG_BELOW:-8}
 mkdir -p "$OUT"
 python3 -s "$HERE/video_pages.py" "$V" "$OUT/p" "$FPS" "$Y0" "$H"
 python3 -s "$HERE/video_tab.py" "$OUT/p" "$OUT/pano" | grep -E "unique|staff|weak|panorama|barlines" | cut -c1-200

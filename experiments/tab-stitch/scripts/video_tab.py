@@ -13,9 +13,10 @@ from PIL import Image
 pdir, outp = sys.argv[1], sys.argv[2]
 SP, TOP, BOT = 32.0, 175, 175
 GAP = 120
+DEDUPE_THR = float(os.environ.get("DEDUPE_THR", 0.03))   # pages closer than this (dilated-ink diff) are 'the same page shown again'. Repetitive riffs differ only by the grey bar numbers (~0.04): keep it tight
 MERGE_MIN_NCC = float(os.environ.get("MERGE_MIN_NCC", 0.8))   # >= this: take the darker pixel in the overlap; below: switch pages mid-overlap
 MIN_NCC = float(os.environ.get("MIN_NCC", 0.7))   # below this a registration is treated as 'no overlap' (a big overlap at ~0.6 is usually still right: check the seam)
-MAXOV = int(os.environ.get("MAXOV", 1500))   # max overlap searched; slow-flipping/wide pages may overlap more
+MAXOV = int(os.environ.get("MAXOV", 2400))   # max overlap searched; slow-flipping/wide pages may overlap more
 MINN = int(os.environ.get("MINN", 10))   # pages shown for fewer frames are transitions; fast-flipping videos need ~3
 meta = json.load(open(f"{pdir}/pages.json"))
 imgs = [np.array(Image.open(f"{pdir}/page_{i+1:04d}.png")) for i in range(len(meta))]
@@ -29,7 +30,7 @@ groups=[]
 for i,m in enumerate(meta):
     if m["n"]<MINN: continue
     for g in groups:
-        if pdiff(i,g[0])<0.10: g.append(i); break
+        if pdiff(i,g[0])<DEDUPE_THR: g.append(i); break
     else: groups.append([i])
 uniq=[]
 for g in groups:
@@ -84,15 +85,23 @@ def ncc(ra,rb,mask_rows):
     return float(((ra-ma)*(rb-mb)).mean()/np.sqrt(va*vb))
 REG_BELOW=int(os.environ.get("REG_BELOW",60))   # px below the lowest staff line used for registration (a corner watermark/logo sits there: lower it, e.g. 8)
 rows=slice(0,TOP+5*int(SP)+REG_BELOW)   # tab + marks above, a bit below
-def register(A,B):
+def register(A,B,lo=40,hi=None):
     """returns (ncc, overlap_px, scale f applied to B)"""
     best=(-1,0,1.0)
     a=inkf(A)
-    for f in (0.97,0.98,0.99,1.0,1.01,1.02,1.03):
+    def scaled(f):
         Bf=Image.fromarray(B).resize((round(B.shape[1]*f),round(B.shape[0]*f)),Image.LANCZOS)
         c=Image.new("L",(Bf.width,B.shape[0]),245); c.paste(Bf,(0,round(TOP-TOP*f)))
-        b=inkf(np.array(c)); WA,WB=a.shape[1],b.shape[1]
-        for ov in range(40,min(WA,WB,MAXOV),2):
+        return inkf(np.array(c))
+    # 1) full overlap range at scale 1  2) other scales only around the best overlap (6x faster than a full grid)
+    b=scaled(1.0); WA,WB=a.shape[1],b.shape[1]
+    for ov in range(lo,min(WA,WB,hi or MAXOV),2):
+        sc=ncc(a[:,WA-ov:],b[:,:ov],rows)
+        if sc>best[0]: best=(sc,ov,1.0)
+    ov1=best[1]
+    for f in (0.97,0.98,0.99,1.01,1.02,1.03):
+        b=scaled(f); WA,WB=a.shape[1],b.shape[1]
+        for ov in range(max(lo,ov1-24),min(WA,WB,ov1+25),2):
             sc=ncc(a[:,WA-ov:],b[:,:ov],rows)
             if sc>best[0]: best=(sc,ov,f)
     # refine ov at the winning f
@@ -105,7 +114,13 @@ def register(A,B):
     return sc0,ov0,f,np.array(c)
 pano=norm[0]; links=[]
 for k in range(1,len(norm)):
-    sc,ov,f,B=register(pano[:, -max(2200,MAXOV):] if pano.shape[1]>max(2200,MAXOV) else pano, norm[k])
+    tail=pano[:, -max(2200,MAXOV):] if pano.shape[1]>max(2200,MAXOV) else pano
+    sc,ov,f,B=register(tail, norm[k])
+    good=[l["overlap"] for l in links if l["ncc"]>=0.8]
+    if sc<0.8 and len(good)>=3:
+        # Pages of one video flip by the same amount, so a weak global peak is suspicious: look again near the usual overlap
+        m=int(np.median(good)); r=register(tail, norm[k], int(m*0.6), int(m*1.4))
+        if r[0]>max(sc,0.5): print(f"   (weak global match {sc:.2f}@{ov}px; using the match near the usual overlap {m}px)"); sc,ov,f,B=r
     print(f"unique {k}->{k+1}: ncc={sc:.3f} overlap={ov}px scale={f}")
     links.append({"ncc":sc,"overlap":ov,"scale":f})
     WA=pano.shape[1]

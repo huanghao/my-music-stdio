@@ -32,6 +32,8 @@ def compose(ns, first):
         arr=bar(n)[0]; row[:,x:x+arr.shape[1]] = np.minimum(row[:,x:x+arr.shape[1]],arr)
     if not first:
         ref = np.median(bar(1)[0],axis=1).astype(np.uint8)     # staff-line colours from a normal bar
+        # only the staff lines are wanted: on dense (16th-beam) bars the median of a beam row is dark and would draw a stripe
+        ref[:TOP-3] = 245; ref[TOP+5*SP+4:] = 245
         row[:,:left] = np.minimum(row[:,:left],ref[:,None])
         row[:,40:40+clef.shape[1]] = np.minimum(row[:,40:40+clef.shape[1]],clef)
     return row

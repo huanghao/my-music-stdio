@@ -8,11 +8,13 @@
 
 usage: python3 -s video_tab.py PAGES_DIR OUT_PREFIX      -> OUT_PREFIX.png, OUT_PREFIX.json
 """
-import sys, json, itertools, numpy as np
+import sys, os, json, itertools, numpy as np
 from PIL import Image
 pdir, outp = sys.argv[1], sys.argv[2]
 SP, TOP, BOT = 32.0, 175, 175
 GAP = 120
+MAXOV = int(os.environ.get("MAXOV", 1500))   # max overlap searched; slow-flipping/wide pages may overlap more
+MINN = int(os.environ.get("MINN", 10))   # pages shown for fewer frames are transitions; fast-flipping videos need ~3
 meta = json.load(open(f"{pdir}/pages.json"))
 imgs = [np.array(Image.open(f"{pdir}/page_{i+1:04d}.png")) for i in range(len(meta))]
 # ---------- 1. dedupe ----------
@@ -23,7 +25,7 @@ def pdiff(i,j):
     return max((ink[i]&~dil[j]).sum()/max(1,ink[i].sum()), (ink[j]&~dil[i]).sum()/max(1,ink[j].sum()))
 groups=[]
 for i,m in enumerate(meta):
-    if m["n"]<10: continue
+    if m["n"]<MINN: continue
     for g in groups:
         if pdiff(i,g[0])<0.10: g.append(i); break
     else: groups.append([i])
@@ -35,6 +37,8 @@ for g in groups:
 print("unique pages (1-based page ids):",[[i+1 for i in g] for g in groups])
 # ---------- 2. normalize ----------
 def staff_lines(a):
+    if os.environ.get("FIXED_STAFF"):      # "y1,spacing": same layout on every page, skip detection (dense pages hide lines)
+        y1,sp=map(float,os.environ["FIXED_STAFF"].split(",")); return y1,sp
     rf=(a<205).mean(axis=1)
     ys=[y for y in range(len(rf)) if rf[y]>0.55]
     gs=[]
@@ -77,7 +81,7 @@ def register(A,B):
         Bf=Image.fromarray(B).resize((round(B.shape[1]*f),round(B.shape[0]*f)),Image.LANCZOS)
         c=Image.new("L",(Bf.width,B.shape[0]),245); c.paste(Bf,(0,round(TOP-TOP*f)))
         b=inkf(np.array(c)); WA,WB=a.shape[1],b.shape[1]
-        for ov in range(40,min(WA,WB,1500),2):
+        for ov in range(40,min(WA,WB,MAXOV),2):
             sc=ncc(a[:,WA-ov:],b[:,:ov],rows)
             if sc>best[0]: best=(sc,ov,f)
     # refine ov at the winning f

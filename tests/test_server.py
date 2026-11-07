@@ -463,6 +463,17 @@ def test_material_too_large_rejected(client):
     assert r.status_code == 413
 
 
+def test_video_material_gets_a_larger_size_limit(client, monkeypatch):
+    from src import server
+
+    monkeypatch.setattr(server, "MAX_MATERIAL_BYTES", 10)
+    monkeypatch.setattr(server, "MAX_VIDEO_MATERIAL_BYTES", 100)
+    assert client.post("/api/materials", files={"file": ("a.mp3", b"x" * 11, "audio/mpeg")}).status_code == 413
+    ok = client.post("/api/materials", files={"file": ("lesson.mp4", b"x" * 50, "video/mp4")})
+    assert ok.status_code == 200
+    assert client.post("/api/materials", files={"file": ("lesson2.mp4", b"x" * 101, "video/mp4")}).status_code == 413
+
+
 def test_material_state_round_trips_and_shows_up_in_list(client):
     body = client.post(
         "/api/materials",

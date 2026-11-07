@@ -187,6 +187,14 @@ MAX_MATERIAL_BYTES = 100 * 1024 * 1024  # 100MB — generous for backing-track a
 def _materials_dir() -> Path:
     return Path(prefs.load()["materials_dir"]).expanduser()
 
+# Lesson videos (1080p, tens of minutes) are far bigger than audio/PDF; the Lick notes
+# play them inline with <video> (web/licks.js licksIsVideoFileUrl).
+MAX_VIDEO_MATERIAL_BYTES = 1024 * 1024 * 1024
+VIDEO_MATERIAL_EXTS = (".mp4", ".webm", ".mov", ".m4v")
+
+
+def _material_size_limit(filename: str) -> int:
+    return MAX_VIDEO_MATERIAL_BYTES if filename.lower().endswith(VIDEO_MATERIAL_EXTS) else MAX_MATERIAL_BYTES
 _materials_store = LocalFlatMaterialsStore(_materials_dir)
 
 
@@ -487,8 +495,9 @@ def api_get_lick_attachment(lick_id: str, filename: str):
 @app.post("/api/materials")
 async def api_upload_material(file: UploadFile = File(...)):
     content = await file.read()
-    if len(content) > MAX_MATERIAL_BYTES:
-        raise HTTPException(status_code=413, detail="File too large (max 100MB)")
+    limit = _material_size_limit(file.filename or "")
+    if len(content) > limit:
+        raise HTTPException(status_code=413, detail=f"File too large (max {limit // (1024 * 1024)}MB)")
     record = _materials_store.save(file.filename or "file", content)
     return {"id": record.id, "filename": record.filename, "url": f"/api/materials/{record.id}"}
 

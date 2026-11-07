@@ -98,6 +98,36 @@ test('licksParseLinkDirectives ignores unknown directives while keeping recogniz
   assert.deepEqual(licks.licksParseLinkDirectives('page=2,unknown=3'), { page: 2 });
 });
 
+test('licksIsVideoFileUrl detects uploaded video files, not page links or audio', () => {
+  assert.equal(licks.licksIsVideoFileUrl('/api/materials/20261107_lesson.mp4'), true);
+  assert.equal(licks.licksIsVideoFileUrl('/api/materials/20261107_lesson.MP4?x=1'), true);
+  assert.equal(licks.licksIsVideoFileUrl('/api/materials/a.webm#t=5'), true);
+  assert.equal(licks.licksIsVideoFileUrl('/api/materials/a.m4a'), false);
+  assert.equal(licks.licksIsVideoFileUrl('https://www.bilibili.com/video/BV1PH4y1N7Vr/'), false);
+  assert.equal(licks.licksIsVideoFileUrl(''), false);
+});
+
+test('a Markdown link to an uploaded mp4 renders a <video controls> player', () => {
+  // htmlEsc lives in app.js (not loaded here) — stub it the way the renderer uses it.
+  global.htmlEsc = global.htmlEsc || ((v) => String(v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])));
+  const html = marked.parse('[课程](/api/materials/20261107_lesson.mp4)');
+  assert.match(html, /<video controls preload="metadata" src="\/api\/materials\/20261107_lesson\.mp4"/);
+  assert.match(html, /<a href="\/api\/materials\/20261107_lesson\.mp4"/); // plain link kept
+  assert.match(html, /<div class="lick-video-embed" data-ml-idx="0"/); // resizable like other video embeds
+});
+
+test('an uploaded mp4 link takes part in drag-resize write-back (w= in the notes) and the ordinals', () => {
+  const notes = '[课程](/api/materials/lesson.mp4) then [yt](https://youtu.be/keQUk4VQCi4)';
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 0, { w: 916 }),
+    '[课程](/api/materials/lesson.mp4 "w=916") then [yt](https://youtu.be/keQUk4VQCi4)'
+  );
+  assert.equal(
+    licks.licksRewriteLinkSize(notes, 1, { w: 500 }),
+    '[课程](/api/materials/lesson.mp4) then [yt](https://youtu.be/keQUk4VQCi4 "w=500")'
+  );
+});
+
 test('licksIsPdfUrl / licksIsAudioUrl detect by extension, ignoring query/fragment', () => {
   assert.equal(licks.licksIsPdfUrl('/api/materials/abc_Chapter1.pdf'), true);
   assert.equal(licks.licksIsPdfUrl('/api/materials/abc_Chapter1.pdf?x=1'), true);

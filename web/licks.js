@@ -86,6 +86,12 @@ function licksIsAudioUrl(url) {
   return !!url && /\.(mp3|wav|m4a|ogg|flac)(?:[?#]|$)/i.test(url);
 }
 
+// A video *file* (uploaded lesson video), as opposed to a YouTube/Bilibili
+// page link — those two are matched by their own helpers first.
+function licksIsVideoFileUrl(url) {
+  return !!url && /\.(mp4|webm|mov|m4v)(?:[?#]|$)/i.test(url);
+}
+
 // A link's title text doubles as preview-control directives instead of a
 // plain tooltip, e.g. [demo](url "w=300") or [score](url "page=2,y=0.4") —
 // comma-separated key=value pairs. Returns {} (meaning: "just a normal
@@ -123,7 +129,8 @@ function licksFindLinkAt(notes, idx) {
   try {
     marked.walkTokens(marked.lexer(notes), (t) => {
       if (t.type !== 'link' || !t.raw) return;
-      if (licksYoutubeId(t.href) || licksBilibiliId(t.href) || licksIsPdfUrl(t.href)) links.push(t);
+      if (licksYoutubeId(t.href) || licksBilibiliId(t.href) || licksIsPdfUrl(t.href)
+          || licksIsVideoFileUrl(t.href)) links.push(t);
     });
   } catch (e) {
     console.warn('licksFindLinkAt: failed to lex notes:', e);
@@ -217,7 +224,8 @@ if (typeof marked !== 'undefined') {
         const bili = !ytId && licksBilibiliId(href);
         const isPdf = !ytId && !bili && licksIsPdfUrl(href);
         const isAudio = !ytId && !bili && !isPdf && licksIsAudioUrl(href);
-        if (!ytId && !bili && !isPdf && !isAudio) return false;
+        const isVideoFile = !ytId && !bili && !isPdf && !isAudio && licksIsVideoFileUrl(href);
+        if (!ytId && !bili && !isPdf && !isAudio && !isVideoFile) return false;
         const text = this.parser.parseInline(tokens);
         const dir = licksParseLinkDirectives(title);
         const hasDirectives = Object.keys(dir).length > 0;
@@ -230,6 +238,20 @@ if (typeof marked !== 'undefined') {
         // name from the URL itself, which for a materials-library URL is
         // the timestamp-prefixed on-disk filename, not the clean original.
         if (isAudio) return link + licksAudioEmbedHtml(href, text.replace(/<[^>]*>/g, ''));
+        // Uploaded video: the browser's own <video controls> (seek, speed
+        // menu, fullscreen). preload="metadata" so a note with a big lesson
+        // video only fetches the header until you press play; the server
+        // answers Range requests, so seeking doesn't download everything.
+        // Wrapped in .lick-video-embed so it drag-resizes (w= written back to the
+        // notes) exactly like the YouTube/Bilibili embeds; the <video> fills the
+        // 16:9 box (letterboxed if the file isn't 16:9).
+        if (isVideoFile) {
+          const vStyle = dir.w ? ` style="width:${dir.w}px"` : '';
+          return link +
+            `<div class="lick-video-embed" data-ml-idx="${licksMediaEmbedIdx++}"${vStyle}>` +
+            `<video controls preload="metadata" src="${htmlEsc(href)}" class="absolute inset-0 w-full h-full"></video>` +
+            `</div>`;
+        }
 
         // width, not max-width: .lick-video-embed's default box is a fixed
         // 480px (see style.css), so a max-width override can only ever
@@ -1222,7 +1244,7 @@ async function openMaterialPicker() {
     // single quotes a JS string literal needs; a filename containing an
     // apostrophe would otherwise break out of the onclick handler.
     listEl.innerHTML = materials.map(m => {
-      const icon = licksIsPdfUrl(m.url) ? '📄' : licksIsAudioUrl(m.url) ? '🎧' : '📎';
+      const icon = licksIsPdfUrl(m.url) ? '📄' : licksIsAudioUrl(m.url) ? '🎧' : licksIsVideoFileUrl(m.url) ? '🎬' : '📎';
       const kb = Math.round(m.size / 1024);
       return `
         <div class="material-picker-item" onclick="insertMaterialLink(this)" data-filename="${htmlEsc(m.filename)}" data-url="${htmlEsc(m.url)}">
@@ -1624,7 +1646,7 @@ if (typeof guarded === 'function') {
 // Exposed for unit tests (Node/CommonJS only — no-op in the browser <script> tag).
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksParseLinkDirectives,
+    licksYoutubeId, licksBilibiliId, licksIsPdfUrl, licksIsAudioUrl, licksIsVideoFileUrl, licksParseLinkDirectives,
     licksRewriteLinkSize, licksMaterialLinkMarkdown, licksSafeLinkLabel,
     licksSortByLast, licksStalenessAccent, licksPickPracticeBpm, licksSuggestedDurationMin, timeAgo,
     licksAudioEmbedHtml, licksAudioSpeedMap, licksAudioSpeedSet, renderLickChart,

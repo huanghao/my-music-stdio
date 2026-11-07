@@ -46,6 +46,10 @@
 - [用《Take the A Train》练 Two-Notes Solo：为什么练这三个调、怎么练](two-notes-solo-practice-take-the-a-train.md)：guide-tone line/两音旋律这套经典即兴入门练法的原理、"先看调性+曲式再补细节"的曲子分析方法、逐和弦拆解 Jens Larsen 实际用的两音组合（含共用音连接的设计思路）、C→G→F 的练习顺序节奏安排，以及库里对应的伴奏 mp3、教材 PDF 和课程字幕原文。
 - [Voice Leading / 引导音线（37 音接力）—— 待理解，先存档](voice-leading-guide-tone-lines.md)：和助教关于37音三种练习路径（音名直接找、和弦形状、指板音程几何）的讨论，以及"相邻和弦37音最多移动半音"这条 voice leading 规律；当前先练指板音程几何这一层，本文暂存档待回头看。
 
+## 工具与素材处理
+
+- [把教学视频里的谱面变成整齐的谱子（截图 / 视频两种做法）](tab-screenshots-and-video-to-score.md)：不做识谱、只做裁剪对齐拼接的整理思路（谱线归一化、按小节线切、重叠区相关性拼被截断的小节、4 小节一行两端对齐）；从 B 站视频自动取谱（去重、去播放头）、ffmpeg/yt-dlp 的安装升级和音视频分开下载，以及 Licks 里贴 B 站链接/音频/PDF 的写法（本地 mp4 目前不支持预览）。
+
 ## 建议阅读顺序
 
 1. 先读 [音乐练习工作站设计调研草案](music-practice-workstation-research.md)，建立整体背景。

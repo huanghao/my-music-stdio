@@ -6,6 +6,8 @@
 const fbMic = {
   stream: null, audioCtx: null, analyser: null, rafId: null,
   deviceId: '', userSelectedDevice: false, listening: false, onFrame: null, owner: null,
+  // Live monitoring: mic input routed to the output device. Persisted in fb_prefs.
+  monitor: false, source: null, monitorGain: null,
 };
 
 // ── Shared master volume (0-1) — scales every gain this app generates ──
@@ -228,11 +230,24 @@ function fbOutputDeviceName() {
   return fbLastOutputDevices.find(d => d.deviceId === fbOutput.deviceId)?.label || '';
 }
 
+// Browsers enable echo cancellation, noise suppression and auto gain by
+// default on getUserMedia audio. Those are tuned for voices and quietly
+// reshape a guitar's harmonics (and fight the speakers when they're the
+// output), which hurts pitch/chord detection — so turn all three off.
+// deviceId '' means the OS default input.
+function fbMicAudioConstraints(deviceId) {
+  return {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    echoCancellation: false,
+    noiseSuppression: false,
+    autoGainControl: false,
+  };
+}
+
 async function fbMicStart(owner, onFrame, fftSize = 2048) {
   if (fbMic.listening) fbMicStop();
-  const constraints = { audio: fbMic.deviceId ? { deviceId: { exact: fbMic.deviceId } } : true };
   try {
-    fbMic.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: fbMicAudioConstraints(fbMic.deviceId) });
   } catch (e) {
     // The remembered/picked device vanished between detection and start
     // (unplugged interface, stale manual pick) — an exact-match request for
@@ -241,26 +256,56 @@ async function fbMicStart(owner, onFrame, fftSize = 2048) {
     if (!fbMic.deviceId || (e.name !== 'OverconstrainedError' && e.name !== 'NotFoundError')) throw e;
     fbMic.deviceId = '';
     fbMic.userSelectedDevice = false;
-    fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: true }); // throws if denied — caller handles it
+    fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: fbMicAudioConstraints('') }); // throws if denied — caller handles it
   }
   await fbMicAutoSelectAndRefreshDevices();
   fbMic.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  // Registered so the output-device picker also routes the monitor signal.
+  fbRegisterAudioContext(fbMic.audioCtx);
   fbMic.analyser = fbMic.audioCtx.createAnalyser();
   fbMic.analyser.fftSize = fftSize;
   fbMic.analyser.smoothingTimeConstant = 0.3;
-  fbMic.audioCtx.createMediaStreamSource(fbMic.stream).connect(fbMic.analyser);
+  fbMic.source = fbMic.audioCtx.createMediaStreamSource(fbMic.stream);
+  fbMic.source.connect(fbMic.analyser);
+  fbMicApplyMonitor();
   fbMic.onFrame = onFrame;
   fbMic.owner = owner;
   fbMic.listening = true;
   fbMicTick();
 }
 
+// Connects or disconnects the monitor path for the live stream. Speakers with
+// an open mic will feed back into a loud howl — headphones are the safe way.
+function fbMicApplyMonitor() {
+  if (!fbMic.source || !fbMic.audioCtx) return;
+  if (fbMic.monitor && !fbMic.monitorGain) {
+    fbMic.monitorGain = fbMic.audioCtx.createGain();
+    fbMic.monitorGain.gain.value = fbMasterGain();
+    fbMic.source.connect(fbMic.monitorGain);
+    fbMic.monitorGain.connect(fbMic.audioCtx.destination);
+  } else if (!fbMic.monitor && fbMic.monitorGain) {
+    fbMic.source.disconnect(fbMic.monitorGain);
+    fbMic.monitorGain.disconnect();
+    fbMic.monitorGain = null;
+  }
+}
+
+function fbMicSetMonitor(on) {
+  fbMic.monitor = !!on;
+  fbMicApplyMonitor();
+  fbPrefsSave();
+}
+
 function fbMicStop() {
   if (fbMic.rafId) cancelAnimationFrame(fbMic.rafId);
   fbMic.rafId = null;
   if (fbMic.stream) fbMic.stream.getTracks().forEach(t => t.stop());
-  if (fbMic.audioCtx) fbMic.audioCtx.close();
+  if (fbMic.audioCtx) {
+    fbRegisteredAudioContexts.delete(fbMic.audioCtx);
+    fbMic.audioCtx.close();
+  }
   fbMic.stream = null; fbMic.audioCtx = null; fbMic.analyser = null;
+  fbMic.source = null; fbMic.monitorGain = null;
   fbMic.listening = false; fbMic.onFrame = null; fbMic.owner = null;
 }
 
@@ -275,6 +320,18 @@ function fbMicTick() {
 // After permission is granted, device labels become readable. Auto-pick the
 // best input (audio interface > USB mic > built-in; see fbPickPreferredDevice)
 // unless the user has explicitly chosen a device themselves this tab.
+// Input labels/ids are hidden until mic permission is granted, so the device
+// list stays on its "grant mic access first" placeholder after a page load
+// even though the permission already exists — and the Scarlett auto-pick
+// never runs until the first Start. If permission is already granted, fill
+// the list and auto-pick now, without opening a stream.
+async function fbMicRefreshIfPermitted() {
+  try {
+    const perm = await navigator.permissions?.query({ name: 'microphone' });
+    if (perm?.state === 'granted') await fbMicAutoSelectAndRefreshDevices();
+  } catch (_) { /* Permissions API or the 'microphone' name not supported */ }
+}
+
 async function fbMicAutoSelectAndRefreshDevices() {
   try {
     const devices = await navigator.mediaDevices.enumerateDevices();
@@ -307,13 +364,13 @@ async function fbMicAutoSelectAndRefreshDevices() {
           // one before the analyser source gets built from it.
           fbMic.stream.getTracks().forEach(t => t.stop());
           try {
-            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: nextId ? { deviceId: { exact: nextId } } : true });
+            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: fbMicAudioConstraints(nextId) });
           } catch (_) {
             // Preferred device refused/vanished mid-swap — re-acquire the
             // default stream rather than leaving the stopped one behind
             // (an analyser built on a stopped stream reads silence forever).
             fbMic.deviceId = '';
-            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            fbMic.stream = await navigator.mediaDevices.getUserMedia({ audio: fbMicAudioConstraints('') });
           }
         }
       }

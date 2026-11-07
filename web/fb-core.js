@@ -68,6 +68,7 @@ const fbState = {
                         '6': false, m6: false, add9: false, madd9: false, '9': false, m9: false, maj9: false,
                         dim: false, aug: false, '7sus4': false, '6/9': false, mmaj7: false, '7b9': false, '7#9': false },
            notationStyle: 'standard', showFormula: false, showDegreesOnDiagram: false, showChordDiagram: false, diagramSize: 200,
+           stopOnMatch: false,
            source: 'random', fixedRoot: 0, practiceMode: 'all',
            progression: { def: null, keyRoot: 0, chords: null, stepIdx: 0, repeatsLeft: 0,
                           repeatCount: 2, lockKey: false, lockedKeyRoot: 0, categoryFilter: 'all' },

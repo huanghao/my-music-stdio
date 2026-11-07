@@ -63,6 +63,10 @@ class AccompanimentBody(BaseModel):
     # (browser deviceIds don't map to CoreAudio, but labels do); None = system default.
     output_device: Optional[str] = None
     id: Optional[str] = None
+    # Play-only: metronome bars before the track starts (Jam sends 1 or 0).
+    countin_bars: int = Field(default=0, ge=0, le=16)
+    # Play-only: stop after this many seconds of playback (time-based practice).
+    limit_sec: Optional[float] = Field(default=None, gt=0, le=36000)
 
 
 class VolumeBody(BaseModel):
@@ -224,6 +228,21 @@ def api_styles():
     return get_all_styles()
 
 
+@app.get("/api/backing-tracks")
+def api_backing_tracks():
+    """Return the user's local, searchable backing-track catalog."""
+    from src.data_dir import data_dir
+    path = data_dir() / "backing-tracks.json"
+    if not path.exists():
+        return {"tracks": []}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Could not read backing track catalog: %s", exc)
+        raise HTTPException(status_code=500, detail="Backing track catalog is invalid")
+    return data
+
+
 @app.get("/api/prefs")
 def api_get_prefs():
     return prefs.load()
@@ -333,9 +352,12 @@ def api_play(accompaniment: AccompanimentBody):
         midi_path = str(tmp_dir / "jam_accompaniment.mid")
 
     mid = mido.MidiFile(type=0, ticks_per_beat=gen.PPQ)
-    mid.tracks.append(
-        gen.build_track(progression, bpm, style, fill_every=fill_every, loops=loops)
-    )
+    try:
+        track = gen.build_track(progression, bpm, style, fill_every=fill_every, loops=loops)
+    except ValueError as e:
+        # Unparseable chord name etc. — surface the message to the page instead of a 500.
+        raise HTTPException(status_code=400, detail=str(e))
+    mid.tracks.append(track)
     mid.save(midi_path)
 
     # compute total duration
@@ -353,7 +375,10 @@ def api_play(accompaniment: AccompanimentBody):
     _player.set_soundfont(soundfont)
     _player.set_output_device(audio_devices.resolve_output_device(accompaniment.output_device))
     _player.set_volume(accompaniment.volume)
-    _player.play(midi_path, bpm=bpm, session_meta=session_meta)
+    _player.play(
+        midi_path, bpm=bpm, session_meta=session_meta,
+        countin_beats=accompaniment.countin_bars * 4, limit_sec=accompaniment.limit_sec,
+    )
 
     if accompaniment_id:
         try:

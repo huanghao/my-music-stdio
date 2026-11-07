@@ -16,7 +16,7 @@ def client(tmp_path, monkeypatch):
         "accompaniments_dir": str(tmp_path / "accompaniments"),
     })
     # reload server to pick up new prefs
-    import src.server as server
+    from src import server
     reload(server)
     return TestClient(server.app)
 
@@ -161,7 +161,7 @@ def test_play_ignores_empty_bars_in_duration(client):
 def test_play_routes_output_device_to_player(client, monkeypatch):
     """The web UI's output-device picker label must reach Player so server-side
     FluidSynth playback goes to the same interface the user picked."""
-    import src.server as server
+    from src import server
     mock_player = MagicMock()
     monkeypatch.setattr(server, "_player", mock_player)
     monkeypatch.setattr(
@@ -178,7 +178,7 @@ def test_play_routes_output_device_to_player(client, monkeypatch):
 
 
 def test_play_without_output_device_uses_system_default(client, monkeypatch):
-    import src.server as server
+    from src import server
     mock_player = MagicMock()
     monkeypatch.setattr(server, "_player", mock_player)
     monkeypatch.setattr(
@@ -569,8 +569,8 @@ def test_state_put_then_get_roundtrip(client):
 
 
 def test_state_put_accepts_list_value(client):
-    client.put("/api/state/licks_order", json=["a", "b", "c"])
-    assert client.get("/api/state/licks_order").json() == ["a", "b", "c"]
+    client.put("/api/state/pt_blocks", json=["a", "b", "c"])
+    assert client.get("/api/state/pt_blocks").json() == ["a", "b", "c"]
 
 
 def test_state_rejects_unknown_key(client):

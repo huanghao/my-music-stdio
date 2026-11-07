@@ -81,12 +81,14 @@ function fbRenderDeviceBar() {
   document.getElementById('fb-device-bar').innerHTML = `
     <span>Input device:</span>
     <select class="fb-device-select" onchange="fbMicDeviceChange(this.value)"><option value="">Default (grant mic access first)</option></select>
+    <label title="把麦克风/吉他输入实时送到输出设备。用扬声器时会啸叫，建议戴耳机"><input type="checkbox" class="fb-mic-monitor" ${fbMic.monitor ? 'checked' : ''} onchange="fbMicSetMonitor(this.checked)"> 直通监听</label>
     ${fbOutputDeviceSelectHtml()}
   `;
   // The one master-volume slider lives in the transport pill now (static
   // markup in index.html) — push the loaded value into it here.
   document.querySelectorAll('.fb-master-volume-slider').forEach(el => { el.value = fbMasterVolume; });
   fbRefreshOutputDevices();
+  fbMicRefreshIfPermitted();
 }
 
 // fb_prefs bundles every drill's settings (pitch/chord/ear/bend/seq) into one

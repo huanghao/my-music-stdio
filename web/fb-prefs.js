@@ -26,6 +26,11 @@ function fbPrefsLoad() {
   if (saved.chord && typeof saved.chord.showDegreesOnDiagram === 'boolean') fbState.chord.showDegreesOnDiagram = saved.chord.showDegreesOnDiagram;
   if (saved.chord && typeof saved.chord.showChordDiagram === 'boolean') fbState.chord.showChordDiagram = saved.chord.showChordDiagram;
   if (saved.chord && typeof saved.chord.diagramSize === 'number') fbState.chord.diagramSize = saved.chord.diagramSize;
+  if (saved.chord && typeof saved.chord.stopOnMatch === 'boolean') fbState.chord.stopOnMatch = saved.chord.stopOnMatch;
+  if (saved.mic && typeof saved.mic.monitor === 'boolean') {
+    fbMic.monitor = saved.mic.monitor;
+    document.querySelectorAll('.fb-mic-monitor').forEach(el => { el.checked = fbMic.monitor; });
+  }
   if (saved.chord && ['random', 'progression', 'fixed_root'].includes(saved.chord.source)) fbState.chord.source = saved.chord.source;
   if (saved.chord && ['all', 'weak'].includes(saved.chord.practiceMode)) fbState.chord.practiceMode = saved.chord.practiceMode;
   if (saved.chord && Number.isInteger(saved.chord.fixedRoot) && saved.chord.fixedRoot >= 0 && saved.chord.fixedRoot < 12) fbState.chord.fixedRoot = saved.chord.fixedRoot;
@@ -127,12 +132,14 @@ function fbPrefsSave() {
   localStorage.setItem(FB_PREFS_KEY, JSON.stringify({
     pitch: { strings: fbState.pitch.strings, practiceMode: fbState.pitch.practiceMode, showBoard: fbState.pitch.showBoard,
              naturalsOnly: fbState.pitch.naturalsOnly },
+    mic: { monitor: fbMic.monitor },
     chord: {
       qualities: fbState.chord.qualities,
       notationStyle: fbState.chord.notationStyle,
       showFormula: fbState.chord.showFormula, showDegreesOnDiagram: fbState.chord.showDegreesOnDiagram,
       showChordDiagram: fbState.chord.showChordDiagram,
       diagramSize: fbState.chord.diagramSize,
+      stopOnMatch: fbState.chord.stopOnMatch,
       source: fbState.chord.source, fixedRoot: fbState.chord.fixedRoot, practiceMode: fbState.chord.practiceMode,
       progression: { repeatCount: fbState.chord.progression.repeatCount,
                      lockKey: fbState.chord.progression.lockKey,

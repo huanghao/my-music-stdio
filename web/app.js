@@ -20,8 +20,9 @@ function keyOptions(selected) {
 // ── State ──
 const state = {
   styles: [],
-  vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3, beat_dots: true },
-  jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3, beat_dots: true },
+  vamp: { chord: 'Am', style: 'pop', bpm: 120, loops: 3, beat_dots: true, loop_mode: 'count', minutes: 5 },
+  jam:  { bars: [], bpm: 120, key: 'C', style: 'pop', loops: 3, beat_dots: true,
+          loop_mode: 'count', minutes: 5, countin: true },
   modal: { _onConfirm: null },
   playback: { polling: null, beatTimer: null, anchor: null },
   prefs: { bars_per_row: 4 },
@@ -82,6 +83,8 @@ function loadLastSelection() {
     if (Number.isFinite(saved.vamp.bpm)) state.vamp.bpm = saved.vamp.bpm;
     if (Number.isFinite(saved.vamp.loops)) state.vamp.loops = saved.vamp.loops;
     if (typeof saved.vamp.beat_dots === 'boolean') state.vamp.beat_dots = saved.vamp.beat_dots;
+    if (['count', 'time'].includes(saved.vamp.loop_mode)) state.vamp.loop_mode = saved.vamp.loop_mode;
+    if (Number.isFinite(saved.vamp.minutes) && saved.vamp.minutes > 0) state.vamp.minutes = saved.vamp.minutes;
   }
   if (saved.jam) {
     if (Array.isArray(saved.jam.bars)) state.jam.bars = saved.jam.bars;
@@ -90,6 +93,9 @@ function loadLastSelection() {
     if (Number.isFinite(saved.jam.bpm)) state.jam.bpm = saved.jam.bpm;
     if (Number.isFinite(saved.jam.loops)) state.jam.loops = saved.jam.loops;
     if (typeof saved.jam.beat_dots === 'boolean') state.jam.beat_dots = saved.jam.beat_dots;
+    if (['count', 'time'].includes(saved.jam.loop_mode)) state.jam.loop_mode = saved.jam.loop_mode;
+    if (Number.isFinite(saved.jam.minutes) && saved.jam.minutes > 0) state.jam.minutes = saved.jam.minutes;
+    if (typeof saved.jam.countin === 'boolean') state.jam.countin = saved.jam.countin;
   }
 }
 
@@ -164,7 +170,7 @@ function initToolsMenu() {
 
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
-const NAV_PAGES = ['vamp', 'jam', 'licks', 'tuner', 'fretboard', 'songloop', 'progressions', 'prefs'];
+const NAV_PAGES = ['vamp', 'jam', 'backingtracks', 'licks', 'tuner', 'fretboard', 'songloop', 'progressions', 'prefs'];
 
 async function init() {
   transportLoadPos();  // restore the floating pill's last position before anything registers a transport
@@ -368,6 +374,7 @@ function showPage(name) {
   if (name === 'fretboard') initFretboardPage();
   if (name === 'songloop')  initSongLoopPage();
   if (name === 'progressions') initProgressionLabPage();
+  if (name === 'backingtracks') btInitPage();
   // Move the metronome panel back to its parked (hidden) home if it was
   // embedded in a Lick detail page we're now navigating away from.
   if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();
@@ -727,10 +734,7 @@ function renderVampControls() {
           <input type="number" id="vamp-bpm" value="${state.vamp.bpm}" min="40" max="240"
             oninput="state.vamp.bpm=parseInt(this.value)||120; liveSetBpm(this.value); saveLastSelection()">
         </div>
-        <div class="field"><label>Loops</label>
-          <input type="number" id="vamp-loops" value="${state.vamp.loops}" min="1" max="999" class="w-[60px]!"
-            oninput="state.vamp.loops=parseInt(this.value)||1; saveLastSelection()">
-        </div>
+        ${loopModeFieldsHtml('vamp', 'renderVampControls')}
         <div class="field"><label>Beat dots</label>
           <input type="checkbox" id="vamp-beat-dots" ${state.vamp.beat_dots ? 'checked' : ''}
             onchange="state.vamp.beat_dots=this.checked; saveLastSelection()">
@@ -770,13 +774,14 @@ function renderVampPhrase(activebar) {
 
 async function vampPlay() {
   state.vamp.bpm   = parseInt(document.getElementById('vamp-bpm')?.value) || 120;
-  state.vamp.loops = getLoops('vamp');
   state.vamp.style = document.getElementById('vamp-style')?.value || 'pop';
   state.vamp.chord = document.getElementById('vamp-chord')?.value.trim() || 'Am';
+  const { loops, limitSec } = practicePlan('vamp', 1, state.vamp.bpm);
   const payload = {
     bars: [{ chords: [{ name: state.vamp.chord, beats: 4 }] }],
-    bpm: state.vamp.bpm, loops: state.vamp.loops, style: state.vamp.style,
+    bpm: state.vamp.bpm, loops, style: state.vamp.style,
     fill_every: 8, volume: fbMasterGain(), output_device: fbOutputDeviceName() || null,
+    limit_sec: limitSec,
   };
   setPlaybackUI('vamp', 'playing');
   renderVampPhrase(-1);
@@ -816,9 +821,10 @@ function renderJamControls() {
           <input type="number" id="jam-bpm" value="${state.jam.bpm}" min="40" max="240"
             oninput="state.jam.bpm=parseInt(this.value)||120; liveSetBpm(this.value); saveLastSelection()">
         </div>
-        <div class="field"><label>Loops</label>
-          <input type="number" id="jam-loops" value="${state.jam.loops}" min="1" max="99" class="w-[60px]!"
-            oninput="state.jam.loops=parseInt(this.value)||1; saveLastSelection()">
+        ${loopModeFieldsHtml('jam', 'renderJamControls')}
+        <div class="field"><label>Count-in 1 bar</label>
+          <input type="checkbox" id="jam-countin" ${state.jam.countin ? 'checked' : ''}
+            onchange="state.jam.countin=this.checked; saveLastSelection()">
         </div>
         <div class="field"><label>Beat dots</label>
           <input type="checkbox" id="jam-beat-dots" ${state.jam.beat_dots ? 'checked' : ''}
@@ -826,7 +832,50 @@ function renderJamControls() {
         </div>
       </div>
     </div>
+    <div class="fb-feedback err" id="jam-error"></div>
   `;
+}
+
+function jamShowError(msg) {
+  const el = document.getElementById('jam-error');
+  if (el) el.textContent = msg;
+}
+
+// Shared by Jam and Vamp: "Loops" (fixed count) or "Minutes" (play until the
+// time is up). rerender names the page's own controls renderer.
+function loopModeFieldsHtml(prefix, rerender) {
+  const s = state[prefix];
+  return `
+    <div class="field"><label>Practice by</label>
+      <select id="${prefix}-loop-mode" onchange="state.${prefix}.loop_mode=this.value; ${rerender}(); saveLastSelection()">
+        <option value="count" ${s.loop_mode==='count'?'selected':''}>Loops</option>
+        <option value="time" ${s.loop_mode==='time'?'selected':''}>Minutes</option>
+      </select>
+    </div>
+    ${s.loop_mode === 'time' ? `
+    <div class="field"><label>Minutes</label>
+      <input type="number" id="${prefix}-minutes" value="${s.minutes}" min="0.5" max="600" step="0.5" class="w-[72px]!"
+        oninput="state.${prefix}.minutes=parseFloat(this.value)||1; saveLastSelection()">
+    </div>` : `
+    <div class="field"><label>Loops</label>
+      <input type="number" id="${prefix}-loops" value="${s.loops}" min="1" max="999" class="w-[60px]!"
+        oninput="state.${prefix}.loops=parseInt(this.value)||1; saveLastSelection()">
+    </div>`}`;
+}
+
+// Loop count and optional time limit for a play request. Time mode: enough
+// loops to cover the minutes at the current BPM (+1 for safety), and the server
+// stops at exactly limit_sec. Count mode: the loops input.
+function practicePlan(prefix, soundingBars, bpm) {
+  const s = state[prefix];
+  if (s.loop_mode !== 'time') {
+    s.loops = getLoops(prefix);
+    return { loops: s.loops, limitSec: null };
+  }
+  s.minutes = parseFloat(document.getElementById(`${prefix}-minutes`)?.value) || s.minutes;
+  const limitSec = s.minutes * 60;
+  const secPerLoop = soundingBars * 4 * 60 / bpm;
+  return { loops: Math.min(999, Math.ceil(limitSec / secPerLoop) + 1), limitSec };
 }
 
 function applyStyle(styleId, context) {
@@ -1100,6 +1149,11 @@ function startPolling(prefix) {
         };
       }
 
+      // Count-in has no musical clock yet (elapsed is null), so say so instead of looking stalled.
+      const msgEl = document.getElementById('status-msg');
+      if (s.countin) setStatus('Count-in');
+      else if (msgEl?.textContent === 'Count-in') setStatus('Playing');
+
       if (s.paused) return;
 
       // highlight current bar (chord chart) or phrase cell (vamp)
@@ -1181,18 +1235,33 @@ function jamSetBeatDots(bar, beat) {
 
 async function jamPlay() {
   state.jam.bpm   = parseInt(document.getElementById('jam-bpm')?.value) || 120;
-  state.jam.loops = getLoops('jam');
   state.jam.style = document.getElementById('jam-style')?.value || 'pop';
   state.jam.key   = document.getElementById('jam-key')?.value || state.jam.key;
+  const sounding = state.jam.bars.filter(b => b.chords.length).length;
+  const { loops, limitSec } = practicePlan('jam', sounding, state.jam.bpm);
+  jamShowError('');
   setPlaybackUI('jam', 'playing');
   setStatus('Playing');
   try {
-    await api('/api/play', 'POST', { ...state.jam, fill_every: 8, volume: fbMasterGain(), output_device: fbOutputDeviceName() || null });
+    await api('/api/play', 'POST', {
+      ...state.jam, loops, fill_every: 8, volume: fbMasterGain(), output_device: fbOutputDeviceName() || null,
+      countin_bars: state.jam.countin ? 1 : 0, limit_sec: limitSec,
+    });
     startPolling('jam');
   } catch(e) {
-    setStatus('Error: ' + e.message);
+    jamShowError(jamErrorMessage(e));
+    setStatus('Error');
     jamStop();
   }
+}
+
+// api() throws the response body; FastAPI's HTTPException comes back as {"detail": "..."}.
+function jamErrorMessage(e) {
+  try {
+    const detail = JSON.parse(e.message).detail;
+    if (typeof detail === 'string') return detail;
+  } catch (_) { /* not JSON */ }
+  return e.message;
 }
 
 async function jamPause() {

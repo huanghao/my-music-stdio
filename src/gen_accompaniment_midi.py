@@ -25,6 +25,9 @@ NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
 ENHARMONIC = {"Db": "C#", "Eb": "D#", "Fb": "E", "Gb": "F#", "Ab": "G#", "Bb": "A#", "Cb": "B"}
 
+# Spelled-out quality names typed into Jam ("Fmaj") that mean an existing quality.
+QUALITY_ALIASES = {"maj": ""}
+
 QUALITY_INTERVALS: dict[str, list[int]] = {
     "":     [0, 4, 7],        # major
     "m":    [0, 3, 7],        # minor
@@ -63,7 +66,7 @@ def parse_chord(symbol: str) -> tuple[int, str]:
         root_name = symbol[:length]
         root_name = ENHARMONIC.get(root_name, root_name)
         if root_name in NOTE_NAMES:
-            quality = symbol[length:]
+            quality = QUALITY_ALIASES.get(symbol[length:], symbol[length:])
             if quality in QUALITY_INTERVALS:
                 root_midi = 60 + NOTE_NAMES.index(root_name)
                 # keep within one octave below C4 for comfortable voicing

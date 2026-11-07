@@ -460,6 +460,7 @@ function fbRenderChordOptions() {
       `).join('')}
       <div class="fb-chord-type-group">
         <label><input type="checkbox" ${s.showFormula ? 'checked' : ''} onchange="fbState.chord.showFormula=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show chord formula (e.g. 1 b3 5 b7)</label>
+        <label><input type="checkbox" ${s.stopOnMatch ? 'checked' : ''} onchange="fbState.chord.stopOnMatch=this.checked; fbPrefsSave()"> 答对后停留，不自动下一题</label>
         <label><input type="checkbox" ${s.showChordDiagram ? 'checked' : ''} onchange="fbState.chord.showChordDiagram=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show chord shape diagrams (E/A/D-shape)</label>
         <label><input type="checkbox" ${s.showDegreesOnDiagram ? 'checked' : ''} onchange="fbState.chord.showDegreesOnDiagram=this.checked; fbPrefsSave(); fbChordRefreshLabels()"> Show degree labels on shape diagrams</label>
         <label class="flex items-center gap-1.5">
@@ -762,9 +763,26 @@ function fbRenderChroma(chroma, target) {
   }).join('');
 }
 
+// Back to normal matching on the same chord (stop mode only). The ring-out of
+// the last strum has to end first, so it can't count again by itself.
+function fbChordRearm() {
+  const s = fbState.chord;
+  s._rearmTimer = null;
+  s.matched = false;
+  s._holdCount = 0;
+  s._awaitRelease = true;
+  document.getElementById('fb-chord-target').classList.remove('matched');
+  const fb = document.getElementById('fb-chord-feedback');
+  fb.textContent = `继续监听 ${fbChordDisplaySymbol(s.target.root, s.target.quality)} — 换个把位或手法再弹`;
+  fb.className = 'fb-feedback';
+}
+
 function fbChordNewChord() {
   const s = fbState.chord;
   const t = fbChordPickTarget();
+  clearTimeout(s._rearmTimer);
+  s._scored = false;
+  s._awaitRelease = false;
   s.target = t;
   s.matched = false;
   s._holdCount = 0;
@@ -783,6 +801,7 @@ function fbChordNewChord() {
   const fb = document.getElementById('fb-chord-feedback');
   fb.textContent = '';
   fb.className = 'fb-feedback';
+  document.getElementById('fb-chord-target').classList.remove('matched');
   fbChordRefreshLabels();
 }
 
@@ -905,6 +924,7 @@ function fbChordOnFrame(analyser, sampleRate) {
   if (totalEnergy < 0.5) { // effectively silent — nothing meaningful ringing
     fbRenderChroma(new Array(12).fill(0), s.target);
     s._holdCount = 0;
+    s._awaitRelease = false;
     return;
   }
 
@@ -918,7 +938,7 @@ function fbChordOnFrame(analyser, sampleRate) {
     simEl.textContent = `Similarity to ${fbChordDisplaySymbol(s.target.root, s.target.quality)}: ${Math.round(sim * 100)}%`;
     simEl.className = 'fb-feedback';
   }
-  if (s.matched) return;
+  if (s.matched || s._awaitRelease) return;
 
   if (sim >= FB_CHORD_MATCH_SIM && covered) {
     s._holdCount++;
@@ -958,9 +978,27 @@ function fbChordOnWrong(heard) {
   fb.className = 'fb-feedback err';
 }
 
+// Stop mode: after a success, stay on the same chord for practice in other
+// positions/techniques. A few seconds later the matcher re-arms (fbChordRearm)
+// without generating a new chord; Next Chord still moves on.
+const FB_CHORD_REARM_MS = 2500;
+
 function fbChordOnMatch() {
   const s = fbState.chord;
   s.matched = true;
+  const sym = fbChordDisplaySymbol(s.target.root, s.target.quality);
+  const fb = document.getElementById('fb-chord-feedback');
+  document.getElementById('fb-chord-target').classList.add('matched');
+
+  // Only the first success for a presented chord is scored, so matches can't
+  // exceed presented in the stats — re-arms on the same chord are not counted.
+  if (s.stopOnMatch && s._scored) {
+    fb.textContent = `✓ 又答对了！${sym} — 这一题已计分，换个把位或手法继续`;
+    fb.className = 'fb-feedback ok big';
+    s._rearmTimer = setTimeout(fbChordRearm, FB_CHORD_REARM_MS);
+    return;
+  }
+
   const elapsedMs = performance.now() - s.startTime - (s._hiddenMs || 0);
   s.total++; s.matches++; s.streak++;
   const st = s.stats[s.target.symbol];
@@ -968,8 +1006,15 @@ function fbChordOnMatch() {
   fbChordSaveStats();
   fbRenderChordStats();
   fbRenderChordStatsTable();
-  const fb = document.getElementById('fb-chord-feedback');
-  fb.textContent = `Matched ${fbChordDisplaySymbol(s.target.root, s.target.quality)} in ${(elapsedMs / 1000).toFixed(1)}s!`;
+  const secs = (elapsedMs / 1000).toFixed(1);
+  if (s.stopOnMatch) {
+    s._scored = true;
+    fb.textContent = `✓ 答对了！${sym}，用时 ${secs}s`;
+    fb.className = 'fb-feedback ok big';
+    s._rearmTimer = setTimeout(fbChordRearm, FB_CHORD_REARM_MS);
+    return;
+  }
+  fb.textContent = `Matched ${sym} in ${secs}s!`;
   fb.className = 'fb-feedback ok';
   setTimeout(fbChordNewChord, 1100);
 }

@@ -89,15 +89,25 @@ class Player:
             for ch in range(16):
                 self._fs.cc(ch, 123, 0)  # All Notes Off
 
-    def _playback_loop(self, midi_file: str) -> None:
+    def _playback_loop(self, midi_file: str, countin_beats: int = 0, limit_sec: float | None = None) -> None:
         mid = mido.MidiFile(midi_file)
         ppq = mid.ticks_per_beat or 480
-        # collect all messages with absolute tick positions
+        # Count-in: metronome clicks on the drum channel before the track starts.
+        # The track is shifted by the same amount, and the clock (_started_at)
+        # only starts at the first musical event, so bar highlighting and the
+        # loop counter ignore the count-in.
+        offset = countin_beats * ppq
         messages: list[tuple[int, mido.Message]] = []
+        for beat in range(countin_beats):
+            click = 76 if beat % 4 == 0 else 77  # high wood block on the downbeat
+            on = beat * ppq
+            messages.append((on, mido.Message("note_on", channel=9, note=click, velocity=100)))
+            messages.append((on + ppq // 4, mido.Message("note_off", channel=9, note=click, velocity=0)))
+        # collect all messages with absolute tick positions
         tick = 0
         for msg in mid.tracks[0]:
             tick += msg.time
-            messages.append((tick, msg))
+            messages.append((tick + offset, msg))
 
         first_note = True
         # Drift-free scheduling: accumulate musical time and sleep to an absolute
@@ -136,13 +146,19 @@ class Player:
             if self._stop_event.is_set():
                 break
 
+            if limit_sec is not None and self._started_at is not None:
+                with self._lock:
+                    elapsed = _time.monotonic() - self._started_at - self._total_paused
+                if elapsed >= limit_sec:
+                    break
+
             if msg.is_meta:
                 if msg.type == "set_tempo":
                     # update reference tempo but don't override user BPM
                     self._midi_tempo = msg.tempo
                 continue
 
-            if first_note:
+            if first_note and abs_tick >= offset:
                 with self._lock:
                     self._started_at = _time.monotonic()
                 first_note = False
@@ -227,8 +243,10 @@ class Player:
         midi_file: str,
         bpm: float | None = None,
         session_meta: dict | None = None,
+        countin_beats: int = 0,
+        limit_sec: float | None = None,
     ) -> None:
-        logger.info("play: %s (bpm=%s)", midi_file, bpm)
+        logger.info("play: %s (bpm=%s, countin_beats=%s, limit_sec=%s)", midi_file, bpm, countin_beats, limit_sec)
         self.stop()
         self._ensure_synth()
         self._init_gm_channels()  # reset channels on every play
@@ -245,7 +263,7 @@ class Player:
             if self._session_meta and bpm is not None:
                 self._session_meta["bpm"] = self._bpm
         self._thread = threading.Thread(
-            target=self._playback_loop, args=(midi_file,), daemon=True
+            target=self._playback_loop, args=(midi_file, countin_beats, limit_sec), daemon=True
         )
         self._thread.start()
 
@@ -313,7 +331,8 @@ class Player:
             elapsed = round(max(0.0, raw), 3)
         else:
             elapsed = None
-        status = {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed}
+        status = {"playing": playing, "paused": paused, "file": f, "elapsed_sec": elapsed,
+                  "countin": playing and started is None}
         if playing and session_meta:
             status.update(session_meta)
             duration = session_meta.get("duration_sec")

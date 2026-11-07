@@ -119,6 +119,7 @@
   <!-- Backing tracks -->
   <button class="nav-btn active" data-page="vamp"      onclick="navGoToPage('vamp')">Vamp</button>
   <button class="nav-btn"        data-page="jam"        onclick="navGoToPage('jam')">Jam</button>
+  <button class="nav-btn"        data-page="backingtracks" onclick="navGoToPage('backingtracks')">伴奏库</button>
   <span class="nav-sep"></span>
   <!-- Practice tools -->
   <button class="nav-btn"        data-page="licks"      onclick="navGoToPage('licks')">Licks</button>
@@ -153,6 +154,20 @@
   <div id="jam-chart"></div>
 </div>
 
+<!-- BACKING TRACK LIBRARY -->
+<div class="page" id="page-backingtracks">
+  <div class="page-header"><h2 class="page-title">伴奏库</h2></div>
+  <p class="bt-intro">按调、风格和速度筛选，选一条直接试听。来源和下载许可分别标注。</p>
+  <div class="bt-filters">
+    <label>调 <select id="bt-key"><option value="">全部</option></select></label>
+    <label>风格 <select id="bt-style"><option value="">全部</option></select></label>
+    <label>BPM <input id="bt-bpm-min" type="number" min="20" max="300" placeholder="最低"> – <input id="bt-bpm-max" type="number" min="20" max="300" placeholder="最高"></label>
+    <input id="bt-search" type="search" placeholder="搜索标题或和弦进行">
+  </div>
+  <div id="bt-player" class="bt-player hidden"></div>
+  <div id="bt-results" class="bt-results"></div>
+</div>
+
 <!-- FRETBOARD PAGE -->
 <div class="page" id="page-fretboard">
   <div class="fb-tabs-row">
@@ -173,19 +188,21 @@
        its own top-level page); same fbState.chord/fbMic underneath. -->
   <div class="fb-panel" id="fb-chord">
     <div class="fb-options" id="fb-chord-options"></div>
-    <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
 
     <div id="fb-chord-exam-panel">
-      <div class="fb-stats" id="fb-chord-stats"></div>
+      <div class="fb-chord-action-row">
+        <button class="btn btn-primary fb-next-chord-btn" onclick="fbChordNewChord()">Next Chord →</button>
+        <button class="btn btn-ghost btn-sm hidden" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()">🔊 Preview progression</button>
+        <div class="fb-feedback" id="fb-chord-feedback"></div>
+      </div>
+      <div class="fb-chord-statsbar">
+        <div class="fb-stats" id="fb-chord-stats"></div>
+        <a class="fb-ref-link" href="https://www.fachords.com/chords/" target="_blank">🎸 fachords.com 和弦查询 ↗</a>
+      </div>
       <div class="fb-chord-progression-info" id="fb-chord-progression-info"></div>
       <div class="fb-pitch-target" id="fb-chord-target"></div>
       <div class="fb-chord-formula" id="fb-chord-formula"></div>
       <div class="fb-chroma-bars" id="fb-chord-chroma"></div>
-      <div class="fb-caged-answer">
-        <button class="btn btn-ghost btn-sm" onclick="fbChordNewChord()">New Chord</button>
-        <button class="btn btn-ghost btn-sm hidden" id="fb-chord-preview-btn" onclick="fbChordPreviewProgression()">🔊 Preview progression</button>
-      </div>
-      <div class="fb-feedback" id="fb-chord-feedback"></div>
       <div class="fb-shape-cards" id="fb-chord-diagrams"></div>
       <div class="fb-stats-table-wrap" id="fb-chord-stats-table"></div>
     </div>
@@ -1000,6 +1017,7 @@
 <script src="key-drill.js"></script>
 <script src="dom-drill.js"></script>
 <script src="materials.js"></script>
+<script src="backing-tracks.js"></script>
 <script src="agent-assistant.js"></script>
 <script src="app.js"></script>
 </body>

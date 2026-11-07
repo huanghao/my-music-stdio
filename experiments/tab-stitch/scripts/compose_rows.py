@@ -17,7 +17,8 @@ def bar(n):                        # n = 0-based; strip with PAD on both sides, 
     a = 0 if n==0 else int(round(xl-PAD))          # first bar: keep the 'od.guit.' label and TAB clef
     b = int(round(xr+PAD)) + (10 if n==nb-1 else 0)   # last bar: include the thick final barline
     return pano[:, a:b], xl-a, xr-xl
-clef = pano[:, int(bl[0])+14:int(bl[0])+55]       # the 'TAB' glyph only (no time signature)
+clef = pano[:, int(bl[0])+14:int(bl[0])+55].copy()    # the 'TAB' glyph only (no time signature)
+clef[int(175+5*32+8):] = 245        # below the staff only watermark/beam debris can be in this strip
 def compose(ns, first):
     left = 0 if first else LEFT
     xs=[]; right=None

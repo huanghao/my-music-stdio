@@ -4,6 +4,7 @@ build a clean image by taking the per-pixel MAX over its frames (removes the blu
 that sweeps across the strip: uncovered paper is lighter than covered paper).
 
 usage: python3 -s video_pages.py VIDEO OUTDIR [fps=2] [y0=592] [h=488]
+(paper colour is detected per frame, so tinted/translucent strips work too)
 """
 import sys, subprocess, numpy as np, json, os
 from PIL import Image
@@ -30,7 +31,12 @@ while True:
     if len(buf)<fsize: break
     t = n/fps; n+=1
     g = np.frombuffer(buf,np.uint8).reshape(h,W)
-    has_tab = (g>225).mean() > 0.6
+    # Paper colour differs per video (white, cream, or a translucent blue-grey strip over the footage):
+    # use the frame median as "paper", call it a tab frame when most pixels sit near it, and rescale
+    # so paper == 255. Everything downstream (ink < 90, staff rows < 205) then works for any paper.
+    paper = float(np.median(g))
+    has_tab = paper > 150 and (np.abs(g.astype(np.int16)-paper) <= 16).mean() > 0.6
+    if has_tab: g = np.clip(g.astype(np.float32)*(255.0/paper),0,255).astype(np.uint8)
     if not has_tab:
         flush(); prev_ink=None; continue
     ink = g[56:]<90          # ignore the top 56px: video/subtitles leak in there on some pages

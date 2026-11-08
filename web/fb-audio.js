@@ -135,6 +135,17 @@ function fbRenderSoundVolumePrefs() {
 // silently no-ops and audio just keeps playing through the system default.
 const FB_SETSINKID_SUPPORTED = typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype;
 const fbOutput = { deviceId: '', userSelectedDevice: false };
+const FB_DEVICE_PREFS_KEY = 'fb_audio_devices';
+function fbDevicePrefsLoad() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FB_DEVICE_PREFS_KEY)) || {};
+    if (typeof saved.input === 'string') { fbMic.deviceId = saved.input; fbMic.userSelectedDevice = true; }
+    if (typeof saved.output === 'string') { fbOutput.deviceId = saved.output; fbOutput.userSelectedDevice = true; }
+  } catch (_) {}
+}
+function fbDevicePrefsSave() {
+  localStorage.setItem(FB_DEVICE_PREFS_KEY, JSON.stringify({ input: fbMic.deviceId, output: fbOutput.deviceId }));
+}
 // Last enumerated audiooutput devices — fbOutputDeviceName() looks up the
 // selected device's label here to hand it to the backend, which routes
 // server-side FluidSynth playback (Vamp/Jam) to the same interface.
@@ -189,22 +200,8 @@ async function fbRefreshOutputDevices() {
     const outputs = fbDedupDevices(devices.filter(d => d.kind === 'audiooutput'));
     if (!outputs.length) return;
     fbLastOutputDevices = outputs;
-    // Same gone-check as the input side: a manually picked output that has
-    // been unplugged hands control back to auto-detect.
-    if (fbOutput.deviceId && outputs.some(d => d.deviceId) && !outputs.some(d => d.deviceId === fbOutput.deviceId)) {
-      fbOutput.deviceId = '';
-      fbOutput.userSelectedDevice = false;
-    }
-    if (!fbOutput.userSelectedDevice) {
-      const preferred = fbPickPreferredDevice(outputs, 'output');
-      const nextId = preferred ? preferred.deviceId : '';
-      if (nextId !== fbOutput.deviceId) {
-        // Also covers the unplugged-interface case: nextId '' drops back to
-        // the OS default via setSinkId('').
-        fbOutput.deviceId = nextId;
-        fbApplySinkIdToAll();
-      }
-    }
+    // Never auto-route output to a newly connected interface. Keep the last
+    // explicit choice, even while it is temporarily absent from enumeration.
     document.querySelectorAll('.fb-output-select').forEach(sel => {
       sel.innerHTML = outputs.map(d =>
         `<option value="${htmlEsc(d.deviceId)}" ${d.deviceId === fbOutput.deviceId ? 'selected' : ''}>${htmlEsc(d.label || 'Speaker')}</option>`
@@ -216,6 +213,7 @@ async function fbRefreshOutputDevices() {
 async function fbOutputDeviceChange(deviceId) {
   fbOutput.userSelectedDevice = true;
   fbOutput.deviceId = deviceId;
+  fbDevicePrefsSave();
   document.querySelectorAll('.fb-output-select').forEach(sel => { sel.value = deviceId; });
   fbApplySinkIdToAll();
 }
@@ -341,9 +339,8 @@ async function fbMicAutoSelectAndRefreshDevices() {
     // the selection forever — once it's gone from the enumeration, hand
     // control back to auto-detect. (Guard: pre-permission enumerations hide
     // all ids/labels, so skip the gone-check when nothing is identifiable.)
-    if (fbMic.deviceId && inputs.some(d => d.deviceId) && !inputs.some(d => d.deviceId === fbMic.deviceId)) {
+    if (fbMic.deviceId && inputs.some(d => d.deviceId) && !inputs.some(d => d.deviceId === fbMic.deviceId) && !fbMic.userSelectedDevice) {
       fbMic.deviceId = '';
-      fbMic.userSelectedDevice = false;
     }
     if (!fbMic.userSelectedDevice) {
       const preferred = fbPickPreferredDevice(inputs, 'input');
@@ -375,6 +372,7 @@ async function fbMicAutoSelectAndRefreshDevices() {
         }
       }
     }
+    if (fbMic.deviceId) fbDevicePrefsSave();
     document.querySelectorAll('.fb-device-select').forEach(sel => {
       sel.innerHTML = inputs.map(d =>
         `<option value="${htmlEsc(d.deviceId)}" ${d.deviceId === fbMic.deviceId ? 'selected' : ''}>${htmlEsc(d.label || 'Microphone')}</option>`
@@ -389,6 +387,7 @@ async function fbMicAutoSelectAndRefreshDevices() {
 async function fbMicDeviceChange(deviceId) {
   fbMic.userSelectedDevice = true;
   fbMic.deviceId = deviceId;
+  fbDevicePrefsSave();
   document.querySelectorAll('.fb-device-select').forEach(sel => { sel.value = deviceId; });
   if (fbMic.listening) {
     const owner = fbMic.owner, cb = fbMic.onFrame, fftSize = fbMic.analyser.fftSize;
@@ -513,6 +512,7 @@ if (typeof module !== 'undefined' && module.exports) {
     fbMic, FB_MASTER_VOLUME_KEY, fbMasterVolume, fbMasterVolumeLoad, fbMasterVolumeChange, fbMasterGain,
     FB_SOUND_VOLUME_KEY, FB_SOUND_VOLUME_DEFAULT, FB_SOUND_VOLUME_MAX, FB_SOUND_CATEGORIES, fbSoundVolumes, fbSoundVolumesLoad,
     fbSoundVolumesSave, fbSoundGain, fbSetSoundVolume, fbRenderSoundVolumePrefs, FB_SETSINKID_SUPPORTED, fbOutput,
+    FB_DEVICE_PREFS_KEY, fbDevicePrefsLoad, fbDevicePrefsSave,
     fbLastOutputDevices, fbRegisteredAudioContexts, fbRegisterAudioContext, fbApplySinkId, FB_MEDIA_SETSINKID_SUPPORTED, fbRegisteredMediaElements,
     fbRegisterMediaElement, fbApplySinkIdToMedia, fbApplySinkIdToAll, fbRefreshOutputDevices, fbOutputDeviceChange, fbOutputDeviceName,
     fbMicStart, fbMicStop, fbMicTick, fbMicAutoSelectAndRefreshDevices, fbMicDeviceChange, fbSyncMicButtons,

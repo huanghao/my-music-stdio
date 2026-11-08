@@ -75,6 +75,7 @@ function fbWatchDeviceChanges() {
 // this is rendered once at app startup (see init() in app.js), not gated
 // behind visiting any particular page.
 function fbRenderDeviceBar() {
+  fbDevicePrefsLoad();
   fbWatchDeviceChanges();
   fbMasterVolumeLoad();
   fbSoundVolumesLoad();

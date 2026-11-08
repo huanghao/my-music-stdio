@@ -29,6 +29,7 @@
 | Lick 详情 Sessions 列表展开/收起 | `lick_sessions_open` | `licks.js` `licksSessionsOpen()` / `licksSessionsOnToggle()`（全局布尔，默认收起） |
 | Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` |
 | Key Drill（方向、聚焦调） | `kd_prefs` | `key-drill.js` `kdPrefsLoad()` / `kdPrefsSave()` |
+| 页面宽度（紧凑/标准/全宽） | `mps_page_width` | `app.js` `pageWidthLoad()` / `pageWidthSet()`（设 `<html>` 的 `--page-max`） |
 | Song Loop | `sl_prefs` / 每首曲子的 url 专属 state | `song-loop.js`（url 专属 state 走后端 `/api/materials/{id}/state`，localStorage 只是迁移前的一次性种子） |
 
 ### 后端 `/api/state/{key}`（练习数据，`src/user_state.py`）

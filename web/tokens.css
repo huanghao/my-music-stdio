@@ -111,6 +111,22 @@
   --rad-xl:   12px;
   --rad-full: 999px;
 
+  /* spacing scale (4px grid) for plain CSS (`padding: var(--s3)`). Tailwind
+     utilities already sit on the same grid via its default 4px base:
+     s1..s6 = p-1 p-2 p-3 p-4 p-6 p-8 — so no @theme alias needed. */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+
+  /* control heights: sm = inline/tool buttons, md = default, lg = primary CTA.
+     Aliased as --spacing-ctl-* → h-ctl-sm / min-h-ctl-md. */
+  --ctl-sm: 28px;
+  --ctl-md: 32px;
+  --ctl-lg: 44px;
+
   /* font-size scale (px; this app runs dense — 13px base).
      Aliased in @theme as --text-* (Tailwind's font-size namespace). */
   --fs-xs:   11px;

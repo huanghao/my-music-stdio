@@ -279,15 +279,16 @@ function licksCourseNavHtml(lick) {
   if (!lick.collection) return '';
   const items = licksCourseOrder(lickCatalog.filter(l => l.collection === lick.collection));
   const at = items.findIndex(l => l.id === lick.id);
-  const button = (l, label) => l ? `<button class="btn btn-ghost btn-sm" onclick="licksOpenCourseLick(decodeURIComponent('${encodeURIComponent(l.id).replace(/'/g, '%27')}'))">${label}</button>` : `<span></span>`;
-  return `<nav class="lick-course-nav flex justify-between items-center gap-3 mb-4 border-0 border-b border-solid border-line pb-3 text-fg-dim text-base" aria-label="课程导航">${button(items[at - 1], '← 上一课')}
-    <span class="max-sm:max-w-[55%] max-sm:text-center">${htmlEsc(lick.collection)} · ${at + 1} / ${items.length}</span>${button(items[at + 1], '下一课 →')}</nav>`;
+  const button = (l, label, title) => l
+    ? `<button class="bg-transparent border-0 cursor-pointer px-1.5 py-0 text-fg-dim hover:text-fg text-lg leading-none" title="${title}" aria-label="${title}" onclick="licksOpenCourseLick(decodeURIComponent('${encodeURIComponent(l.id).replace(/'/g, '%27')}'))">${label}</button>`
+    : `<span class="px-1.5 text-fg-dim opacity-30 text-lg leading-none">${label}</span>`;
+  return `<nav class="lick-course-nav flex items-center gap-0.5 text-fg-dim text-sm" aria-label="课程导航">${button(items[at - 1], '‹', '上一课')}<span class="whitespace-nowrap"><span class="max-sm:hidden">${htmlEsc(lick.collection)} · </span>${at + 1} / ${items.length}</span>${button(items[at + 1], '›', '下一课')}</nav>`;
 }
 
 // Type switch under the title: 歌曲 / 练习 (the only tags the UI manages).
 function licksTypeSwitchHtml(lick) {
   const cur = (lick.tags || []).find(t => LICK_TYPES.includes(t)) || '';
-  return `<div class="pl-lookup-tabs mt-2 mb-0!" id="lick-type-switch" role="group" aria-label="类型">${LICK_TYPES.map(t =>
+  return `<div class="pl-lookup-tabs m-0!" id="lick-type-switch" role="group" aria-label="类型">${LICK_TYPES.map(t =>
     `<button type="button" class="pl-lookup-tab${cur === t ? ' active' : ''}" aria-pressed="${cur === t}" onclick="licksSetType('${t}')">${t}</button>`).join('')}</div>`;
 }
 

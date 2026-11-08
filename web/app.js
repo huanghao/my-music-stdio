@@ -1285,6 +1285,26 @@ async function jamStop() {
 
 // ── Preferences page ──
 
+// Page width (UI convenience → localStorage). '' = full width (default).
+const PAGE_WIDTH_KEY = 'mps_page_width';
+const PAGE_WIDTHS = [['1240', '紧凑'], ['1440', '标准'], ['', '全宽']];
+function pageWidthLoad() {
+  let v = '';
+  try { v = localStorage.getItem(PAGE_WIDTH_KEY) || ''; } catch (_) {}
+  return PAGE_WIDTHS.some(([k]) => k === v) ? v : '';
+}
+function pageWidthApply(v) {
+  const root = document.documentElement.style;
+  if (v) { root.setProperty('--page-max', v + 'px'); root.setProperty('--page-gutter', '24px'); }
+  else { root.removeProperty('--page-max'); root.removeProperty('--page-gutter'); }
+}
+function pageWidthSet(v) {
+  try { localStorage.setItem(PAGE_WIDTH_KEY, v); } catch (_) {}
+  pageWidthApply(v);
+  document.querySelectorAll('#pref-page-width button').forEach(b => b.classList.toggle('active', b.dataset.w === v));
+}
+pageWidthApply(pageWidthLoad());
+
 async function renderPrefsForm() {
   const [p, soundfonts] = await Promise.all([api('/api/prefs'), api('/api/soundfonts')]);
   const sfOptions = soundfonts.map(f => {
@@ -1301,6 +1321,11 @@ async function renderPrefsForm() {
           <option value="4" ${p.bars_per_row==4?'selected':''}>4</option>
           <option value="8" ${p.bars_per_row==8?'selected':''}>8</option>
         </select>
+      </div>
+      <div class="field">
+        <label>页面宽度</label>
+        <div class="pl-lookup-tabs m-0!" id="pref-page-width" role="group" aria-label="页面宽度">${PAGE_WIDTHS.map(([k, n]) =>
+          `<button type="button" class="pl-lookup-tab${pageWidthLoad() === k ? ' active' : ''}" data-w="${k}" onclick="pageWidthSet('${k}')">${n}</button>`).join('')}</div>
       </div>
       <div class="field">
         <label>SoundFont</label>

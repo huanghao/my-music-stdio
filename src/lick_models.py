@@ -1,5 +1,6 @@
 """Practice content and per-exercise settings, separate from session history."""
 
+import json
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -31,6 +32,15 @@ class LickBody(BaseModel):
     reference_bpm_min: float | None = Field(default=None, ge=20, le=300)
     reference_bpm_max: float | None = Field(default=None, ge=20, le=300)
     practice_plan: LickPracticePlan | None = None
+    # Free-form material board layout (web/licks-board.js); opaque to the server.
+    layout: dict | None = None
+
+    @field_validator("layout")
+    @classmethod
+    def layout_not_huge(cls, value):
+        if value is not None and len(json.dumps(value)) > 100_000:
+            raise ValueError("layout too large")
+        return value
 
     @field_validator("score_images", "source_url", "demo_url", "pdf_url")
     @classmethod

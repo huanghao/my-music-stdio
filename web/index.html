@@ -96,6 +96,9 @@
       --text-xl: var(--fs-xl);
       --text-2xl: var(--fs-2xl);
       --text-display: var(--fs-display);
+      --spacing-ctl-sm: var(--ctl-sm);
+      --spacing-ctl-md: var(--ctl-md);
+      --spacing-ctl-lg: var(--ctl-lg);
       --shadow-sm: var(--elev-sm);
       --shadow-md: var(--elev-md);
       --shadow-lg: var(--elev-lg);
@@ -111,6 +114,7 @@
       document.getElementById('tw-theme').textContent;
   </script>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="licks-board.css">
 </head>
 <body>
 
@@ -471,9 +475,6 @@
 
 <!-- LICK DETAIL PAGE -->
 <div class="page" id="page-lick-detail">
-  <div class="page-back-row">
-    <button class="btn btn-ghost btn-sm" onclick="navGoToPage('licks')">← Licks</button>
-  </div>
   <div id="lick-detail-content"></div>
 </div>
 
@@ -1012,6 +1013,7 @@
 <script src="speed-trainer.js"></script>
 <script src="song-loop.js"></script>
 <script src="licks.js"></script>
+<script src="licks-board.js"></script>
 <script src="lick-courses.js"></script>
 <script src="progression-lab.js"></script>
 <script src="key-drill.js"></script>

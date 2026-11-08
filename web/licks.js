@@ -119,7 +119,7 @@ function licksVideoSeekSpec(url) {
 // No matching player on the page (e.g. the video link isn't in these notes):
 // returns true so the link opens normally in a new tab — the browser honours #t=.
 function licksSeekVideo(ev, a) {
-  const scope = a.closest('.lick-notes-md') || document;
+  const scope = a.closest('#lkb-canvas') || a.closest('.lick-notes-md') || document;
   const v = [...scope.querySelectorAll('video')].find((el) => el.getAttribute('src') === a.dataset.videoUrl);
   if (!v) return true;
   ev.preventDefault();
@@ -952,7 +952,7 @@ async function openLick(id) {
   if (typeof navCanonicalizeLickUrl === 'function') navCanonicalizeLickUrl(id, lick.title, false);
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-lick-detail').classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === 'licks'));
   renderLickDetail(lick);
 }
 
@@ -974,6 +974,7 @@ function renderLickDetail(lick) {
   // Drop resize observers on the outgoing embeds before the rebuild removes
   // them (see licksWatchEmbedResizes — fresh ones attach below).
   licksDisconnectEmbedResizes();
+  const useBoard = typeof lkbEnabled === 'function' && lkbEnabled();
   const sessions = lick.sessions || [];
   const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
   const targetLine = `<span class="lick-target" id="lick-detail-target">${lick.target_bpm ? `个人目标 ${lick.target_bpm} BPM` : '个人目标未设置'}</span>`;
@@ -986,29 +987,30 @@ function renderLickDetail(lick) {
     : '';
 
   el.innerHTML = `
-    ${licksCourseNavHtml(lick)}
-    <div class="lick-detail-header gap-2">
-      <div>
-        <h2 class="lick-detail-title break-words" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
-        ${targetLine}
-        ${licksTypeSwitchHtml(lick)}
-      </div>
-      <div class="row-actions">
-        <button class="btn btn-ghost btn-sm" onclick="navOpenLickEdit('${lick.id}')">Edit</button>
-        <button class="btn btn-ghost btn-sm danger"
-          onclick="deleteLick('${lick.id}')">Delete</button>
-      </div>
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
+      <h2 class="lick-detail-title break-words m-0!" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
+      ${targetLine}
+      ${licksTypeSwitchHtml(lick)}
+      <span class="flex-1"></span>
+      ${licksCourseNavHtml(lick)}
+      <details class="lick-more relative" id="lick-more-menu">
+        <summary class="list-none cursor-pointer select-none px-2 h-ctl-sm inline-flex items-center rounded-md text-fg-dim hover:bg-subtle hover:text-fg" title="更多" aria-label="更多操作">⋯</summary>
+        <div class="absolute right-0 top-full mt-1 z-20 min-w-28 flex flex-col p-1 rounded-lg border border-solid border-line bg-card shadow-md">
+          <button class="btn btn-ghost btn-sm justify-start" onclick="navOpenLickEdit('${lick.id}')">Edit</button>
+          <button class="btn btn-ghost btn-sm danger justify-start" onclick="deleteLick('${lick.id}')">Delete</button>
+        </div>
+      </details>
     </div>
 
     ${liveNote}
-    ${licksScoreHtml(lick)}
-    ${lick.notes ? `<div class="lick-notes-md">${licksRenderNotes(lick.notes)}</div>` : ''}
+    ${useBoard ? lkbHostHtml() : licksScoreHtml(lick)}
+    ${!useBoard && lick.notes ? `<div class="lick-notes-md">${licksRenderNotes(lick.notes)}</div>` : ''}
 
     <!-- Practice slot lives directly under the notes: while practicing, the
          flow is score + metronome together, with the chart/sessions history
          below as reference. Empty when not practicing — no visual change. -->
     <div id="lick-practice-slot"></div>
-    ${licksReferenceHtml(lick)}
+    ${useBoard ? '' : licksReferenceHtml(lick)}
 
     <div class="lick-chart-wrap" id="lick-chart-wrap">
       ${renderLickChart(sessions, lick.target_bpm)}
@@ -1036,6 +1038,7 @@ function renderLickDetail(lick) {
       </div>
     </details>
   `;
+  if (useBoard) lkbMount(lick);
   licksRestoreCourseDetailUi(lick);
   licksSyncPracticePanelHome();
   licksWatchEmbedResizes(el);
@@ -1220,6 +1223,7 @@ function licksRenderCheatsheet() {
 // if nothing was focused there) — shared by image upload and the material
 // picker below. The user still has to click Save to persist the notes text.
 function licksInsertAtNotesCursor(text) {
+  if (window.lkbPickerSink) { window.lkbPickerSink(text); return; }
   const textarea = document.getElementById('lick-edit-notes');
   const pos = textarea.selectionStart ?? textarea.value.length;
   textarea.value = textarea.value.slice(0, pos) + text + textarea.value.slice(pos);
@@ -1296,6 +1300,7 @@ async function openMaterialPicker() {
 }
 
 function closeMaterialPicker() {
+  window.lkbPickerSink = null;
   document.getElementById('material-picker-modal').classList.remove('show');
 }
 
@@ -1366,6 +1371,12 @@ function cancelLickEdit() {
   licksState.editor = null;
   if (id) navOpenLick(id); else navGoToPage('licks');
 }
+
+// Close the ⋯ menu when clicking anywhere outside it.
+document.addEventListener('click', e => {
+  const m = document.getElementById('lick-more-menu');
+  if (m && m.open && !m.contains(e.target)) m.open = false;
+});
 
 async function deleteLick(id) {
   if (!confirm('Delete this lick and all its session history?')) return;

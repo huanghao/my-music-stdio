@@ -61,7 +61,11 @@
 | 阴影 | `--elev-sm` / `--elev-md` / `--elev-lg` | `shadow-sm`/`shadow-md`/`shadow-lg` |
 | z-index | `--z-base` 1 / `--z-sticky` 10 / `--z-panel` 20 / `--z-float` 60 / `--z-overlay` 100 / `--z-menu` 200 | CSS 里 `var(--z-*)`；utility 用 `z-10` 等任意值 |
 
-间距不设自定义 scale，直接用 Tailwind 默认 4px 基数（`p-2` = 8px、`ml-3` = 12px、`gap-1.5` = 6px…）。
+| 间距（4px 栅格） | `--s1` 4 / `--s2` 8 / `--s3` 12 / `--s4` 16 / `--s5` 24 / `--s6` 32px | 手写 CSS 用 `var(--s3)`；utility 直接用 Tailwind 默认 4px 基数（`p-1 p-2 p-3 p-4 p-6 p-8` 对应 s1…s6） |
+| 控件高度 | `--ctl-sm` 28 / `--ctl-md` 32 / `--ctl-lg` 44px | `h-ctl-sm` / `min-h-ctl-md` / `h-ctl-lg` |
+| 字体 | `--font-sans`（界面）/ `--font-mono`（BPM、时间、数字、笔记编辑器）/ `--font-display`（页面标题、和弦名） | CSS 里 `var(--font-*)`；不要再写裸 `monospace` / `sans-serif` / `Georgia` |
+
+页面最大宽度：`--page-max`（`<html>` 上，Preferences → 页面宽度 设置，缺省不限宽），`.page` 引用它。
 
 ## 两个必须知道的坑
 

@@ -539,6 +539,10 @@
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
       <button class="btn btn-ghost btn-sm" onclick="stReset()" title="中断当前练习，回到初始状态（速度回到 Start BPM，小节数清零）">↺ 重置</button>
     </div>
+  </div>
+
+  <details class="st-more" id="st-more">
+    <summary>⚙ 节拍与提速设置</summary>
     <div class="st-rhythm-row flex-wrap sm:flex-nowrap">
       <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
       <label class="st-field st-field-wide"><span class="st-field-label">Subdivision</span>
@@ -551,7 +555,6 @@
         </select>
       </label>
     </div>
-  </div>
 
   <!-- 动态提速（练到多快、怎么涨、涨完要不要折返）—— 设定一次基本不动，
        分割线以下。 -->
@@ -569,6 +572,7 @@
     <label class="st-field"><span class="st-field-label">变速后预备小节</span><input type="number" id="st-count-in" min="0" max="4" value="1" title="变速后先用新速度数几个小节（显示“预备”），再开始计数"></label>
     <label class="st-bounce-label max-sm:items-start!"><input type="checkbox" id="st-bounce"> Bounce back to Start once Target is reached (loops)</label>
   </div>
+  </details>
 </div>
 </div>
 

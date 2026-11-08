@@ -1,7 +1,11 @@
 """Upload a score PDF (+ optional lesson video) to the materials library and create a Lick that embeds them.
 
 usage: python3 -s publish_lick.py TITLE SCORE.pdf [--video X.mp4] [--type 歌曲|练习|乐队课] [--note "text"]
-                                   [--pdf-name NAME] [--video-name NAME] [--server http://localhost:3050]
+                                   [--collection NAME --order N] [--pdf-name NAME] [--video-name NAME] [--server http://localhost:3050]
+
+A lesson that belongs to a course/series must pass BOTH --collection (the series name, identical across its lessons)
+and --order (the lesson number, int). The number lives in `course_order`, never in the title: the Licks list and the
+detail heading render "01 …" from it, and the list sorts by it. TITLE is then just the lesson name, without a number.
 
 Files are uploaded under friendly names; the notes use the plain `[name](/api/materials/..)` form (no <> wrapping),
 videos get `"w=775"` and PDFs `"page=1,w=1155,h=823"` so both are drag-resizable in the Lick page afterwards.
@@ -13,8 +17,11 @@ ap = argparse.ArgumentParser()
 ap.add_argument("title"); ap.add_argument("score")
 ap.add_argument("--video"); ap.add_argument("--type", default="歌曲", choices=["歌曲", "练习", "乐队课"])
 ap.add_argument("--note", default=""); ap.add_argument("--pdf-name"); ap.add_argument("--video-name")
+ap.add_argument("--collection", default=""); ap.add_argument("--order", type=int)
 ap.add_argument("--server", default="http://localhost:3050")
 a = ap.parse_args()
+if bool(a.collection) != (a.order is not None):
+    ap.error('--collection and --order must be given together (series name + lesson number)')
 opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # never go through the local proxy
 
 def upload(path, name):
@@ -34,6 +41,7 @@ if a.video:
 pdf_name = a.pdf_name or f"{a.title} 吉他谱.pdf"
 parts.append(f'[{pdf_name}]({upload(a.score, pdf_name)} "page=1,w=1155,h=823")')
 if a.note: parts.append(a.note)
-body = json.dumps({"title": a.title, "notes": "\n\n".join(parts), "tags": [a.type]}).encode()
+body = json.dumps({"title": a.title, "notes": "\n\n".join(parts), "tags": [a.type],
+                   "collection": a.collection, "course_order": a.order}).encode()
 req = urllib.request.Request(a.server + "/api/licks", body, {"Content-Type": "application/json"}, method="POST")
 print(json.load(opener.open(req))["id"])

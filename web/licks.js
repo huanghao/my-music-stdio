@@ -1001,6 +1001,14 @@ function licksRefreshSessions(lick) {
   return true;
 }
 
+// Course lessons keep their number in `course_order`, not in the title — show it in the
+// detail heading so you can tell which lesson you are on ("01 交替拨弦基础").
+function licksDisplayTitle(lick) {
+  if (!lick.course_order) return lick.title;
+  const n = String(lick.course_order).padStart(2, '0');
+  return new RegExp(`^\\s*0*${lick.course_order}(\\D|$)`).test(lick.title) ? lick.title : `${n} ${lick.title}`;
+}
+
 function renderLickDetail(lick) {
   const el = document.getElementById('lick-detail-content');
   if (!el) return;
@@ -1035,7 +1043,7 @@ function renderLickDetail(lick) {
 
   el.innerHTML = `
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
-      <h2 class="lick-detail-title break-words m-0!" id="lick-detail-title">${htmlEsc(lick.title)}</h2>
+      <h2 class="lick-detail-title break-words m-0!" id="lick-detail-title">${htmlEsc(licksDisplayTitle(lick))}</h2>
       ${targetLine}
       ${licksTypeSwitchHtml(lick)}
       <span class="flex-1"></span>

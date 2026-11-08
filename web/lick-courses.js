@@ -105,16 +105,26 @@ function licksGroupCourses(items) {
 }
 
 
+// The most recently practiced lick overall — the one you just came back from. It gets a soft
+// highlight, and its course is scrolled so the row is visible (see licksRevealJust).
+let licksJustId = null;
+function licksComputeJust(items) {
+  let best = null;
+  for (const l of items) if (l.last_date && (!best || l.last_date > best.last_date)) best = l;
+  licksJustId = best ? best.id : null;
+}
+
 function licksRowHtml(l) {
+  const just = l.id === licksJustId;
   const bpm = l.last_practiced_bpm ?? l.last_bpm;
   const progress = bpm != null ? `${bpm}${l.target_bpm ? ` / ${l.target_bpm}` : ''} BPM` : '尚未开始';
   // ids may be non-Latin slugs. Encode before placing them in an event handler.
   const id = encodeURIComponent(l.id).replace(/'/g, '%27');
-  return `<button type="button" class="lick-card lick-course-row ${licksStalenessClass(l.last_date)} w-full text-left text-fg bg-card! font-normal max-sm:items-start! max-sm:gap-2!" data-lick-id="${htmlEsc(l.id)}"
+  return `<button type="button" class="lick-card lick-course-row ${licksStalenessClass(l.last_date)} w-full text-left text-fg ${just ? 'bg-primary-bg! lick-just' : 'bg-card!'} font-normal max-sm:items-start! max-sm:gap-2!" data-lick-id="${htmlEsc(l.id)}"
       onclick="licksOpenCourseLick(decodeURIComponent('${id}'))" >
     <span class="lick-row-name flex items-center gap-3 min-w-0">${l.course_order ? `<span class="lick-order text-sm text-fg-muted tabular-nums">${String(l.course_order).padStart(2, '0')}</span>` : ''}
       <span>${htmlEsc(l.title)}</span></span>
-    <span class="lick-card-right max-sm:flex-wrap max-sm:justify-end max-sm:max-w-[45%]"><span class="lick-card-bpm">${progress}</span><span class="lick-card-last max-sm:text-xs!">${l.last_date ? timeAgo(l.last_date) : '—'}</span></span>
+    <span class="lick-card-right max-sm:flex-wrap max-sm:justify-end max-sm:max-w-[45%]"><span class="lick-card-bpm">${progress}</span><span class="lick-card-last max-sm:text-xs! ${just ? 'text-primary!' : ''}">${l.last_date ? timeAgo(l.last_date) : '—'}</span></span>
   </button>`;
 }
 
@@ -159,6 +169,7 @@ function licksFilterList() {
   Object.assign(lickCourseUi, { query });
   licksCourseUiSave();
   licksRenderTypeTabs();
+  licksComputeJust(lickCatalog);
   const items = licksFilterItems(lickCatalog, query, status, lickCourseUi.type);
   const groups = licksGroupCourses(items);
   const summary = document.getElementById('licks-summary');
@@ -166,11 +177,10 @@ function licksFilterList() {
   let main = '';
   if (groups.length) main += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">课程集</h3>${groups.map(g => {
     const all = lickCatalog.filter(l => l.collection === g.name);
-    const practiced = all.filter(l => l.session_count).length;
     return `<details class="lick-collection group border border-solid border-line rounded-lg my-3 bg-card" data-collection="${htmlEsc(g.name)}" ${licksDetailsAttrs('collection:' + g.name, !!(query || status || tag))}>
-      <summary class="cursor-pointer flex gap-3 items-center p-4 list-none"><span aria-hidden="true" class="text-xl text-fg-muted transition-transform group-open:rotate-90">›</span><span class="lick-collection-name flex-1 text-lg font-semibold">${htmlEsc(g.name)}<small class="block text-fg-muted text-sm font-normal mt-1">${all.length} 课 · ${practiced} 课有练习记录</small></span>
+      <summary class="cursor-pointer flex gap-3 items-center p-4 list-none"><span aria-hidden="true" class="text-xl text-fg-muted transition-transform group-open:rotate-90">›</span><span class="lick-collection-name flex-1 text-lg font-semibold">${htmlEsc(g.name)}</span><span class="text-fg-muted text-sm font-normal shrink-0">${all.length} 课</span>
       </summary>
-      <div class="lick-collection-lessons px-3 pb-3 max-h-[min(60vh,420px)] overflow-y-auto">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
+      <div class="lick-collection-lessons relative px-3 pb-3 max-h-[min(60vh,420px)] overflow-y-auto">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
   }).join('')}</section>`;
   const single = licksSortByLast(items.filter(l => !l.collection));
   let side = '';
@@ -179,6 +189,22 @@ function licksFilterList() {
   // Wide screens: courses on the left; standalone licks + heatmap pinned on the right (see .lick-list-cols).
   el.innerHTML = main;
   document.getElementById('licks-side').innerHTML = side;
+  licksRevealJust();
+}
+
+// Lessons scroll inside a capped box, so make sure the just-practiced row is inside the viewport of its
+// course, even when it is the last lesson. Re-run when a course is opened (a closed <details> has no layout).
+function licksScrollToJust(details) {
+  const box = details.querySelector('.lick-collection-lessons');
+  const row = box?.querySelector('.lick-just');
+  if (!box || !row || !details.open) return;
+  box.scrollTop = Math.max(0, row.offsetTop - (box.clientHeight - row.offsetHeight) / 2);
+}
+function licksRevealJust() {
+  document.querySelectorAll('#licks-list details.lick-collection').forEach(d => {
+    d.addEventListener('toggle', () => licksScrollToJust(d));
+    licksScrollToJust(d);
+  });
 }
 
 function licksDefaultPlan(lick = {}) {

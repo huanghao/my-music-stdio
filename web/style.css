@@ -1162,6 +1162,8 @@ input[type="number"] { width: 64px; text-align: center; }
 .lick-card-last { font-size: 13px; font-weight: 600; color: var(--text); }
 .lick-card-bpm  { font-size: 12px; color: var(--text-faint); }
 .lick-list-cols { display: block; }
+/* The first section sits right under the search bar — no extra top margin. */
+.lick-list-main > .lick-list-section:first-child, #licks-side > .lick-list-section:first-child { margin-top: 0; }
 @media (min-width: 1024px) {
   .lick-list-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
   .lick-list-side .lick-heatmap-wrap { margin-top: 16px; }

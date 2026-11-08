@@ -1072,7 +1072,7 @@ function updateTransportForPage(name) {
       // see licksSyncPracticePanelHome); editing anything else clears it.
       if (typeof licksState !== 'undefined' && licksState.activeLick && licksState.editor
           && licksState.activeLick.id === licksState.editor.id) {
-        registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart, stop: stStop });
+        registerTransport({ kind: 'playback', label: '遥控', play: stStart, stop: stStop });
         setTransportState(stState.running ? 'playing' : 'stopped');
       } else {
         clearTransport();

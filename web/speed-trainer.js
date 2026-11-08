@@ -25,6 +25,12 @@ const stState = {
   running: false,
   audioCtx: null, timerId: null,
   nextTickTime: 0, tickIndex: 0, barsCompletedAtCurrentBpm: 0,
+  // Step cue (only meaningful with autoAdvance): a distinct chime when the tempo
+  // steps, plus `countInBars` "预备" bars at the new tempo before the counted
+  // bars of that step begin. totalBars = counted bars since Start (shown when
+  // autoAdvance is off, so a long session never loses its place).
+  stepChime: true, countInBars: 1,
+  countInLeft: 0, pendingCue: null, totalBars: 0,
 };
 
 // ── Persistence ──
@@ -42,6 +48,8 @@ function stPrefsLoad() {
   if (typeof saved.autoAdvance === 'boolean') stState.autoAdvance     = saved.autoAdvance;
   if (Number.isFinite(saved.autoAdvanceBars)) stState.autoAdvanceBars = saved.autoAdvanceBars;
   if (typeof saved.bounceMode === 'boolean')  stState.bounceMode      = saved.bounceMode;
+  if (typeof saved.stepChime === 'boolean')   stState.stepChime       = saved.stepChime;
+  if (Number.isFinite(saved.countInBars))     stState.countInBars     = Math.max(0, Math.min(4, saved.countInBars));
   // The live tempo is persisted too, so a revisit picks up where the last
   // session left off instead of snapping back to Start BPM.
   if (Number.isFinite(saved.currentBpm)) {
@@ -60,6 +68,8 @@ function stApplyStateToUI() {
   document.getElementById('st-auto-advance').checked    = stState.autoAdvance;
   document.getElementById('st-auto-advance-bars').value = stState.autoAdvanceBars;
   document.getElementById('st-bounce').checked          = stState.bounceMode;
+  document.getElementById('st-step-chime').checked      = stState.stepChime;
+  document.getElementById('st-count-in').value          = stState.countInBars;
 }
 
 function stPrefsSave() {
@@ -68,6 +78,7 @@ function stPrefsSave() {
     stepBpm: stState.stepBpm, beatsPerBar: stState.beatsPerBar,
     subdivision: stState.subdivision, autoAdvance: stState.autoAdvance,
     autoAdvanceBars: stState.autoAdvanceBars, bounceMode: stState.bounceMode,
+    stepChime: stState.stepChime, countInBars: stState.countInBars,
     currentBpm: stState.currentBpm,
   }));
 }
@@ -81,6 +92,9 @@ function stReadOptionsFromUI() {
   stState.autoAdvance = document.getElementById('st-auto-advance').checked;
   stState.autoAdvanceBars = Math.max(1, parseInt(document.getElementById('st-auto-advance-bars').value) || 4);
   stState.bounceMode = document.getElementById('st-bounce').checked;
+  stState.stepChime = document.getElementById('st-step-chime').checked;
+  const ci = parseInt(document.getElementById('st-count-in').value);
+  stState.countInBars = Number.isFinite(ci) ? Math.max(0, Math.min(4, ci)) : 1;
 }
 
 function initSpeedPage() {
@@ -106,6 +120,8 @@ function initSpeedPage() {
     document.getElementById('st-auto-advance').addEventListener('change', stOnOptionsChanged);
     document.getElementById('st-auto-advance-bars').addEventListener('change', stOnOptionsChanged);
     document.getElementById('st-bounce').addEventListener('change', stOnOptionsChanged);
+    document.getElementById('st-step-chime').addEventListener('change', stOnOptionsChanged);
+    document.getElementById('st-count-in').addEventListener('change', stOnOptionsChanged);
   }
 
   stRenderBeatRow();
@@ -119,8 +135,9 @@ function stOnOptionsChanged() {
   const wasRunning = stState.running;
   const prevStartBpm = stState.startBpm;
   stReadOptionsFromUI();
-  if (!wasRunning) stState.currentBpm = Math.min(stState.currentBpm, stState.targetBpm);
-  stPrefsSave(); // after the currentBpm clamp above, so the persisted tempo matches
+  // (No clamp of the live tempo to Target here: a tempo you set by hand —
+  // even above Target — must survive unrelated option edits.)
+  stPrefsSave();
   stRenderBeatRow();
   stUpdateDisplay();
   // Editing Start BPM while a lick is being practiced is a tempo decision for
@@ -148,19 +165,61 @@ function stRenderBeatRow() {
   ).join('');
 }
 
+let stDotCache = null; // [rowEl, dots] — rebuilt only when the row is re-rendered
 function stFlashBeat(beatIndexInBar, isDownbeat) {
   const row = document.getElementById('st-beat-row');
-  row.querySelectorAll('.st-beat-dot').forEach((dot, i) => {
+  if (!stDotCache || stDotCache[0] !== row || stDotCache[1].length !== stState.beatsPerBar || !stDotCache[1][0]?.isConnected) {
+    stDotCache = [row, [...row.querySelectorAll('.st-beat-dot')]];
+  }
+  stDotCache[1].forEach((dot, i) => {
     dot.classList.toggle('active', i === beatIndexInBar);
     dot.classList.toggle('downbeat', i === beatIndexInBar && isDownbeat);
   });
 }
 
 function stUpdateDisplay() {
-  document.getElementById('st-bpm-current').value = stState.currentBpm;
+  const input = document.getElementById('st-bpm-current');
+  // The metronome refreshes this box every bar while running — never overwrite
+  // it while you're typing in it, or half-typed numbers vanish mid-edit.
+  const typing = typeof document.activeElement !== 'undefined' && document.activeElement === input;
+  if (!typing) input.value = stState.currentBpm;
+  stRefreshLive();
 }
 
-function stScheduleClick(tickIndex, time) {
+// Bar counter ("第 3 / 4 小节"), shown big above the beat dots so a long
+// session never loses its place. `cue` = count-in bar after a tempo step.
+let stBarText = '';
+function stShowBar(num, cue, note) {
+  const el = document.getElementById('st-bar-num');
+  if (!el) return;
+  const total = stState.autoAdvance ? ` / ${stState.autoAdvanceBars}` : '';
+  stBarText = cue ? '预备' : `第 ${num}${total} 小节`;
+  el.textContent = stBarText;
+  el.classList.toggle('cue', !!cue);
+  const noteEl = document.getElementById('st-bar-note');
+  if (noteEl) noteEl.textContent = note || '';
+  stRefreshLive();
+}
+
+function stFlashStep(fromBpm, toBpm) {
+  const input = document.getElementById('st-bpm-current');
+  const noteEl = document.getElementById('st-bar-note');
+  if (noteEl) noteEl.textContent = `${fromBpm} → ${toBpm} BPM`;
+  if (!input) return;
+  input.classList.remove('st-step-flash');
+  void input.offsetWidth;
+  input.classList.add('st-step-flash');
+  setTimeout(() => input.classList.remove('st-step-flash'), 1500);
+}
+
+// One-line live summary for the collapsed floating practice window.
+function stRefreshLive() {
+  const txt = `${stState.running ? '▶' : '■'} ${stState.currentBpm} BPM${stState.running && stBarText ? ' · ' + stBarText : ''}`;
+  if (typeof document.querySelectorAll !== 'function') return;
+  document.querySelectorAll('.lkw-live').forEach(e => { e.textContent = txt; });
+}
+
+function stScheduleClick(tickIndex, time, cue) {
   const ctx = stState.audioCtx;
   const isBeat = tickIndex % stState.subdivision === 0;
   const beatIndexInBar = Math.floor(tickIndex / stState.subdivision) % stState.beatsPerBar;
@@ -187,7 +246,21 @@ function stScheduleClick(tickIndex, time) {
   // do something before hitting the ceiling.
   const soundGain = typeof fbSoundGain === 'function' ? fbSoundGain('metronome') : 1;
   const vol = (isDownbeat ? 0.7 : (isBeat ? 0.6 : 0.32)) * fbMasterGain() * soundGain;
-  if (vol > 0) {
+  if (cue && cue.chime && vol > 0) {
+    // Tempo-step chime: a rising two-note ping, clearly unlike the plain click.
+    [[1800, 0], [2400, 0.09]].forEach(([f, dt]) => {
+      const o = ctx.createOscillator();
+      o.type = 'triangle';
+      o.frequency.value = f;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(Math.min(1, vol * 1.15), time + dt);
+      g.gain.exponentialRampToValueAtTime(0.001, time + dt + 0.16);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(time + dt);
+      o.stop(time + dt + 0.18);
+    });
+  } else if (vol > 0) {
     const osc = ctx.createOscillator();
     osc.type = 'triangle';
     osc.frequency.value = isDownbeat ? 1500 : (isBeat ? 1000 : 700);
@@ -210,16 +283,45 @@ function stScheduleClick(tickIndex, time) {
 function stScheduler() {
   const ctx = stState.audioCtx;
   while (stState.nextTickTime < ctx.currentTime + ST_SCHEDULE_AHEAD_SEC) {
-    stScheduleClick(stState.tickIndex, stState.nextTickTime);
-
     const isBeat = stState.tickIndex % stState.subdivision === 0;
     const beatIndexInBar = Math.floor(stState.tickIndex / stState.subdivision) % stState.beatsPerBar;
+    const isDownbeat = isBeat && beatIndexInBar === 0;
+
+    // First beat of a bar: update the bar counter, and if a tempo step was
+    // just made, play the chime on this very beat.
+    let cue = null;
+    if (isDownbeat) {
+      const delayMs = Math.max(0, (stState.nextTickTime - ctx.currentTime) * 1000);
+      const pending = stState.pendingCue;
+      stState.pendingCue = null;
+      const inCountIn = stState.countInLeft > 0;
+      const num = (stState.autoAdvance ? stState.barsCompletedAtCurrentBpm : stState.totalBars) + 1;
+      if (pending && stState.stepChime) cue = { chime: true };
+      const bpm = stState.currentBpm;
+      setTimeout(() => {
+        stShowBar(num, inCountIn, pending ? `${pending.from} → ${pending.to} BPM` : '');
+        if (pending) stFlashStep(pending.from, pending.to);
+      }, delayMs);
+    }
+    stScheduleClick(stState.tickIndex, stState.nextTickTime, cue);
+
     if (isBeat && beatIndexInBar === stState.beatsPerBar - 1) {
-      // this tick completes a bar — advance the bar counter and, if enabled,
+      // this tick completes a bar. Count-in bars (after a tempo step) don't
+      // count toward the step; otherwise advance the counters and, if enabled,
       // auto-bump the tempo once enough bars have passed at this one
-      stState.barsCompletedAtCurrentBpm++;
-      if (stState.autoAdvance && stState.barsCompletedAtCurrentBpm >= stState.autoAdvanceBars) {
-        stBumpUp();
+      if (stState.countInLeft > 0) {
+        stState.countInLeft--;
+      } else {
+        stState.barsCompletedAtCurrentBpm++;
+        stState.totalBars++;
+        if (stState.autoAdvance && stState.barsCompletedAtCurrentBpm >= stState.autoAdvanceBars) {
+          const from = stState.currentBpm;
+          stBumpUp();
+          if (stState.currentBpm !== from) {
+            stState.pendingCue = { from, to: stState.currentBpm };
+            stState.countInLeft = stState.countInBars;
+          }
+        }
       }
       stUpdateDisplay();
     }
@@ -238,11 +340,15 @@ function stStart() {
     fbRegisterAudioContext(stState.audioCtx); // routes to the globally-selected output device (fb-audio.js)
   }
   if (stState.audioCtx.state === 'suspended') stState.audioCtx.resume();
-  stState.currentBpm = Math.min(Math.max(stState.currentBpm, stState.startBpm), stState.targetBpm);
-  stPrefsSave(); // the clamp above may have moved the persisted tempo
+  // The tempo you set is the tempo you get: no clamping into [Start, Target]
+  // on Play (that silently snapped hand-set tempos back). Start/Target only
+  // steer the automatic ramp.
   stNotifyLickBpm();
   stState.tickIndex = 0;
   stState.barsCompletedAtCurrentBpm = 0;
+  stState.totalBars = 0;
+  stState.countInLeft = 0;
+  stState.pendingCue = null;
   stState.rampDirection = 1; // every Start begins ascending toward Target, regardless of which way a previous bounce run ended
   stState.nextTickTime = stState.audioCtx.currentTime + 0.05;
   stState.running = true;
@@ -261,7 +367,34 @@ function stStop() {
   if (typeof setTransportState === 'function') setTransportState('stopped');
   if (typeof ptOnMetronomeStop === 'function') ptOnMetronomeStop(); // optional timer link — see practice-timer.js
   stFlashBeat(-1, false);
+  stBarText = '';
+  const barEl = document.getElementById('st-bar-num');
+  if (barEl) { barEl.textContent = '—'; barEl.classList?.remove('cue'); }
+  const noteEl = document.getElementById('st-bar-note');
+  if (noteEl) noteEl.textContent = '';
   stUpdateDisplay();
+}
+
+// Abandon the current run and go back to the initial state: stop the click,
+// tempo back to Start BPM, all bar / step counters cleared. (The lick's saved
+// "last practiced" tempo is left untouched.)
+function stReset() {
+  stStop();
+  stState.currentBpm = stState.startBpm;
+  stState.barsCompletedAtCurrentBpm = 0;
+  stState.totalBars = 0;
+  stState.countInLeft = 0;
+  stState.pendingCue = null;
+  stState.rampDirection = 1;
+  stBarText = '';
+  const barEl = document.getElementById('st-bar-num');
+  if (barEl) { barEl.textContent = '—'; barEl.classList?.remove('cue'); }
+  const noteEl = document.getElementById('st-bar-note');
+  if (noteEl) noteEl.textContent = '';
+  stPrefsSave();
+  stUpdateDisplay();
+  // Deliberately NOT stNotifyLickBpm(): a reset abandons this run, it must not
+  // overwrite the lick's saved "last practiced" tempo.
 }
 
 // Notifies the active lick (if any — see licksState.activeLick in licks.js)
@@ -284,11 +417,13 @@ function stNotifyLickBpm() {
 function stBumpUp() {
   const step = stState.rampDirection === -1 ? -stState.stepBpm : stState.stepBpm;
   let next = stState.currentBpm + step;
+  // Never move AGAINST the ramp direction: a hand-set tempo already beyond the
+  // end stays where it is instead of dropping back to Target/Start.
   if (stState.rampDirection !== -1 && next >= stState.targetBpm) {
-    next = stState.targetBpm;
+    next = Math.max(stState.targetBpm, stState.currentBpm);
     if (stState.bounceMode) stState.rampDirection = -1;
   } else if (stState.rampDirection === -1 && next <= stState.startBpm) {
-    next = stState.startBpm;
+    next = Math.min(stState.startBpm, stState.currentBpm);
     stState.rampDirection = 1;
   }
   stState.currentBpm = next;
@@ -324,5 +459,5 @@ function stChartWindowMs() {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { stState, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage, stOnOptionsChanged, stBumpUp };
+  module.exports = { stState, stReset, stScheduler, stScheduleClick, stAdjustBpm, stSetCurrentBpm, stChartWindowMs, initSpeedPage, stOnOptionsChanged, stBumpUp };
 }

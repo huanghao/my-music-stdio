@@ -165,8 +165,10 @@ function licksFilterList() {
   licksRenderTypeTabs();
   const items = licksFilterItems(lickCatalog, query, status, lickCourseUi.type);
   const groups = licksGroupCourses(items);
-  let html = `<p class="lick-list-summary">${lickCatalog.length} 条练习 · ${licksGroupCourses(lickCatalog).length} 个课程集</p>`;
-  if (groups.length) html += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">课程集</h3>${groups.map(g => {
+  const summary = document.getElementById('licks-summary');
+  if (summary) summary.textContent = `${lickCatalog.length} 条练习 · ${licksGroupCourses(lickCatalog).length} 个课程集`;
+  let main = '';
+  if (groups.length) main += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">课程集</h3>${groups.map(g => {
     const all = lickCatalog.filter(l => l.collection === g.name);
     const candidate = licksResumeCandidate(all);
     const practiced = all.filter(l => l.session_count).length;
@@ -174,12 +176,15 @@ function licksFilterList() {
     return `<details class="lick-collection group border border-solid border-line rounded-lg my-3 bg-card" data-collection="${htmlEsc(g.name)}" ${licksDetailsAttrs('collection:' + g.name, !!(query || status || tag))}>
       <summary class="cursor-pointer flex gap-3 items-center p-4 list-none"><span aria-hidden="true" class="text-xl text-fg-muted transition-transform group-open:rotate-90">›</span><span class="lick-collection-name flex-1 text-lg font-semibold">${htmlEsc(g.name)}<small class="block text-fg-muted text-sm font-normal mt-1">${all.length} 课 · ${practiced} 课有练习记录</small></span>
       ${candidate ? `<button class="btn btn-ghost btn-sm" onclick="event.preventDefault();event.stopPropagation();licksOpenCourseLick(decodeURIComponent('${id}'))">${candidate.last_date ? '继续练习' : '开始课程'} →</button>` : ''}</summary>
-      <div class="lick-collection-lessons px-3 pb-3">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
+      <div class="lick-collection-lessons px-3 pb-3 max-h-[min(60vh,420px)] overflow-y-auto">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
   }).join('')}</section>`;
   const single = licksSortByLast(items.filter(l => !l.collection));
-  if (single.length) html += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">独立 Licks</h3>${single.map(licksRowHtml).join('')}</section>`;
-  if (!items.length) html += '<p class="empty-state">没有匹配的练习。可以清除筛选，或新建 Lick。</p>';
-  el.innerHTML = html;
+  let side = '';
+  if (single.length) side += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">独立 Licks</h3>${single.map(licksRowHtml).join('')}</section>`;
+  if (!items.length) main += '<p class="empty-state">没有匹配的练习。可以清除筛选，或新建 Lick。</p>';
+  // Wide screens: courses on the left; standalone licks + heatmap pinned on the right (see .lick-list-cols).
+  el.innerHTML = main;
+  document.getElementById('licks-side').innerHTML = side;
 }
 
 function licksDefaultPlan(lick = {}) {
@@ -227,7 +232,10 @@ function licksNotifyPlanChange() {
   licksState.licksById[a.id] = { ...licksState.licksById[a.id], ...update };
   if (licksState.currentLick?.id === a.id) Object.assign(licksState.currentLick, update);
   const target = document.getElementById('lick-detail-target');
-  if (target) target.textContent = `个人目标 ${target_bpm} BPM`;
+  if (target) {
+    const cur = target.textContent.match(/^(\d+) → /);
+    target.textContent = `${cur ? cur[1] + ' → ' : ''}目标 ${target_bpm} BPM`;
+  }
   lickPlanSave = lickPlanSave.catch(() => {}).then(() => api(`/api/licks/${encodeURIComponent(a.id)}/practice-plan`, 'PUT', update));
   lickPlanSave.catch(e => setStatus('训练配置保存失败：' + e.message));
 }

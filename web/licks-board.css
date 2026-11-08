@@ -1,9 +1,7 @@
 /* Lick detail material board — see licks-board.js */
 .lkb { margin: 8px 0 16px; }
-.lkb-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-.lkb-hint { color: var(--text-muted); font-size: 12px; }
 .lkb-menu { position: relative; }
-.lkb-pop { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 240px; padding: 4px; z-index: 600;
+.lkb-pop { display: none; position: absolute; top: 100%; right: 0; margin-top: 4px; min-width: 240px; padding: 4px; z-index: 600;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); }
 .lkb-menu.open .lkb-pop { display: block; }
 .lkb-pop div { padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
@@ -51,3 +49,42 @@
   border-right: 2px solid var(--border-muted); border-bottom: 2px solid var(--border-muted); border-radius: 0 0 3px 0; }
 .lkb-blk:hover .lkb-rc::after { border-color: var(--primary); }
 .lkb-rr:hover, .lkb-rb:hover { background: var(--primary-bg); }
+
+/* Compact track list: ▶ + name per row; the playing row expands to show seek / speed / Song Loop. */
+.lkb-trk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 12px; border-top: 1px solid var(--border); }
+.lkb-trk:first-child { border-top: 0; }
+.lkb-trk.on { background: var(--primary-bg); }
+.lkb-trk .lick-audio-embed, .lkb-trk .lick-audio-player { display: contents; }
+.lkb-trk .lick-audio-toggle { order: 0; }
+.lkb-trk-nm { order: 1; flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lkb-trk.on .lkb-trk-nm { font-weight: 600; }
+.lkb-trk .lick-audio-time { order: 2; }
+.lkb-trk .lick-audio-seek { order: 3; flex: 1 1 120px; min-width: 80px; }
+.lkb-trk .lick-audio-speed { order: 4; }
+.lkb-trk [data-label] { order: 5; }
+.lkb-trk:not(.on) .lick-audio-time, .lkb-trk:not(.on) .lick-audio-seek, .lkb-trk:not(.on) .lick-audio-speed, .lkb-trk:not(.on) [data-label] { display: none; }
+
+/* Floating practice window (metronome) */
+.lkw { position: fixed; z-index: 500; width: 440px; max-width: calc(100vw - 16px); max-height: calc(100vh - 80px); min-width: 320px; min-height: 120px; overflow: auto; resize: both;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.22); }
+.lkw:not(:has(#st-panel)) { display: none; }
+.lkw-h { display: flex; align-items: center; gap: 8px; padding: 6px 10px; position: sticky; top: 0; z-index: 1; cursor: grab; user-select: none;
+  background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 12px; }
+.lkw-h:active { cursor: grabbing; }
+.lkw-grip { color: var(--text-muted); }
+.lkw-toggle { margin-left: auto; border: 0; background: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 6px; }
+.lkw.collapsed #st-panel { display: none; }
+.lkw.collapsed .lkw-h { border-bottom: 0; }
+.lkw #st-panel { margin: 0; border: 0; box-shadow: none; }
+
+.lkw-live { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.lkw:not(.collapsed) .lkw-live { display: none; }
+
+.lkw.collapsed { resize: none; width: max-content !important; min-width: 0; min-height: 0; height: auto !important; overflow: hidden; border-radius: 999px; }
+.lkw.collapsed .lkw-h { border-bottom: 0; background: var(--bg-card); padding: 6px 12px; border-radius: 999px; }
+
+.lkw .st-bpm-row, .lkw .st-rhythm-row { flex-wrap: wrap; row-gap: 6px; }
+
+.lkb-empty { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 32px 16px;
+  border: 2px dashed var(--border); border-radius: 12px; }
+.lkb-empty .empty-state { margin: 0; }

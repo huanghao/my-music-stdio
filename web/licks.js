@@ -938,6 +938,10 @@ async function newLick() {
     // history — Back from the editor returns to the new lick's detail page,
     // and Back from there returns to wherever "New Lick" was clicked from.
     await navOpenLick(r.id);
+    // Board layout: land on the (empty) detail page — materials are added with
+    // "＋ 添加素材" there; notes / target BPM stay one click away in ⋯ → Edit.
+    // The single-column fallback has no board, so it still opens the editor.
+    if (typeof lkbEnabled === 'function' && lkbEnabled()) return;
     navOpenLickEdit(r.id); // then the full-page editor to fill notes + target BPM
   }, false);
 }
@@ -954,6 +958,47 @@ async function openLick(id) {
   document.getElementById('page-lick-detail').classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === 'licks'));
   renderLickDetail(lick);
+}
+
+// Practice history is auto-recorded and rarely read: one summary line, chart +
+// session list only on demand (open state: lick_sessions_open). Its own
+// function so a logged session can refresh just this block in place.
+function licksSessionsHtml(lick) {
+  const sessions = lick.sessions || [];
+  const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
+  return `
+    <details class="lick-sessions" id="lick-sessions-details" ${licksSessionsOpen() ? 'open' : ''} ontoggle="licksSessionsOnToggle(this)">
+      <summary class="lick-sessions-summary">练习记录 · ${sessions.length} 次${lastLoggedBpm != null ? ` · 最近 ${lastLoggedBpm} BPM` : ''}${lick.target_bpm ? ` · 目标 ${lick.target_bpm} BPM` : ''}</summary>
+      <div class="lick-chart-wrap" id="lick-chart-wrap">
+        ${renderLickChart(sessions, lick.target_bpm)}
+      </div>
+      <div class="lick-sessions-list">
+        ${sessions.length === 0
+          ? '<p class="empty-state">No sessions yet — practice and log one!</p>'
+          : (() => {
+              const MAX = 20;
+              const shown = [...sessions].reverse().slice(0, MAX);
+              const rows = shown.map(s => `
+                <div class="lick-session-row">
+                  <span class="lick-session-bpm">${s.bpm} BPM</span>
+                  <span class="lick-session-dur">${s.duration_min} min</span>
+                  <span class="lick-session-date">${fmtDate(s.date)}</span>
+                </div>`).join('');
+              const more = sessions.length > MAX
+                ? `<p class="empty-state py-2!">… and ${sessions.length - MAX} earlier sessions</p>`
+                : '';
+              return rows + more;
+            })()}
+      </div>
+    </details>
+  `;
+}
+
+function licksRefreshSessions(lick) {
+  const el = document.getElementById('lick-sessions-details');
+  if (!el) return false;
+  el.outerHTML = licksSessionsHtml(lick);
+  return true;
 }
 
 function renderLickDetail(lick) {
@@ -977,14 +1022,16 @@ function renderLickDetail(lick) {
   const useBoard = typeof lkbEnabled === 'function' && lkbEnabled();
   const sessions = lick.sessions || [];
   const lastLoggedBpm = sessions.length ? sessions[sessions.length - 1].bpm : null;
-  const targetLine = `<span class="lick-target" id="lick-detail-target">${lick.target_bpm ? `个人目标 ${lick.target_bpm} BPM` : '个人目标未设置'}</span>`;
+  // Progress and goal share one chip: "95 → 目标 120 BPM". A dot marks a live
+  // tempo that is ahead of the last logged session.
+  const liveBpm = lick.last_practiced_bpm != null ? lick.last_practiced_bpm : lastLoggedBpm;
+  const unlogged = lick.last_practiced_bpm != null && lick.last_practiced_bpm !== lastLoggedBpm;
+  const goalTxt = lick.target_bpm ? `目标 ${lick.target_bpm} BPM` : '未设目标';
+  const targetLine = `<span class="lick-target" id="lick-detail-target" title="${liveBpm != null ? `上次练习 ${liveBpm} BPM${unlogged ? '（尚未记为 session）' : ''} · ` : ''}个人${goalTxt}">${liveBpm != null ? `${liveBpm} → ` : ''}${goalTxt}${unlogged ? ' <span class="text-primary">●</span>' : ''}</span>`;
   // Live progress: the tempo auto-saved while practicing (see
   // licksNotifyBpmChange) can be ahead of the last formally logged session —
   // surface that explicitly so "did my 95 BPM actually get saved?" has a
   // visible answer.
-  const liveNote = (lick.last_practiced_bpm != null && lick.last_practiced_bpm !== lastLoggedBpm)
-    ? `<div class="lick-live-bpm">🎯 Last practiced at <b>${lick.last_practiced_bpm} BPM</b> (not yet logged as a session)</div>`
-    : '';
 
   el.innerHTML = `
     <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mb-2">
@@ -993,6 +1040,7 @@ function renderLickDetail(lick) {
       ${licksTypeSwitchHtml(lick)}
       <span class="flex-1"></span>
       ${licksCourseNavHtml(lick)}
+      ${useBoard ? lkbMenuHtml() : ''}
       <details class="lick-more relative" id="lick-more-menu">
         <summary class="list-none cursor-pointer select-none px-2 h-ctl-sm inline-flex items-center rounded-md text-fg-dim hover:bg-subtle hover:text-fg" title="更多" aria-label="更多操作">⋯</summary>
         <div class="absolute right-0 top-full mt-1 z-20 min-w-28 flex flex-col p-1 rounded-lg border border-solid border-line bg-card shadow-md">
@@ -1002,7 +1050,6 @@ function renderLickDetail(lick) {
       </details>
     </div>
 
-    ${liveNote}
     ${useBoard ? lkbHostHtml() : licksScoreHtml(lick)}
     ${!useBoard && lick.notes ? `<div class="lick-notes-md">${licksRenderNotes(lick.notes)}</div>` : ''}
 
@@ -1012,31 +1059,7 @@ function renderLickDetail(lick) {
     <div id="lick-practice-slot"></div>
     ${useBoard ? '' : licksReferenceHtml(lick)}
 
-    <div class="lick-chart-wrap" id="lick-chart-wrap">
-      ${renderLickChart(sessions, lick.target_bpm)}
-    </div>
-
-    <details class="lick-sessions" id="lick-sessions-details" ${licksSessionsOpen() ? 'open' : ''} ontoggle="licksSessionsOnToggle(this)">
-      <summary class="lick-sessions-summary">Sessions (${sessions.length})</summary>
-      <div class="lick-sessions-list">
-        ${sessions.length === 0
-          ? '<p class="empty-state">No sessions yet — practice and log one!</p>'
-          : (() => {
-              const MAX = 20;
-              const shown = [...sessions].reverse().slice(0, MAX);
-              const rows = shown.map(s => `
-                <div class="lick-session-row">
-                  <span class="lick-session-bpm">${s.bpm} BPM</span>
-                  <span class="lick-session-dur">${s.duration_min} min</span>
-                  <span class="lick-session-date">${fmtDate(s.date)}</span>
-                </div>`).join('');
-              const more = sessions.length > MAX
-                ? `<p class="empty-state py-2!">… and ${sessions.length - MAX} earlier sessions</p>`
-                : '';
-              return rows + more;
-            })()}
-      </div>
-    </details>
+    ${licksSessionsHtml(lick)}
   `;
   if (useBoard) lkbMount(lick);
   licksRestoreCourseDetailUi(lick);
@@ -1466,7 +1489,8 @@ async function practiceLick(id) {
   if (!onDetailPage || !licksState.currentLick || licksState.currentLick.id !== id) {
     await openLick(id); // navigate to + render the detail page (also syncs panel placement)
   } else {
-    renderLickDetail(licksState.currentLick); // already viewing it — re-render to swap in the panel
+    if (document.getElementById('lkb-canvas')) licksSyncPracticePanelHome(); // board: just re-home the metronome, keep the loaded PDFs
+    else renderLickDetail(licksState.currentLick); // already viewing it — re-render to swap in the panel
   }
 }
 
@@ -1495,7 +1519,7 @@ function licksSyncPracticePanelHome() {
     && document.getElementById('page-lick-edit')?.classList.contains('active'));
   if (onActiveLickEditor) {
     if (typeof registerTransport === 'function') {
-      registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart, stop: stStop });
+      registerTransport({ kind: 'playback', label: '遥控', play: stStart, stop: stStop });
       setTransportState(stState.running ? 'playing' : 'stopped');
     }
     return;
@@ -1511,7 +1535,7 @@ function licksSyncPracticePanelHome() {
   // The panel has no inline Start/Stop of its own — like the standalone
   // Speed Trainer page, it's driven by the shared bottom transport bar.
   if (onActiveLickDetail) {
-    registerTransport({ kind: 'playback', label: 'Speed Trainer', play: stStart, stop: stStop });
+    registerTransport({ kind: 'playback', label: '遥控', play: stStart, stop: stStop });
     setTransportState(stState.running ? 'playing' : 'stopped');
   } else if (onLickDetailPage) {
     // Viewing a lick's detail page but not (or no longer) practicing it —
@@ -1540,7 +1564,9 @@ async function licksEndPractice() {
   // Reflect practice having ended if the detail page content is still
   // sitting in the DOM (about to be hidden by the page nav that triggered
   // this) — otherwise it'd briefly show a stale, now-detached panel slot.
-  if (licksState.currentLick) renderLickDetail(licksState.currentLick);
+  // (Board layout: the metronome lives in a floating window that hides itself
+  // once its panel is parked, so a re-render would only reload every PDF.)
+  if (licksState.currentLick && !document.getElementById('lkb-canvas')) renderLickDetail(licksState.currentLick);
 }
 
 // Auto-save hook: called whenever the timer's 🔗 metronome-link toggle
@@ -1645,7 +1671,9 @@ async function licksAutoLogSession(a) {
       const updated = await api(`/api/licks/${a.id}`);
       licksState.currentLick = updated;
       licksState.licksById[a.id] = updated;
-      renderLickDetail(updated);
+      // Board layout: refresh only the history block — a full re-render would
+      // reload every PDF/video iframe on the page.
+      if (!(document.getElementById('lkb-canvas') && licksRefreshSessions(updated))) renderLickDetail(updated);
     }
   } catch (e) {
     setStatus('Error auto-logging session: ' + e.message);

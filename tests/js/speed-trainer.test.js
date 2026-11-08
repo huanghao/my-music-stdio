@@ -175,3 +175,55 @@ test('stOnOptionsChanged mid-run does not override the tempo being practiced', (
     delete global.licksNotifyBpmChange;
   }
 });
+
+test('auto step: chime on the step beat, count-in bars do not count toward the step', () => {
+  global.fbMasterGain = () => 1;
+  const realSetTimeout = global.setTimeout;
+  global.setTimeout = () => 0; // UI flashes are timer-driven and need a real DOM
+  const freqs = [];
+  const ctx = {
+    currentTime: 0, destination: {},
+    createOscillator() { return { type: '', frequency: { set value(v) { freqs.push(v); } }, connect() {}, start() {}, stop() {} }; },
+    createGain() { return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {} }; },
+  };
+  Object.assign(st.stState, {
+    audioCtx: ctx, currentBpm: 60, startBpm: 60, targetBpm: 120, stepBpm: 5,
+    beatsPerBar: 4, subdivision: 1, autoAdvance: true, autoAdvanceBars: 2,
+    stepChime: true, countInBars: 1, bounceMode: false, rampDirection: 1,
+    nextTickTime: 0, tickIndex: 0, barsCompletedAtCurrentBpm: 0, totalBars: 0, countInLeft: 0, pendingCue: null,
+  });
+  // 60 BPM = 1 tick/s. Run 12 ticks: 2 counted bars, step, 1 count-in bar.
+  for (let t = 0; t < 12.5; t += 0.05) { ctx.currentTime = t; st.stScheduler(); }
+  assert.equal(st.stState.currentBpm, 65);
+  assert.equal(st.stState.countInLeft, 0);               // count-in bar finished
+  assert.equal(st.stState.barsCompletedAtCurrentBpm, 0); // …and was not counted
+  assert.equal(freqs.filter(f => f === 1800).length, 1); // exactly one chime
+  // the next counted bar starts counting normally
+  for (let t = 12.5; t < 17; t += 0.05) { ctx.currentTime = t; st.stScheduler(); }
+  assert.equal(st.stState.barsCompletedAtCurrentBpm, 1);
+  global.setTimeout = realSetTimeout;
+});
+
+test('stReset returns to Start BPM and clears every counter, even mid-run', () => {
+  Object.assign(st.stState, {
+    running: false, startBpm: 70, currentBpm: 95, barsCompletedAtCurrentBpm: 3, totalBars: 11,
+    countInLeft: 1, pendingCue: { from: 90, to: 95 }, rampDirection: -1,
+  });
+  st.stReset();
+  assert.equal(st.stState.currentBpm, 70);
+  assert.equal(st.stState.barsCompletedAtCurrentBpm, 0);
+  assert.equal(st.stState.totalBars, 0);
+  assert.equal(st.stState.countInLeft, 0);
+  assert.equal(st.stState.pendingCue, null);
+  assert.equal(st.stState.rampDirection, 1);
+});
+
+test('a hand-set tempo beyond Target survives option edits and the ramp never drags it back', () => {
+  Object.assign(st.stState, { running: false, startBpm: 60, targetBpm: 100, stepBpm: 5, bounceMode: false, rampDirection: 1 });
+  st.stSetCurrentBpm(120);
+  st.stOnOptionsChanged();
+  assert.equal(st.stState.currentBpm, 120);
+  Object.assign(st.stState, { startBpm: 60, targetBpm: 100, stepBpm: 5 }); // (the stub DOM re-read above resets these)
+  st.stBumpUp();
+  assert.equal(st.stState.currentBpm, 120);
+});

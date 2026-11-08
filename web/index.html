@@ -461,16 +461,18 @@
 
 <!-- LICKS LIST PAGE -->
 <div class="page" id="page-licks">
-  <div class="page-header max-w-[960px]!">
-    <h2 class="page-title">Licks</h2>
+  <div class="page-header max-w-[1280px]!">
+    <div class="flex items-baseline gap-3 flex-wrap"><h2 class="page-title">Licks</h2><span class="lick-list-summary mb-0!" id="licks-summary"></span></div>
     <button class="btn btn-primary" onclick="newLick()">+ New Lick</button>
   </div>
-  <div class="flex flex-wrap items-center gap-3 mb-5 max-w-[960px]">
+  <div class="flex flex-wrap items-center gap-3 mb-5 max-w-[1280px]">
     <input class="flex-1 min-w-[180px]" id="licks-search" type="search" placeholder="搜索练习或课程集…" aria-label="搜索练习" oninput="licksFilterList()">
     <div class="pl-lookup-tabs mb-0!" id="licks-type-tabs" role="group" aria-label="按类型筛选"></div>
   </div>
-  <div id="licks-list" class="max-w-[960px]"></div>
-  <div id="lick-heatmap"></div>
+  <div class="lick-list-cols max-w-[1280px]">
+    <div id="licks-list" class="lick-list-main"></div>
+    <aside class="lick-list-side"><div id="licks-side"></div><div id="lick-heatmap"></div></aside>
+  </div>
 </div>
 
 <!-- LICK DETAIL PAGE -->
@@ -523,6 +525,7 @@
   <!-- 动态圆点 + BPM 调节 + 节拍本身（Beats/bar、Subdivision）—— 这些是
        "节拍器"这一层的东西，练习中一直在看/碰，分割线以上。 -->
   <div class="st-live">
+    <div class="st-bar-row"><span class="st-bar-num" id="st-bar-num">—</span><span class="st-bar-note" id="st-bar-note"></span></div>
     <div class="st-beat-row" id="st-beat-row"></div>
     <div class="st-bpm-row flex-wrap sm:flex-nowrap gap-1.5! sm:gap-2.5!">
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(-10)">−10</button>
@@ -534,6 +537,7 @@
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(1)">+</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(5)">+5</button>
       <button class="btn btn-ghost btn-sm" onclick="stAdjustBpm(10)">+10</button>
+      <button class="btn btn-ghost btn-sm" onclick="stReset()" title="中断当前练习，回到初始状态（速度回到 Start BPM，小节数清零）">↺ 重置</button>
     </div>
     <div class="st-rhythm-row flex-wrap sm:flex-nowrap">
       <label class="st-field"><span class="st-field-label">Beats/bar</span><input type="number" id="st-beats-per-bar" min="1" max="12" value="4" class="w-[64px]!"></label>
@@ -561,6 +565,8 @@
     <label class="st-field"><span class="st-field-label">Target</span><input type="number" id="st-target-bpm" min="20" max="300" value="120"></label>
     <label class="st-field"><span class="st-field-label">Step</span><input type="number" id="st-step-bpm" min="1" max="30" value="4"></label>
     <label class="st-auto-advance-label"><input type="checkbox" id="st-auto-advance"> 自动提速 <span id="st-legacy-bars">every <input type="number" id="st-auto-advance-bars" min="1" max="4096" value="4" class="w-[48px]!"> bars</span></label>
+    <label class="st-auto-advance-label" title="自动提速时：提速那一拍响一个特别的提示音"><input type="checkbox" id="st-step-chime"> 变速提示音</label>
+    <label class="st-field"><span class="st-field-label">变速后预备小节</span><input type="number" id="st-count-in" min="0" max="4" value="1" title="变速后先用新速度数几个小节（显示“预备”），再开始计数"></label>
     <label class="st-bounce-label max-sm:items-start!"><input type="checkbox" id="st-bounce"> Bounce back to Start once Target is reached (loops)</label>
   </div>
 </div>

@@ -6,7 +6,7 @@
 //   text). The notes Markdown stays the single source of truth for WHICH
 //   materials exist; `lick.layout` only stores WHERE they sit.
 // - Layout (saved to the backend as lick.layout, only after the user changes
-//   something): { v:1, inline:bool, hidden:[sourceId], blocks:[{id, of, x, y, w, h, page}] }
+//   something): { v:1, hidden:[sourceId], blocks:[{id, of, x, y, w, h, page}] }
 //   x/w are in 1/LKB_COLS of the canvas width, y/h in px (multiples of LKB_SNAP).
 // - A block is dragged by its header, resized by its right / bottom / corner
 //   edges. A block that gets overlapped moves aside (right if cheaper, else down).
@@ -52,7 +52,7 @@ function lkbTakeLabel(w) {
 
 // Walks the rendered notes; every media embed becomes a source and is removed
 // from the text. Returns { sources: [...], textHtml }.
-function lkbCollectSources(lick, inline) {
+function lkbCollectSources(lick) {
   const sources = [];
   const seen = new Map();
   const add = (base, src) => {
@@ -70,7 +70,7 @@ function lkbCollectSources(lick, inline) {
   if (lkbSafeUrl(lick.demo_url)) add('video:' + lick.demo_url, { kind: 'video', title: '示范视频', href: lick.demo_url, file: true });
   if (lkbSafeUrl(lick.pdf_url)) add('pdf:' + lick.pdf_url, { kind: 'pdf', title: lkbFileName(lick.pdf_url), href: lick.pdf_url, page: 1 });
 
-  if (!inline) {
+  {
     const dropEmpty = el => {
       const p = el && el.parentElement;
       el.remove();
@@ -91,14 +91,17 @@ function lkbCollectSources(lick, inline) {
       add('video:' + key, { kind: 'video', title: label, html: w.outerHTML.replace(/ data-ml-idx="\d+"/, '') });
       dropEmpty(w);
     });
+    // All audio of the lick goes into ONE "音轨" block (a list of players).
+    const tracks = [];
     tmp.querySelectorAll('.lick-audio-embed').forEach(w => {
       const player = w.querySelector('.lick-audio-player');
       const url = player ? player.dataset.url : '';
       const btn = w.querySelector('[data-label]');
       const label = lkbTakeLabel(w) || (btn && btn.dataset.label) || lkbFileName(url);
-      add('audio:' + url, { kind: 'audio', title: label, html: w.outerHTML });
+      tracks.push(`<div class="lkb-trk"><div class="lkb-trk-nm" title="${htmlEsc(label)}">${htmlEsc(label)}</div>${w.outerHTML}</div>`);
       dropEmpty(w);
     });
+    if (tracks.length) add('tracks', { kind: 'audio', title: `音轨（${tracks.length}）`, html: tracks.join(''), n: tracks.length });
     tmp.querySelectorAll('img').forEach(img => {
       const src = img.getAttribute('src');
       if (!lkbSafeUrl(src)) return;
@@ -115,7 +118,8 @@ function lkbCollectSources(lick, inline) {
 
 // ── Layout model ──
 
-function lkbDefaultSize(kind) {
+function lkbDefaultSize(kind, src) {
+  if (kind === 'audio' && src && src.n) return { w: 60, h: Math.min(420, 50 + src.n * 70) };
   return {
     pdf: { w: 60, h: 640 }, img: { w: 120, h: 340 }, video: { w: 60, h: 340 },
     audio: { w: 60, h: 90 }, text: { w: 60, h: 220 }, link: { w: 40, h: 80 },
@@ -134,9 +138,8 @@ function lkbPlaceNew(blocks, entry) {
 }
 
 function lkbNormalizeLayout(raw) {
-  const L = { v: 1, inline: false, hidden: [], blocks: [] };
+  const L = { v: 1, hidden: [], blocks: [] };
   if (raw && typeof raw === 'object') {
-    L.inline = raw.inline === true;
     if (Array.isArray(raw.hidden)) L.hidden = raw.hidden.filter(s => typeof s === 'string');
     if (Array.isArray(raw.blocks)) {
       for (const b of raw.blocks) {
@@ -158,7 +161,7 @@ function lkbReconcile() {
   const used = new Set(L.blocks.map(b => b.of));
   for (const s of lkb.sources.values()) {
     if (used.has(s.id) || L.hidden.includes(s.id)) continue;
-    const sz = lkbDefaultSize(s.kind);
+    const sz = lkbDefaultSize(s.kind, s);
     const e = { id: s.id, of: s.id, x: 0, y: 0, w: sz.w, h: sz.h, page: s.page || 1 };
     lkbPlaceNew(L.blocks, e);
     L.blocks.push(e);
@@ -220,7 +223,7 @@ function lkbPdfSrc(src, page) {
 function lkbBodyHtml(entry, src) {
   switch (src.kind) {
     case 'pdf':
-      return `<div class="lick-pdf-embed lkb-pdf" data-href="${htmlEsc(src.href)}"><iframe src="${htmlEsc(lkbPdfSrc(src, entry.page))}" title="PDF"></iframe></div>`;
+      return `<div class="lick-pdf-embed lkb-pdf" data-href="${htmlEsc(src.href)}"><iframe loading="lazy" src="${htmlEsc(lkbPdfSrc(src, entry.page))}" title="PDF"></iframe></div>`;
     case 'img': return `<img src="${htmlEsc(src.href)}" alt="${htmlEsc(src.title)}" draggable="false">`;
     case 'video':
       return src.file
@@ -241,12 +244,7 @@ function lkbHeaderHtml(entry, src) {
   const pager = src.kind === 'pdf'
     ? `<span class="lkb-pp"><button data-act="prev" title="上一页">◀</button><input data-act="page" value="${entry.page || 1}"><button data-act="next" title="下一页">▶</button></span>`
     : '';
-  let tools = '';
-  if (src.kind === 'text') {
-    tools = `<button data-act="inline" title="打开后，笔记里的图片 / PDF / 音频回到文字中间原位显示，不再单独成块">${lkb.layout.inline ? '☑' : '☐'} 素材内联</button>`;
-  } else {
-    tools = `<button data-act="dup" title="复制一份放在旁边（例如同一个 PDF 的另一页）">＋并排</button><button data-act="del" title="从面板移除（不会删除素材本身，可从“添加素材”里找回）">×</button>`;
-  }
+  const tools = src.kind === 'text' ? '' : `<button data-act="dup" title="复制一份放在旁边（例如同一个 PDF 的另一页）">＋并排</button><button data-act="del" title="从面板移除（不会删除素材本身，可从“添加素材”里找回）">×</button>`;
   return `<div class="lkb-h">${title}${pager}<span class="lkb-sp">${tools}</span></div>`;
 }
 
@@ -266,13 +264,13 @@ function lkbFit() {
   cv.style.height = Math.max(240, lkbBottom(lkb.layout.blocks)) + 60 + 'px';
 }
 
+// The "add material" menu lives in the lick header row (see renderLickDetail).
+function lkbMenuHtml() {
+  return `<div class="lkb-menu" id="lkb-menu"><button class="btn btn-sm" onclick="lkbToggleMenu()" title="拖标题栏移动 · 拖右边 / 下边 / 右下角改大小">＋ 添加素材 ▾</button><div class="lkb-pop" id="lkb-pop"></div></div>`;
+}
+
 function lkbHostHtml() {
   return `<section class="lkb" id="lkb-root" aria-label="素材面板">
-    <div class="lkb-bar">
-      <div class="lkb-menu" id="lkb-menu"><button class="btn btn-sm" onclick="lkbToggleMenu()">＋ 添加素材 ▾</button><div class="lkb-pop" id="lkb-pop"></div></div>
-      <button class="btn btn-ghost btn-sm" onclick="lkbResetLayout()" title="清除手工排版，恢复自动排布">恢复默认排布</button>
-      <span class="lkb-hint">拖标题栏移动 · 拖右边 / 下边 / 右下角改大小</span>
-    </div>
     <div class="lkb-canvas" id="lkb-canvas"></div>
   </section>`;
 }
@@ -282,13 +280,18 @@ function lkbMount(lick) {
   if (!root) return;
   lkb.lick = lick;
   lkb.canvas = root;
+  // Page-width preference / sidebar changes resize the canvas without a window resize.
+  if (lkb.ro) lkb.ro.disconnect();
+  lkb.ro = new ResizeObserver(() => { if (lkb.canvas === root && lkb.layout) lkbFit(); });
+  lkb.ro.observe(root);
   lkb.layout = lkbNormalizeLayout(lick.layout);
   lkbRebuild();
+  lkbInitPracticeWindow();
 }
 
 // Re-collects sources (the notes may have changed) and redraws every block.
 function lkbRebuild() {
-  const { sources } = lkbCollectSources(lkb.lick, lkb.layout.inline);
+  const { sources } = lkbCollectSources(lkb.lick);
   lkb.sources = new Map(sources.map(s => [s.id, s]));
   lkbReconcile();
   lkbRender();
@@ -304,8 +307,30 @@ function lkbRender() {
   }).join('');
   lkbFit();
   lkbBindBlocks();
+  lkbWatchTracks();
   lkbRenderMenu();
-  if (!cv.children.length) cv.innerHTML = '<p class="empty-state">还没有素材 — 点上面的“＋ 添加素材”</p>';
+  if (!cv.children.length) {
+    cv.innerHTML = `<div class="lkb-empty"><p class="empty-state">还没有素材 — 点右上角的“＋ 添加素材”（添加后拖标题栏移动，拖右边 / 下边 / 右下角改大小）</p>
+      <div><button class="btn" onclick="lkbPickMaterial()">📎 上传 / 从素材库选择</button>
+      <button class="btn btn-ghost" onclick="navOpenLickEdit('${htmlEsc(lkb.lick.id)}')">📝 写笔记</button></div></div>`;
+    cv.style.height = '';
+  }
+}
+
+// A track row counts as "on" while its toggle shows ⏸ (the audio code flips
+// the button text on play/pause/end), so watch the text rather than hook events.
+function lkbSyncTracks() {
+  lkb.canvas?.querySelectorAll('.lkb-trk').forEach(r =>
+    r.classList.toggle('on', r.querySelector('.lick-audio-toggle')?.textContent.trim() === '⏸'));
+}
+function lkbWatchTracks() {
+  if (lkb.mo) lkb.mo.disconnect();
+  // Observe only each track's play button (not the whole canvas): the time
+  // readouts rewrite their text several times a second while playing.
+  lkb.mo = new MutationObserver(lkbSyncTracks);
+  lkb.canvas.querySelectorAll('.lkb-trk .lick-audio-toggle').forEach(b =>
+    lkb.mo.observe(b, { childList: true, characterData: true, subtree: true }));
+  lkbSyncTracks();
 }
 
 function lkbEntry(bid) { return lkb.layout.blocks.find(b => b.id === bid); }
@@ -362,22 +387,14 @@ function lkbSetPage(bid, page) {
   lkbSave();
 }
 
-function lkbToggleInline() {
-  lkb.layout.inline = !lkb.layout.inline;
-  // Block sets change completely: keep the text block's place, drop the rest.
-  lkb.layout.blocks = lkb.layout.blocks.filter(b => b.of === 'text');
-  lkb.layout.hidden = [];
-  lkbSave();
-  lkbRebuild();
-}
-
-function lkbResetLayout() {
-  lkb.layout = lkbNormalizeLayout({ inline: lkb.layout.inline });
-  lkbSave();
-  lkbRebuild();
-}
-
 function lkbToggleMenu() { document.getElementById('lkb-menu')?.classList.toggle('open'); }
+document.addEventListener('click', e => {
+  const m = document.getElementById('lkb-menu');
+  if (m && m.classList.contains('open') && !m.contains(e.target)) m.classList.remove('open');
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('lkb-menu')?.classList.remove('open');
+});
 
 function lkbRenderMenu() {
   const pop = document.getElementById('lkb-pop');
@@ -386,13 +403,14 @@ function lkbRenderMenu() {
   pop.innerHTML =
     hidden.map(s => `<div data-restore="${htmlEsc(s.id)}">${LKB_ICON[s.kind]} ${htmlEsc(s.title)}</div>`).join('') +
     (hidden.length ? '<hr>' : '') +
-    `<div data-pick="1">📎 上传 / 从素材库选择…</div>`;
+    `<div data-pick="1">📎 上传 / 从素材库选择…</div><div data-edit="1">📝 编辑笔记 / 目标 BPM…</div>`;
   pop.onclick = e => {
     const t = e.target.closest('div');
     if (!t) return;
     document.getElementById('lkb-menu').classList.remove('open');
     if (t.dataset.restore) lkbRestore(t.dataset.restore);
     else if (t.dataset.pick) lkbPickMaterial();
+    else if (t.dataset.edit) navOpenLickEdit(lkb.lick.id);
   };
 }
 
@@ -401,7 +419,7 @@ function lkbRestore(srcId) {
   const src = lkb.sources.get(srcId);
   if (!src) return;
   L.hidden = L.hidden.filter(id => id !== srcId);
-  const sz = lkbDefaultSize(src.kind);
+  const sz = lkbDefaultSize(src.kind, src);
   const e = { id: srcId, of: srcId, x: 0, y: 0, w: sz.w, h: sz.h, page: src.page || 1 };
   lkbPlaceNew(L.blocks, e);
   L.blocks.push(e);
@@ -552,7 +570,6 @@ function lkbBindBlocks() {
       else if (act === 'del') lkbDel(bid);
       else if (act === 'prev') lkbSetPage(bid, (b.page || 1) - 1);
       else if (act === 'next') lkbSetPage(bid, (b.page || 1) + 1);
-      else if (act === 'inline') lkbToggleInline();
     };
     el.querySelector('.lkb-h').onchange = e => {
       const t = e.target.closest('[data-act]');
@@ -575,3 +592,62 @@ addEventListener('resize', () => {
     } else if (on && document.getElementById('lkb-canvas')) lkbFit();
   }, 150);
 });
+
+// ── Floating practice window ──
+// The metronome panel (#st-panel) is homed into #lick-practice-slot by
+// licksSyncPracticePanelHome(); on the board page that slot is a free-floating,
+// draggable window that can collapse to a strip. Position/collapsed state is
+// a pure UI convenience → localStorage (lick_practice_win).
+const LKW_KEY = 'lick_practice_win';
+function lkwLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LKW_KEY));
+    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: v?.collapsed === true,
+      w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null };
+  } catch (_) { return { x: null, y: null, collapsed: false, w: null, h: null }; }
+}
+function lkwSave(st) { try { localStorage.setItem(LKW_KEY, JSON.stringify(st)); } catch (_) {} }
+
+function lkwApply(slot, st) {
+  slot.classList.toggle('collapsed', st.collapsed);
+  slot.style.width = st.w && !st.collapsed ? Math.max(320, Math.min(window.innerWidth - 16, st.w)) + 'px' : '';
+  slot.style.height = st.h && !st.collapsed ? Math.max(120, Math.min(window.innerHeight - 40, st.h)) + 'px' : '';
+  const w = slot.offsetWidth || 440;
+
+  const x = st.x == null ? window.innerWidth - w - 24 : st.x;
+  const y = st.y == null ? 130 : st.y;
+  slot.style.left = Math.max(0, Math.min(window.innerWidth - w - 8, x)) + 'px';
+  slot.style.top = Math.max(0, Math.min(window.innerHeight - 40, y)) + 'px';
+  const btn = slot.querySelector('.lkw-toggle');
+  if (btn) btn.textContent = st.collapsed ? '▸' : '▾';
+}
+
+function lkbInitPracticeWindow() {
+  const slot = document.getElementById('lick-practice-slot');
+  if (!slot) return;
+  const st = lkwLoad();
+  slot.classList.add('lkw');
+  slot.insertAdjacentHTML('afterbegin',
+    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-toggle" title="收起 / 展开"></button></div>');
+  const head = slot.querySelector('.lkw-h');
+  lkwApply(slot, st);
+  // Drag the bottom-right corner (CSS resize) to size the window; remember it.
+  let first = true, t = 0;
+  new ResizeObserver(() => {
+    if (first) { first = false; return; }
+    if (slot.classList.contains('collapsed') || !slot.offsetWidth) return;
+    clearTimeout(t);
+    t = setTimeout(() => { st.w = Math.round(slot.offsetWidth); st.h = Math.round(slot.offsetHeight); lkwSave(st); }, 300);
+  }).observe(slot);
+  if (typeof stRefreshLive === 'function') stRefreshLive();
+  head.querySelector('.lkw-toggle').onclick = () => { st.collapsed = !st.collapsed; lkwApply(slot, st); lkwSave(st); };
+  head.onpointerdown = e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, r = slot.getBoundingClientRect();
+    const move = ev => { st.x = r.left + ev.clientX - x0; st.y = r.top + ev.clientY - y0; lkwApply(slot, st); };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); lkwSave(st); };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+}

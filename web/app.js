@@ -142,6 +142,15 @@ function vampJamApplyVolumeChange(e) {
 function toolsMenuRender() {
   const check = document.getElementById('tools-menu-fretboard-check');
   if (check) check.textContent = fbState.iv.open ? '●' : '';
+  // Speed Trainer only exists on a Lick's page; hide its row elsewhere.
+  const speedAvail = typeof lkwIsAvailable === 'function' && lkwIsAvailable();
+  document.getElementById('tools-menu-speed')?.classList.toggle('hidden', !speedAvail);
+  const sc = document.getElementById('tools-menu-speed-check');
+  if (sc) sc.textContent = speedAvail && lkwIsOpen() ? '●' : '';
+}
+function toolsMenuSelectSpeed() {
+  lkwSetOpen(!lkwIsOpen());
+  toolsMenuClose();
 }
 function toolsMenuToggle() {
   const menu = document.getElementById('tools-menu');

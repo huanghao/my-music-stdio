@@ -244,7 +244,9 @@ function lkbHeaderHtml(entry, src) {
   const pager = src.kind === 'pdf'
     ? `<span class="lkb-pp"><button data-act="prev" title="上一页">◀</button><input data-act="page" value="${entry.page || 1}"><button data-act="next" title="下一页">▶</button></span>`
     : '';
-  const tools = src.kind === 'text' ? '' : `<button data-act="dup" title="复制一份放在旁边（例如同一个 PDF 的另一页）">＋并排</button><button data-act="del" title="从面板移除（不会删除素材本身，可从“添加素材”里找回）">×</button>`;
+  // The notes block can be hidden too (restorable from "添加素材"), but not duplicated.
+  const tools = (src.kind === 'text' ? '' : `<button data-act="dup" title="复制一份放在旁边（例如同一个 PDF 的另一页）">＋并排</button>`) +
+    `<button data-act="del" title="从面板移除（不会删除${src.kind === 'text' ? '笔记' : '素材'}本身，可从“添加素材”里找回）">×</button>`;
   return `<div class="lkb-h">${title}${pager}<span class="lkb-sp">${tools}</span></div>`;
 }
 
@@ -602,13 +604,27 @@ const LKW_KEY = 'lick_practice_win';
 function lkwLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(LKW_KEY));
-    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: v?.collapsed === true,
+    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: v?.collapsed === true, open: v?.open !== false,
       w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null, more: v?.more === true };
-  } catch (_) { return { x: null, y: null, collapsed: false, w: null, h: null, more: false }; }
+  } catch (_) { return { x: null, y: null, collapsed: false, open: true, w: null, h: null, more: false }; }
 }
 function lkwSave(st) { try { localStorage.setItem(LKW_KEY, JSON.stringify(st)); } catch (_) {} }
 
+// The live window state of the lick currently on screen (null when no lick page is mounted);
+// the tools menu toggles open/closed through it so drag/resize saves never write a stale flag.
+let lkwCur = null;
+function lkwIsAvailable() { return !!(lkwCur && document.querySelector('#lick-practice-slot.lkw')); }
+function lkwIsOpen() { return lkwIsAvailable() && lkwCur.open; }
+function lkwSetOpen(open) {
+  const slot = document.querySelector('#lick-practice-slot.lkw');
+  if (!slot || !lkwCur) return;
+  lkwCur.open = open;
+  lkwApply(slot, lkwCur);
+  lkwSave(lkwCur);
+}
+
 function lkwApply(slot, st) {
+  slot.classList.toggle('closed', !st.open);
   slot.classList.toggle('collapsed', st.collapsed);
   slot.style.width = st.w && !st.collapsed ? Math.max(320, Math.min(window.innerWidth - 16, st.w)) + 'px' : '';
   // Height is intentionally not restored: the compact window sizes to its content (a stale saved height would keep it tall).
@@ -626,10 +642,10 @@ function lkwApply(slot, st) {
 function lkbInitPracticeWindow() {
   const slot = document.getElementById('lick-practice-slot');
   if (!slot) return;
-  const st = lkwLoad();
+  const st = lkwCur = lkwLoad();
   slot.classList.add('lkw');
   slot.insertAdjacentHTML('afterbegin',
-    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-toggle" title="收起 / 展开"></button></div>');
+    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-toggle agent-icon-btn" title="收起 / 展开"></button><button class="lkw-close agent-icon-btn" title="关闭">✕</button></div>');
   const head = slot.querySelector('.lkw-h');
   lkwApply(slot, st);
   // "节拍与提速设置" fold: remembered across reloads (reassigning ontoggle keeps this idempotent across lick switches).
@@ -644,6 +660,7 @@ function lkbInitPracticeWindow() {
     t = setTimeout(() => { st.w = Math.round(slot.offsetWidth); st.h = Math.round(slot.offsetHeight); lkwSave(st); }, 300);
   }).observe(slot);
   if (typeof stRefreshLive === 'function') stRefreshLive();
+  head.querySelector('.lkw-close').onclick = () => lkwSetOpen(false);
   head.querySelector('.lkw-toggle').onclick = () => { st.collapsed = !st.collapsed; lkwApply(slot, st); lkwSave(st); };
   head.onpointerdown = e => {
     if (e.button !== 0 || e.target.closest('button')) return;

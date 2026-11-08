@@ -72,6 +72,7 @@
   background: var(--bg-subtle); border-bottom: 1px solid var(--border); font-size: 12px; }
 .lkw-h:active { cursor: grabbing; }
 .lkw-grip { color: var(--text-muted); }
+.lkw.closed { display: none; }
 .lkw-toggle { margin-left: auto; border: 0; background: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 6px; }
 .lkw.collapsed #st-panel { display: none; }
 .lkw.collapsed .lkw-h { border-bottom: 0; }

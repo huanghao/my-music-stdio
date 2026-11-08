@@ -221,6 +221,19 @@ function fbIvBuild() {
 
 function fbIvSetOpenUI(open) {
   document.getElementById('fbiv-panel')?.classList.toggle('open', open);
+  fbIvSetCollapsedUI(fbState.iv.collapsed);
+}
+
+function fbIvSetCollapsedUI(collapsed) {
+  document.getElementById('fbiv-panel')?.classList.toggle('collapsed', collapsed);
+  const btn = document.getElementById('fbiv-collapse');
+  if (btn) btn.textContent = collapsed ? '▸' : '▾';
+}
+
+function fbIvToggleCollapse() {
+  fbState.iv.collapsed = !fbState.iv.collapsed;
+  fbIvSetCollapsedUI(fbState.iv.collapsed);
+  fbPrefsSave();
 }
 
 function fbIvOpen() {

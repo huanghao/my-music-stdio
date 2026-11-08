@@ -977,6 +977,9 @@
      its own dedicated button since it's used far more often than these. -->
 <button id="tools-toggle" class="tools-toggle" title="工具" onclick="toolsMenuToggle()">🛠 工具</button>
 <div id="tools-menu" class="tools-menu">
+  <button type="button" class="tools-menu-item" id="tools-menu-speed" onclick="toolsMenuSelectSpeed()">
+    <span>⏱ Speed Trainer</span><span id="tools-menu-speed-check" class="tools-menu-check"></span>
+  </button>
   <button type="button" class="tools-menu-item" onclick="toolsMenuSelectFretboard()">
     <span>🎸 指板参考图</span><span id="tools-menu-fretboard-check" class="tools-menu-check"></span>
   </button>
@@ -996,7 +999,8 @@
   <div class="fbiv-head" id="fbiv-head">
     <span class="fbiv-grip" title="拖动到任意位置（双击复位）">⠿</span>
     <span class="fbiv-title">指板参考图</span>
-    <button type="button" class="agent-icon-btn" onclick="fbIvClose()">✕</button>
+    <button type="button" class="agent-icon-btn" id="fbiv-collapse" title="收起 / 展开" onclick="fbIvToggleCollapse()">▾</button>
+    <button type="button" class="agent-icon-btn" title="关闭" onclick="fbIvClose()">✕</button>
   </div>
   <div class="fbiv-body">
     <div class="fb-options" id="fb-iv-options"></div>

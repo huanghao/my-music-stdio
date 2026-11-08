@@ -603,15 +603,16 @@ function lkwLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(LKW_KEY));
     return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: v?.collapsed === true,
-      w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null };
-  } catch (_) { return { x: null, y: null, collapsed: false, w: null, h: null }; }
+      w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null, more: v?.more === true };
+  } catch (_) { return { x: null, y: null, collapsed: false, w: null, h: null, more: false }; }
 }
 function lkwSave(st) { try { localStorage.setItem(LKW_KEY, JSON.stringify(st)); } catch (_) {} }
 
 function lkwApply(slot, st) {
   slot.classList.toggle('collapsed', st.collapsed);
   slot.style.width = st.w && !st.collapsed ? Math.max(320, Math.min(window.innerWidth - 16, st.w)) + 'px' : '';
-  slot.style.height = st.h && !st.collapsed ? Math.max(120, Math.min(window.innerHeight - 40, st.h)) + 'px' : '';
+  // Height is intentionally not restored: the compact window sizes to its content (a stale saved height would keep it tall).
+  slot.style.height = '';
   const w = slot.offsetWidth || 440;
 
   const x = st.x == null ? window.innerWidth - w - 24 : st.x;
@@ -631,6 +632,9 @@ function lkbInitPracticeWindow() {
     '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-toggle" title="收起 / 展开"></button></div>');
   const head = slot.querySelector('.lkw-h');
   lkwApply(slot, st);
+  // "节拍与提速设置" fold: remembered across reloads (reassigning ontoggle keeps this idempotent across lick switches).
+  const more = document.getElementById('st-more');
+  if (more) { more.open = st.more; more.ontoggle = () => { st.more = more.open; lkwSave(st); }; }
   // Drag the bottom-right corner (CSS resize) to size the window; remember it.
   let first = true, t = 0;
   new ResizeObserver(() => {
@@ -650,4 +654,8 @@ function lkbInitPracticeWindow() {
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);
   };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { lkb, lkbNormalizeLayout, lkbReconcile, lkbPlaceNew, lkbResolve, lkbOverlap, lkbDefaultSize, lkbBottom };
 }

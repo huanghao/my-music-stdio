@@ -18,7 +18,7 @@
 | 当前页面 / 底部 transport 播放位置 | `mps_current_page` / `transport_pos` | `app.js` |
 | Fretboard（全部模式，含 Chord Match 选项） | `fb_prefs` / `fb_chordid_prefs` | `fb-prefs.js` `fbPrefsLoad()` / `fbPrefsSave()`；`chord-id.js` |
 | Fretboard 主音量 / 各音色音量 | `fb_master_volume` / `fb_sound_volumes` | `fb-audio.js` |
-| Speed Trainer | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
+| Speed Trainer（含变速提示音、预备小节） | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
 | Progression Lab | `pl_prefs` | `progression-lab.js` |
 | Agent 助教面板选项（对话历史在后端 `agent-sessions/`，划词笔记 `marks` 是短期数据，划词后最终会进对话 session，故意不迁） | `mps_agent_prefs` | `agent-assistant.js` |
 | 练习计时器运行状态（倒计时进度/暂停/联动开关；完成的计时块 `blocks` 已搬后端，见下表 `pt_blocks`） | `pt_state` | `practice-timer.js` |
@@ -26,6 +26,7 @@
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
+| Lick 详情浮动练习窗（Speed Trainer）位置/大小/是否收起/“节拍与提速设置”折叠 | `lick_practice_win` | `licks-board.js` `lkwLoad()` / `lkwSave()` |
 | Lick 详情 Sessions 列表展开/收起 | `lick_sessions_open` | `licks.js` `licksSessionsOpen()` / `licksSessionsOnToggle()`（全局布尔，默认收起） |
 | Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` |
 | Key Drill（方向、聚焦调） | `kd_prefs` | `key-drill.js` `kdPrefsLoad()` / `kdPrefsSave()` |

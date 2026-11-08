@@ -238,6 +238,23 @@ def test_get_lick(client):
     assert r.json()["sessions"] == []
 
 
+def test_lick_layout_roundtrip_and_survives_other_edits(client):
+    lick_id = client.post("/api/licks", json={"title": "Board"}).json()["id"]
+    layout = {"v": 1, "hidden": [], "blocks": [{"id": "text", "of": "text", "x": 0, "y": 0, "w": 60, "h": 200}]}
+    assert client.put(f"/api/licks/{lick_id}", json={"layout": layout}).status_code == 200
+    assert client.get(f"/api/licks/{lick_id}").json()["layout"] == layout
+    # editing notes (the editor never sends `layout`) must not wipe the layout
+    client.put(f"/api/licks/{lick_id}", json={"title": "Board", "notes": "new notes", "target_bpm": None})
+    got = client.get(f"/api/licks/{lick_id}").json()
+    assert got["notes"] == "new notes" and got["layout"] == layout
+
+
+def test_lick_layout_rejects_oversized_and_wrong_type(client):
+    lick_id = client.post("/api/licks", json={"title": "Big"}).json()["id"]
+    assert client.put(f"/api/licks/{lick_id}", json={"layout": {"x": "a" * 200_000}}).status_code == 422
+    assert client.put(f"/api/licks/{lick_id}", json={"layout": [1, 2]}).status_code == 422
+
+
 def test_update_lick(client):
     lick_id = client.post("/api/licks", json={"title": "Old"}).json()["id"]
     r = client.put(f"/api/licks/{lick_id}", json={"title": "New", "notes": "", "target_bpm": None})

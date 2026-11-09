@@ -179,7 +179,7 @@ function initToolsMenu() {
 
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
-const NAV_PAGES = ['vamp', 'jam', 'backingtracks', 'licks', 'tuner', 'fretboard', 'songloop', 'progressions', 'prefs'];
+const NAV_PAGES = ['vamp', 'jam', 'backingtracks', 'licks', 'improv', 'tuner', 'fretboard', 'songloop', 'progressions', 'prefs'];
 
 async function init() {
   transportLoadPos();  // restore the floating pill's last position before anything registers a transport
@@ -384,6 +384,8 @@ function showPage(name) {
   if (name === 'songloop')  initSongLoopPage();
   if (name === 'progressions') initProgressionLabPage();
   if (name === 'backingtracks') btInitPage();
+  if (name === 'improv') initImprovPage();
+  if (name !== 'improv' && typeof impStop === 'function' && imp.running) impStop();
   // Move the metronome panel back to its parked (hidden) home if it was
   // embedded in a Lick detail page we're now navigating away from.
   if (typeof licksSyncPracticePanelHome === 'function') licksSyncPracticePanelHome();

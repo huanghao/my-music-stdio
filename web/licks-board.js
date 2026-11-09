@@ -147,6 +147,7 @@ function lkbNormalizeLayout(raw) {
         L.blocks.push({
           id: b.id, of: typeof b.of === 'string' ? b.of : b.id,
           x: b.x, y: b.y, w: b.w, h: b.h, page: Number.isFinite(b.page) ? b.page : 1,
+          ...(b.fit === true ? { fit: true } : {}),
         });
       }
     }
@@ -288,7 +289,32 @@ function lkbMount(lick) {
   lkb.ro.observe(root);
   lkb.layout = lkbNormalizeLayout(lick.layout);
   lkbRebuild();
+  lkbApplyFit();
   lkbInitPracticeWindow();
+}
+
+// A block flagged `fit` (set by bulk layout scripts) is shrunk/grown once to exactly show its content,
+// then the flag is dropped. Blocks stacked below it in the same columns move by the same amount.
+function lkbApplyFit() {
+  const L = lkb.layout;
+  let changed = false;
+  for (const b of L.blocks.filter(x => x.fit)) {
+    const el = lkb.canvas.querySelector(`[data-bid="${CSS.escape(b.id)}"]`);
+    const body = el?.querySelector('.lkb-body');
+    if (!body) continue;
+    const head = el.querySelector('.lkb-h')?.offsetHeight || 0;
+    const h = Math.max(LKB_MIN_H, Math.ceil((head + body.scrollHeight + 2) / LKB_SNAP) * LKB_SNAP);
+    const delta = h - b.h, oldBottom = b.y + b.h;
+    for (const o of L.blocks) {
+      if (o !== b && o.y >= oldBottom && o.x < b.x + b.w && b.x < o.x + o.w) o.y += delta;
+    }
+    b.h = h;
+    delete b.fit;
+    changed = true;
+  }
+  if (!changed) return;
+  lkbFit();
+  lkbSave();
 }
 
 // Re-collects sources (the notes may have changed) and redraws every block.
@@ -305,7 +331,7 @@ function lkbRender() {
   cv.innerHTML = lkb.layout.blocks.map(b => {
     const src = lkb.sources.get(b.of);
     if (!src) return '';
-    return `<div class="lkb-blk lkb-${src.kind}" data-bid="${htmlEsc(b.id)}">${lkbHeaderHtml(b, src)}<div class="lkb-body">${lkbBodyHtml(b, src)}</div><div class="lkb-rr"></div><div class="lkb-rb"></div><div class="lkb-rc"></div></div>`;
+    return `<div class="lkb-blk lkb-${src.kind}" data-bid="${htmlEsc(b.id)}">${lkbHeaderHtml(b, src)}<div class="lkb-body">${lkbBodyHtml(b, src)}</div><div class="lkb-rl"></div><div class="lkb-rr"></div><div class="lkb-rb"></div><div class="lkb-rc"></div></div>`;
   }).join('');
   lkbFit();
   lkbBindBlocks();
@@ -481,6 +507,11 @@ function lkbStartDrag(e, el, mode) {
       cur.x = Math.max(0, Math.min(LKB_COLS - bb.w, Math.round((ox + dx) / u)));
       cur.y = Math.max(0, Math.round((oy + dy) / LKB_SNAP) * LKB_SNAP);
     } else {
+      if (mode.l) {   // left edge: the right edge stays put, x and w change together
+        const right = bb.x + bb.w;
+        cur.x = Math.max(0, Math.min(right - LKB_MINW, Math.round((ox + dx) / u)));
+        cur.w = right - cur.x;
+      }
       if (mode.x) cur.w = Math.max(LKB_MINW, Math.min(LKB_COLS - bb.x, Math.round((w0 + dx) / u)));
       if (mode.y) cur.h = Math.max(LKB_MIN_H, Math.round((h0 + dy) / LKB_SNAP) * LKB_SNAP);
     }
@@ -562,6 +593,7 @@ function lkbBindBlocks() {
       if (e.target.closest('button,select,input')) return;
       lkbStartDrag(e, el, 'move');
     };
+    el.querySelector('.lkb-rl').onpointerdown = e => { e.stopPropagation(); lkbStartDrag(e, el, { l: 1 }); };
     el.querySelector('.lkb-rr').onpointerdown = e => { e.stopPropagation(); lkbStartDrag(e, el, { x: 1 }); };
     el.querySelector('.lkb-rb').onpointerdown = e => { e.stopPropagation(); lkbStartDrag(e, el, { y: 1 }); };
     el.querySelector('.lkb-rc').onpointerdown = e => { e.stopPropagation(); lkbStartDrag(e, el, { x: 1, y: 1 }); };

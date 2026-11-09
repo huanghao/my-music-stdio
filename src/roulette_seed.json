@@ -1,0 +1,453 @@
+{
+ "form": {
+  "audio": "/api/materials/20261107182328728438_Cliff-Smith-12-bar-blues-in-E-108bpm.m4a",
+  "bpm": 108,
+  "key": "E",
+  "lead_in_sec": 4.4444,
+  "choruses": 10,
+  "chords": [
+   "E7",
+   "E7",
+   "E7",
+   "E7",
+   "A7",
+   "A7",
+   "E7",
+   "E7",
+   "B7",
+   "A7",
+   "E7",
+   "B7"
+  ]
+ },
+ "phrases": [
+  {
+   "id": "l1-b0",
+   "lesson": 1,
+   "title": "双音滑入句",
+   "pdf": "/api/materials/20261107182328745214_Cliff-Blues-Lick-1-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音（根音+五音）滑入，三连音；移动指型，跟着和弦根音走",
+   "tag": "E7"
+  },
+  {
+   "id": "l2-b0",
+   "lesson": 2,
+   "title": "双音推弦句",
+   "pdf": "/api/materials/20261107182328759891_Cliff-Blues-Lick-2-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音带推弦，注意推弦音准",
+   "tag": "E7"
+  },
+  {
+   "id": "l1-b1",
+   "lesson": 1,
+   "title": "双音滑入句",
+   "pdf": "/api/materials/20261107182328745214_Cliff-Blues-Lick-1-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音（根音+五音）滑入，三连音；移动指型，跟着和弦根音走",
+   "tag": "A7"
+  },
+  {
+   "id": "l2-b1",
+   "lesson": 2,
+   "title": "双音推弦句",
+   "pdf": "/api/materials/20261107182328759891_Cliff-Blues-Lick-2-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音带推弦，注意推弦音准",
+   "tag": "A7"
+  },
+  {
+   "id": "l1-b2",
+   "lesson": 1,
+   "title": "双音滑入句",
+   "pdf": "/api/materials/20261107182328745214_Cliff-Blues-Lick-1-tab.pdf",
+   "block": 2,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音（根音+五音）滑入，三连音；移动指型，跟着和弦根音走",
+   "tag": "B7"
+  },
+  {
+   "id": "l2-b2",
+   "lesson": 2,
+   "title": "双音推弦句",
+   "pdf": "/api/materials/20261107182328759891_Cliff-Blues-Lick-2-tab.pdf",
+   "block": 2,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 1,
+   "hint": "双音带推弦，注意推弦音准",
+   "tag": "B7"
+  },
+  {
+   "id": "l3-b0",
+   "lesson": 3,
+   "title": "四音短句",
+   "pdf": "/api/materials/20261107182328778879_Cliff-Blues-Lick-3-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7",
+    "A7",
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "四个音的短句，E7/A7/B7 都能用，注意推弦音准",
+   "tag": "原位"
+  },
+  {
+   "id": "l3-b1",
+   "lesson": 3,
+   "title": "四音短句",
+   "pdf": "/api/materials/20261107182328778879_Cliff-Blues-Lick-3-tab.pdf",
+   "block": 1,
+   "chords": [
+    "E7",
+    "A7",
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "同一句升高八度",
+   "tag": "高八度"
+  },
+  {
+   "id": "l3-b2",
+   "lesson": 3,
+   "title": "四音短句",
+   "pdf": "/api/materials/20261107182328778879_Cliff-Blues-Lick-3-tab.pdf",
+   "block": 2,
+   "chords": [
+    "E7",
+    "A7",
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "同一句降低八度",
+   "tag": "低八度"
+  },
+  {
+   "id": "l4-b0",
+   "lesson": 4,
+   "title": "Clapton 式半音布鲁斯句",
+   "pdf": "/api/materials/20261107182328801645_Cliff-Blues-Lick-4-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7",
+    "A7",
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "E 布鲁斯音阶 + 加六音 C#：在 E 上是六音，在 A 上是大三度，在 B 上是九音",
+   "tag": "原位"
+  },
+  {
+   "id": "l4-b1",
+   "lesson": 4,
+   "title": "Clapton 式半音布鲁斯句",
+   "pdf": "/api/materials/20261107182328801645_Cliff-Blues-Lick-4-tab.pdf",
+   "block": 1,
+   "chords": [
+    "E7",
+    "A7",
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "同一句升高八度",
+   "tag": "高八度"
+  },
+  {
+   "id": "l4-b2",
+   "lesson": 4,
+   "title": "Clapton 式半音布鲁斯句",
+   "pdf": "/api/materials/20261107182328801645_Cliff-Blues-Lick-4-tab.pdf",
+   "block": 2,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "上移两品用在 B7：E 小五声 + C、C#（B 的 b9/9）+ D#（B 的大三度）",
+   "tag": "B7"
+  },
+  {
+   "id": "l4-b3",
+   "lesson": 4,
+   "title": "Clapton 式半音布鲁斯句",
+   "pdf": "/api/materials/20261107182328801645_Cliff-Blues-Lick-4-tab.pdf",
+   "block": 3,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "B7 版本再升高八度（要有足够的品）",
+   "tag": "B7 高八度"
+  },
+  {
+   "id": "l5-b0",
+   "lesson": 5,
+   "title": "属七和弦句",
+   "pdf": "/api/materials/20261107182328821074_Cliff-Blues-Lick-5-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "含大三度和 b7，加四分之一音推弦和半音滑音；也可升高八度",
+   "tag": "E7"
+  },
+  {
+   "id": "l5-b1",
+   "lesson": 5,
+   "title": "属七和弦句",
+   "pdf": "/api/materials/20261107182328821074_Cliff-Blues-Lick-5-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "含大三度和 b7，加四分之一音推弦和半音滑音；也可升高八度",
+   "tag": "A7"
+  },
+  {
+   "id": "l5-b2",
+   "lesson": 5,
+   "title": "属七和弦句",
+   "pdf": "/api/materials/20261107182328821074_Cliff-Blues-Lick-5-tab.pdf",
+   "block": 2,
+   "chords": [],
+   "slot": "9-10",
+   "bars": 2,
+   "hint": "第 9 小节 B7、第 10 小节 A7：把长句拆成两个一小节",
+   "tag": "第9-10小节"
+  },
+  {
+   "id": "l5-b3",
+   "lesson": 5,
+   "title": "属七和弦句",
+   "pdf": "/api/materials/20261107182328821074_Cliff-Blues-Lick-5-tab.pdf",
+   "block": 3,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "第 11 小节 E7、第 12 小节 B7",
+   "tag": "第11-12小节"
+  },
+  {
+   "id": "l6-b0",
+   "lesson": 6,
+   "title": "齐奏推弦句",
+   "pdf": "/api/materials/20261107183054673327_Cliff-Blues-Lick-6-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "齐奏推弦：两个音一起弹或分开弹；第 1 小节根音在 1 弦，第 2 小节根音在 2 弦",
+   "tag": "E7"
+  },
+  {
+   "id": "l6-b1",
+   "lesson": 6,
+   "title": "齐奏推弦句",
+   "pdf": "/api/materials/20261107183054673327_Cliff-Blues-Lick-6-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "齐奏推弦：两个音一起弹或分开弹；第 1 小节根音在 1 弦，第 2 小节根音在 2 弦",
+   "tag": "A7"
+  },
+  {
+   "id": "l6-b2",
+   "lesson": 6,
+   "title": "齐奏推弦句",
+   "pdf": "/api/materials/20261107183054673327_Cliff-Blues-Lick-6-tab.pdf",
+   "block": 2,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "齐奏推弦：两个音一起弹或分开弹；第 1 小节根音在 1 弦，第 2 小节根音在 2 弦",
+   "tag": "B7"
+  },
+  {
+   "id": "l7-b0",
+   "lesson": 7,
+   "title": "Turnaround 句型",
+   "pdf": "/api/materials/20261107182328838709_Cliff-Blues-Lick-7-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "四个双音和弦：第一个（B+G#）和第四个（G#+E）可以落音，中间两个只作经过，可上行也可下行",
+   "tag": "E7"
+  },
+  {
+   "id": "l7-b1",
+   "lesson": 7,
+   "title": "Turnaround 句型",
+   "pdf": "/api/materials/20261107182328838709_Cliff-Blues-Lick-7-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "第一和第四个双音含 A、C#、E，可落音",
+   "tag": "A7"
+  },
+  {
+   "id": "l7-b2",
+   "lesson": 7,
+   "title": "Turnaround 句型",
+   "pdf": "/api/materials/20261107182328838709_Cliff-Blues-Lick-7-tab.pdf",
+   "block": 2,
+   "chords": [],
+   "slot": "9-10",
+   "bars": 2,
+   "hint": "用第二小节的下半句，移到 B 和 A：用在第 9、10 小节",
+   "tag": "第9-10小节"
+  },
+  {
+   "id": "l7-b3",
+   "lesson": 7,
+   "title": "Turnaround 句型",
+   "pdf": "/api/materials/20261107182328838709_Cliff-Blues-Lick-7-tab.pdf",
+   "block": 3,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "第 11 小节用原句后半，第 12 小节移到 B：用在第 11、12 小节",
+   "tag": "第11-12小节"
+  },
+  {
+   "id": "l8-b0",
+   "lesson": 8,
+   "title": "Poison 推弦句",
+   "pdf": "/api/materials/20261107183054691677_Cliff-Blues-Lick-8-tab.pdf",
+   "block": 0,
+   "chords": [
+    "E7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "从小三度 G 锤到大三度 G#，再到 B 和 E；两个推弦从 b7 推到根音；从“3 的后半拍”起",
+   "tag": "E7"
+  },
+  {
+   "id": "l8-b1",
+   "lesson": 8,
+   "title": "Poison 推弦句",
+   "pdf": "/api/materials/20261107183054691677_Cliff-Blues-Lick-8-tab.pdf",
+   "block": 1,
+   "chords": [
+    "A7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "从小三度 G 锤到大三度 G#，再到 B 和 E；两个推弦从 b7 推到根音；从“3 的后半拍”起",
+   "tag": "A7"
+  },
+  {
+   "id": "l8-b2",
+   "lesson": 8,
+   "title": "Poison 推弦句",
+   "pdf": "/api/materials/20261107183054691677_Cliff-Blues-Lick-8-tab.pdf",
+   "block": 2,
+   "chords": [
+    "B7"
+   ],
+   "slot": "chord",
+   "bars": 2,
+   "hint": "从小三度 G 锤到大三度 G#，再到 B 和 E；两个推弦从 b7 推到根音；从“3 的后半拍”起",
+   "tag": "B7"
+  },
+  {
+   "id": "l9-b0",
+   "lesson": 9,
+   "title": "布鲁斯收尾句 1",
+   "pdf": "/api/materials/20261107182328857158_Cliff-Blues-Lick-9-tab.pdf",
+   "block": 0,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "用于最后两小节，从第 2 拍开始",
+   "tag": "收尾"
+  },
+  {
+   "id": "l9-b1",
+   "lesson": 9,
+   "title": "布鲁斯收尾句 1",
+   "pdf": "/api/materials/20261107182328857158_Cliff-Blues-Lick-9-tab.pdf",
+   "block": 1,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "同一句升高一个八度（12 品）",
+   "tag": "收尾 高八度"
+  },
+  {
+   "id": "l10-b0",
+   "lesson": 10,
+   "title": "布鲁斯收尾句 2",
+   "pdf": "/api/materials/20261107182328875178_Cliff-Blues-Lick-10-tab.pdf",
+   "block": 0,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "用于最后两小节，从第 2 拍开始",
+   "tag": "收尾"
+  },
+  {
+   "id": "l10-b1",
+   "lesson": 10,
+   "title": "布鲁斯收尾句 2",
+   "pdf": "/api/materials/20261107182328875178_Cliff-Blues-Lick-10-tab.pdf",
+   "block": 1,
+   "chords": [],
+   "slot": "11-12",
+   "bars": 2,
+   "hint": "同一句降低一个八度（12 品）",
+   "tag": "收尾 低八度"
+  }
+ ]
+}

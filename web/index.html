@@ -127,6 +127,7 @@
   <span class="nav-sep"></span>
   <!-- Practice tools -->
   <button class="nav-btn"        data-page="licks"      onclick="navGoToPage('licks')">Licks</button>
+  <button class="nav-btn"        data-page="improv"     onclick="navGoToPage('improv')">Improv</button>
   <button class="nav-btn"        data-page="tuner"      onclick="navGoToPage('tuner')">Tuner</button>
   <button class="nav-btn"        data-page="fretboard"  onclick="navGoToPage('fretboard')">Fretboard</button>
   <button class="nav-btn"        data-page="songloop"   onclick="navGoToPage('songloop')">Song Loop</button>
@@ -156,6 +157,13 @@
 <div class="page" id="page-jam">
   <div id="jam-controls"></div>
   <div id="jam-chart"></div>
+</div>
+
+<!-- IMPROV ROULETTE (improv.js) -->
+<div class="page" id="page-improv">
+  <div class="page-header"><h2 class="page-title">Improv</h2>
+    <span class="lick-list-summary mb-0!">E 调 12 小节布鲁斯 · 每 2 小节随机一句，下一句提前显示</span></div>
+  <div id="imp-root" class="max-w-[1280px]"></div>
 </div>
 
 <!-- BACKING TRACK LIBRARY -->
@@ -1034,6 +1042,7 @@
 <script src="dom-drill.js"></script>
 <script src="materials.js"></script>
 <script src="backing-tracks.js"></script>
+<script src="improv.js"></script>
 <script src="agent-assistant.js"></script>
 <script src="app.js"></script>
 </body>

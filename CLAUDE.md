@@ -20,6 +20,7 @@
 | Fretboard 主音量 / 各音色音量 | `fb_master_volume` / `fb_sound_volumes` | `fb-audio.js` |
 | Speed Trainer（含变速提示音、预备小节） | `st_prefs` | `speed-trainer.js` `stPrefsLoad()` / `stPrefsSave()` |
 | Progression Lab | `pl_prefs` | `progression-lab.js` |
+| Improv（伴奏速度、对齐微调、参与随机的课） | `improv_prefs` | `improv.js` `impPrefsLoad()` / `impPrefsSave()` |
 | Agent 助教面板选项（对话历史在后端 `agent-sessions/`，划词笔记 `marks` 是短期数据，划词后最终会进对话 session，故意不迁） | `mps_agent_prefs` | `agent-assistant.js` |
 | 练习计时器运行状态（倒计时进度/暂停/联动开关；完成的计时块 `blocks` 已搬后端，见下表 `pt_blocks`） | `pt_state` | `practice-timer.js` |
 | Licks 课程列表筛选、课程集/参考资料/编辑器展开状态、示范视频位置与速度 | `lick_course_ui` | `lick-courses.js` `licksCourseUiLoad()` / `licksCourseUiSave()`（只存界面偏好；每课训练配置仍存后端 Lick） |

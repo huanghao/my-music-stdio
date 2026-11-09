@@ -41,14 +41,15 @@
   aspect-ratio: auto; border-radius: 0; resize: none; }
 .lkb-body .lick-audio-player { max-width: none; }
 
-.lkb-rr, .lkb-rb, .lkb-rc { position: absolute; z-index: 50; }
+.lkb-rl, .lkb-rr, .lkb-rb, .lkb-rc { position: absolute; z-index: 50; }
+.lkb-rl { top: 0; left: 0; width: 8px; height: 100%; cursor: ew-resize; }
 .lkb-rr { top: 0; right: 0; width: 8px; height: 100%; cursor: ew-resize; }
 .lkb-rb { left: 0; bottom: 0; width: 100%; height: 8px; cursor: ns-resize; }
 .lkb-rc { right: 0; bottom: 0; width: 18px; height: 18px; cursor: nwse-resize; z-index: 60; }
 .lkb-rc::after { content: ''; position: absolute; right: 4px; bottom: 4px; width: 8px; height: 8px;
   border-right: 2px solid var(--border-muted); border-bottom: 2px solid var(--border-muted); border-radius: 0 0 3px 0; }
 .lkb-blk:hover .lkb-rc::after { border-color: var(--primary); }
-.lkb-rr:hover, .lkb-rb:hover { background: var(--primary-bg); }
+.lkb-rl:hover, .lkb-rr:hover, .lkb-rb:hover { background: var(--primary-bg); }
 
 /* Compact track list: ▶ + name per row; the playing row expands to show seek / speed / Song Loop. */
 .lkb-trk { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 6px 12px; border-top: 1px solid var(--border); }

@@ -25,6 +25,7 @@ from src.styles import get_all_styles
 from src.player import Player
 import src.gen_accompaniment_midi as gen
 from src.agent_api import cancel_agent_runs, router as agent_router
+from src.roulette import router as roulette_router
 from src.materials_store import LocalFlatMaterialsStore
 import src.user_state as user_state
 
@@ -96,6 +97,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 app.include_router(agent_router)
+app.include_router(roulette_router)
 
 
 def _accompaniments_dir() -> Path:

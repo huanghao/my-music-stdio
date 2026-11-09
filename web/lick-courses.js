@@ -310,7 +310,24 @@ function licksCourseNavHtml(lick) {
   const button = (l, label, title) => l
     ? `<button class="bg-transparent border-0 cursor-pointer px-1.5 py-0 text-fg-dim hover:text-fg text-lg leading-none" title="${title}" aria-label="${title}" onclick="licksOpenCourseLick(decodeURIComponent('${encodeURIComponent(l.id).replace(/'/g, '%27')}'))">${label}</button>`
     : `<span class="px-1.5 text-fg-dim opacity-30 text-lg leading-none">${label}</span>`;
-  return `<nav class="lick-course-nav flex items-center gap-0.5 text-fg-dim text-sm" aria-label="课程导航">${button(items[at - 1], '‹', '上一课')}<span class="whitespace-nowrap"><span class="max-sm:hidden">${htmlEsc(lick.collection)} · </span>${at + 1} / ${items.length}</span>${button(items[at + 1], '›', '下一课')}</nav>`;
+  return `<nav class="lick-course-nav flex items-center gap-0.5 text-fg-dim text-sm" aria-label="课程导航">${button(items[at - 1], '‹', '上一课')}<span class="relative" id="lick-course-menu"><button type="button" class="bg-transparent border-0 cursor-pointer px-1.5 py-0.5 rounded-md text-fg-dim hover:bg-subtle hover:text-fg whitespace-nowrap" title="选择课程" aria-haspopup="listbox" onclick="licksToggleCourseMenu()"><span class="max-sm:hidden">${htmlEsc(lick.collection)} · </span>${at + 1} / ${items.length} ▾</button>
+    <div class="hidden absolute right-0 top-full mt-1 z-30 w-72 max-h-[60vh] overflow-y-auto p-1 rounded-lg border border-solid border-line bg-card shadow-md" id="lick-course-pop" role="listbox">${items.map((l, i) =>
+      `<button type="button" role="option" aria-selected="${i === at}" class="btn btn-ghost btn-sm w-full justify-start text-left whitespace-normal! ${i === at ? 'bg-primary-bg! font-semibold' : ''}" data-cur="${i === at ? 1 : 0}" onclick="licksOpenCourseLick(decodeURIComponent('${encodeURIComponent(l.id).replace(/'/g, '%27')}'))">${htmlEsc(licksDisplayTitle(l))}</button>`).join('')}</div></span>${button(items[at + 1], '›', '下一课')}</nav>`;
+}
+
+function licksToggleCourseMenu(force) {
+  const pop = document.getElementById('lick-course-pop');
+  if (!pop) return;
+  const open = force ?? pop.classList.contains('hidden');
+  pop.classList.toggle('hidden', !open);
+  if (open) pop.querySelector('[data-cur="1"]')?.scrollIntoView({ block: 'center' });
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('click', e => {
+    const m = document.getElementById('lick-course-menu');
+    if (m && !m.contains(e.target)) licksToggleCourseMenu(false);
+  });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') licksToggleCourseMenu(false); });
 }
 
 // Type switch under the title: 歌曲 / 练习 (the only tags the UI manages).

@@ -16,7 +16,7 @@ const LKB_COLS = 120, LKB_MINW = 20, LKB_GAP = 10, LKB_SNAP = 10, LKB_MIN_WIDTH 
 const LKB_MIN_H = 80;
 const LKB_ICON = { pdf: '📄', img: '🖼', video: '🎬', audio: '🎧', text: '📝', link: '🔗' };
 
-const lkb = { lick: null, sources: new Map(), layout: null, canvas: null, saveTimer: null, nat: new Map(), hist: [], drag: null, busy: false, edit: false };
+const lkb = { lick: null, sources: new Map(), layout: null, canvas: null, saveTimer: null, nat: new Map(), hist: [], drag: null, busy: false, edit: false, floats: {} };
 
 function lkbEnabled() {
   return window.innerWidth >= LKB_MIN_WIDTH;
@@ -176,6 +176,8 @@ function lkbReconcile() {
     L.blocks.push(e);
   }
   L.hidden = L.hidden.filter(id => lkb.sources.has(id));
+  const ids = new Set(L.blocks.map(b => b.id));
+  for (const id of Object.keys(lkb.floats)) if (!ids.has(id)) delete lkb.floats[id];
 }
 
 const lkbHit = (a, p) => a.x < p.x + p.w && p.x < a.x + a.w && a.y < p.y + p.h + LKB_GAP && p.y < a.y + a.h + LKB_GAP;
@@ -228,7 +230,7 @@ function lkbDock(T, b, side) {
 const lkbIsFit = (b, src) => !!src && src.kind !== 'pdf' && b.fit !== false;
 function lkbUnit() { return lkb.canvas.clientWidth / LKB_COLS; }
 function lkbEntry(bid) { return lkb.layout.blocks.find(b => b.id === bid); }
-function lkbVisible() { return lkb.layout.blocks.filter(b => lkb.sources.has(b.of)); }
+function lkbVisible() { return lkb.layout.blocks.filter(b => lkb.sources.has(b.of) && !lkb.floats[b.id]); }
 
 // Pixel height of a block at the current canvas width.
 function lkbHeight(b, u) {
@@ -303,6 +305,7 @@ function lkbStripHtml(entry, src) {
   const wb = LKB_WIDTHS.map(([w, l]) => `<button data-w="${w}" title="宽度 ${l}">${l}</button>`).join('');
   return `<div class="lkb-strip"><span class="lkb-grip" title="拖动">⋮⋮</span>${title}${pager}<span class="lkb-sp">` +
     `<span class="lkb-wbar">${wb}</span>` +
+    (LKF_KINDS.includes(src.kind) ? `<button class="lkb-chip" data-act="float" title="浮动到右侧工具坞，板上不占位">⇱ 浮动</button>` : '') +
     (src.kind === 'pdf' ? `<button class="lkb-chip" data-act="dup" title="再开一页放在旁边">＋页</button>`
       : `<button class="lkb-chip lkb-fitbtn" data-act="fit" title="高度跟随内容；拖下边缘改高度后变固定，点这里恢复">贴合</button>`) +
     `<button class="lkb-x" data-act="del" title="从看板移除（素材本身不会删除，可在“添加素材”或上方找回）">×</button></span></div>`;
@@ -311,6 +314,7 @@ function lkbStripHtml(entry, src) {
 function lkbBlockHtml(b) {
   const src = lkb.sources.get(b.of);
   return `<div class="lkb-blk lkb-${src.kind}" data-bid="${htmlEsc(b.id)}"><div class="lkb-body"><div class="lkb-nat">${lkbBodyHtml(b, src)}</div></div>` +
+    `${LKF_KINDS.includes(src.kind) ? '<button class="lkb-float" data-act="float" title="浮动到工具坞">⇱</button>' : ''}` +
     `${lkbStripHtml(b, src)}<div class="lkb-rr"></div><div class="lkb-rb"></div><div class="lkb-rc"></div></div>`;
 }
 
@@ -319,7 +323,10 @@ function lkbRender() {
   licksAudioStopAll();
   const blocks = lkbVisible();
   cv.innerHTML = blocks.map(lkbBlockHtml).join('') + '<div class="lkb-ph" id="lkb-ph" hidden></div><div class="lkb-dock" id="lkb-dock" hidden></div>';
-  if (!blocks.length) {
+  if (!blocks.length && Object.keys(lkb.floats).length) {
+    cv.innerHTML = '<div class="lkb-empty"><p class="empty-state">素材都浮动到工具坞了 — 点坞里的圆点打开，右键圆点放回</p></div>';
+    cv.style.height = '';
+  } else if (!blocks.length) {
     cv.innerHTML = `<div class="lkb-empty"><p class="empty-state">还没有素材 — 点右上角的“＋ 添加素材”</p>
       <div><button class="btn" onclick="lkbPickMaterial()">📎 上传 / 从素材库选择</button>
       <button class="btn btn-ghost" onclick="navOpenLickEdit('${htmlEsc(lkb.lick.id)}')">📝 写笔记</button></div></div>`;
@@ -517,8 +524,10 @@ function lkbMount(lick) {
   lkb.ro = new ResizeObserver(() => { if (lkb.canvas === root && lkb.layout) lkbApplyPos(); });
   lkb.ro.observe(root);
   lkb.layout = lkbNormalizeLayout(lick.layout);
+  lkb.floats = lkfLoad(lick.id);
   lkbBindEvents();
   lkbRebuild();
+  lkfSync();
   lkbSetEdit(false);
   lkbInitPracticeWindow();
 }
@@ -618,6 +627,7 @@ function lkbBindEvents() {
     const act = e.target.closest('[data-act]')?.dataset.act;
     if (act === 'fit') lkbToggleFit(b);
     else if (act === 'del') lkbDel(b.id);
+    else if (act === 'float') lkfFloat(b.id);
     else if (act === 'dup') lkbDup(b.id);
     else if (act === 'prev') lkbSetPage(b.id, (b.page || 1) - 1);
     else if (act === 'next') lkbSetPage(b.id, (b.page || 1) + 1);
@@ -753,7 +763,7 @@ addEventListener('resize', () => {
 // A track row counts as "on" while its toggle shows ⏸ (the audio code flips
 // the button text on play/pause/end), so watch the text rather than hook events.
 function lkbSyncTracks() {
-  lkb.canvas?.querySelectorAll('.lkb-trk').forEach(r =>
+  document.querySelectorAll('.lkb-trk').forEach(r =>
     r.classList.toggle('on', r.querySelector('.lick-audio-toggle')?.textContent.trim() === '⏸'));
 }
 function lkbWatchTracks() {
@@ -761,11 +771,181 @@ function lkbWatchTracks() {
   // Observe only each track's play button (not the whole canvas): the time
   // readouts rewrite their text several times a second while playing.
   lkb.mo = new MutationObserver(lkbSyncTracks);
-  lkb.canvas.querySelectorAll('.lkb-trk .lick-audio-toggle').forEach(b =>
+  document.querySelectorAll('.lkb-trk .lick-audio-toggle').forEach(b =>
     lkb.mo.observe(b, { childList: true, characterData: true, subtree: true }));
   lkbSyncTracks();
 }
 
+
+// ── Floating blocks (audio / video → edge dock) ──
+// A block can be floated out of the board into its own window, opened from a dot at the bottom of the edge
+// dock (dock.js). The block stays in lick.layout (so putting it back keeps its source and size) but is skipped
+// by the board packing while floated. Floated set + window geometry are UI convenience → localStorage
+// `lick_floats` = { [lickId]: { [blockId]: { x, y, w, open } } }.
+const LKF_KEY = 'lick_floats';
+const LKF_KINDS = ['audio', 'video'];
+const LKF_ICON = { audio: 'au', video: 'vi' };
+
+function lkfReadAll() {
+  try { const v = JSON.parse(localStorage.getItem(LKF_KEY)); return v && typeof v === 'object' ? v : {}; } catch (_) { return {}; }
+}
+function lkfLoad(lickId) {
+  const raw = lkfReadAll()[lickId], out = {};
+  if (raw && typeof raw === 'object') {
+    for (const [id, v] of Object.entries(raw)) {
+      out[id] = { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, w: Number.isFinite(v?.w) ? v.w : null, open: v?.open !== false };
+    }
+  }
+  return out;
+}
+function lkfPersist() {
+  if (!lkb.lick) return;
+  const all = lkfReadAll();
+  if (Object.keys(lkb.floats).length) all[lkb.lick.id] = lkb.floats; else delete all[lkb.lick.id];
+  try { localStorage.setItem(LKF_KEY, JSON.stringify(all)); } catch (_) {}
+}
+
+const lkfPageActive = () => !!lkb.lick && !!document.getElementById('page-lick-detail')?.classList.contains('active') && !!document.getElementById('lkb-canvas');
+const lkfWinEl = bid => document.querySelector(`.dockwin[data-bid="${CSS.escape(bid)}"]`);
+
+function lkfWinHtml(b, src) {
+  const body = src.kind === 'video'
+    ? (src.file ? `<video controls preload="metadata" src="${htmlEsc(src.href)}"></video>` : src.html)
+    : `<div class="lkb-pad">${src.html}</div>`;
+  return `<div class="dockwin dockwin-${src.kind}" data-bid="${htmlEsc(b.id)}">` +
+    `<div class="dw-h" title="拖动到任意位置"><span class="dw-grip">⠿</span><b>${htmlEsc(src.title)}</b><span class="dw-sp"></span>` +
+    `<button class="dw-back" data-dw="back" title="放回板上">⇲ 放回</button><button class="dw-x" data-dw="close" title="收起到工具坞">✕</button></div>` +
+    `<div class="dw-body"><div class="lkb-nat lkb-win lkb-win-${src.kind}">${body}</div></div></div>`;
+}
+
+function lkfPlace(el, st, bid) {
+  const w = el.offsetWidth || 380, h = el.offsetHeight || 200;
+  let x = st.x, y = st.y;
+  if (x == null || y == null) {
+    const r = typeof dockDotRect === 'function' ? dockDotRect('fl:' + bid) : null;
+    const onRight = typeof dockState === 'undefined' || dockState.side === 'r';
+    x = r ? (onRight ? r.left - w - 14 : r.right + 14) : window.innerWidth - w - 80;
+    y = (r ? r.top - 8 : 120) + 40 * document.querySelectorAll('.dockwin.on').length;   // stagger so new windows don't cover open ones
+  }
+  el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x)) + 'px';
+  el.style.top = Math.max(8, Math.min(window.innerHeight - 60, y)) + 'px';
+}
+
+// Rebuilds every floated window of the current lick (mount / re-render).
+function lkfSync() {
+  document.querySelectorAll('.dockwin').forEach(e => e.remove());
+  for (const bid of Object.keys(lkb.floats)) {
+    const b = lkbEntry(bid), src = b && lkb.sources.get(b.of);
+    if (!src) { delete lkb.floats[bid]; continue; }
+    document.body.insertAdjacentHTML('beforeend', lkfWinHtml(b, src));
+    const el = lkfWinEl(bid), st = lkb.floats[bid];
+    if (st.w) el.style.width = Math.max(300, Math.min(window.innerWidth - 16, st.w)) + 'px';
+    lkfBind(el, bid);
+  }
+  lkfPersist();
+  lkbWatchTracks();
+  if (typeof dockRefresh === 'function') dockRefresh(); else lkfRefresh();   // dock first: its dots position the windows
+}
+
+function lkfBind(el, bid) {
+  const st = () => lkb.floats[bid];
+  el.addEventListener('click', e => {
+    const act = e.target.closest('[data-dw]')?.dataset.dw;
+    if (act === 'back') lkfUnfloat(bid);
+    else if (act === 'close') lkfSetOpen(bid, false);
+  });
+  el.addEventListener('pointerdown', () => { el.style.zIndex = 510 + (lkfZ = (lkfZ || 0) % 20 + 1); });
+  const head = el.querySelector('.dw-h');
+  head.onpointerdown = e => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, r = el.getBoundingClientRect();
+    const move = ev => { const s = st(); if (!s) return; s.x = r.left + ev.clientX - x0; s.y = r.top + ev.clientY - y0; lkfPlace(el, s, bid); };
+    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); lkfPersist(); };
+    addEventListener('pointermove', move);
+    addEventListener('pointerup', up);
+  };
+  let first = true, t = 0;
+  new ResizeObserver(() => {
+    if (first) { first = false; return; }
+    if (!el.offsetWidth || !st()) return;
+    clearTimeout(t);
+    t = setTimeout(() => { if (st()) { st().w = Math.round(el.offsetWidth); lkfPersist(); } }, 300);
+  }).observe(el);
+}
+let lkfZ = 0;
+
+// Shows each window only while its Lick page is on screen and it is open.
+function lkfRefresh() {
+  const active = lkfPageActive();
+  for (const el of document.querySelectorAll('.dockwin')) {
+    const st = lkb.floats[el.dataset.bid];
+    const show = active && !!st && st.open;
+    const was = el.classList.contains('on');
+    el.classList.toggle('on', show);
+    if (show && !was) lkfPlace(el, st, el.dataset.bid);
+  }
+}
+
+function lkfSetOpen(bid, open) {
+  const st = lkb.floats[bid];
+  if (!st) return;
+  st.open = open;
+  lkfPersist();
+  lkfRefresh();
+}
+
+function lkfFloat(bid) {
+  const b = lkbEntry(bid), src = b && lkb.sources.get(b.of);
+  if (!b || !src || !LKF_KINDS.includes(src.kind) || lkb.floats[bid]) return;
+  licksAudioStopAll();   // the player DOM is rebuilt in the window; keep UI and audio in step
+  lkb.floats[bid] = { x: null, y: null, w: null, open: true };
+  lkbRender();
+  lkfSync();
+  if (typeof dockRefresh === 'function') dockRefresh();   // draws the new dot, then the window opens beside it
+  lkfRefresh();
+  const el = lkfWinEl(bid);
+  if (el) lkfPlace(el, lkb.floats[bid], bid);
+}
+
+function lkfUnfloat(bid) {
+  const b = lkbEntry(bid);
+  if (!b || !lkb.floats[bid]) return;
+  licksAudioStopAll();
+  delete lkb.floats[bid];
+  // Back at the end of the board (its old spot may be taken by now).
+  const L = lkb.layout;
+  L.blocks = L.blocks.filter(x => x.id !== bid);
+  lkbPlaceNew(lkbVisible(), b);
+  L.blocks.push(b);
+  lkbSave();
+  lkbRender();
+  lkfSync();
+  if (typeof dockRefresh === 'function') dockRefresh();
+}
+
+// Dots for dock.js (below the divider). Only while the owning Lick page is showing.
+function lkfDockItems() {
+  if (!lkfPageActive()) return [];
+  const out = [];
+  for (const bid of Object.keys(lkb.floats)) {
+    const b = lkbEntry(bid), src = b && lkb.sources.get(b.of);
+    if (!src) continue;
+    out.push({
+      id: 'fl:' + bid, icon: LKF_ICON[src.kind], title: src.title,
+      open: () => !!lkb.floats[bid]?.open,
+      toggle: () => lkfSetOpen(bid, !lkb.floats[bid]?.open),
+      back: () => lkfUnfloat(bid),
+      live: () => {
+        const el = lkfWinEl(bid);
+        if (!el) return '';
+        if (el.querySelector('.lkb-trk.on')) return '播放中';
+        return [...el.querySelectorAll('video')].some(v => !v.paused && !v.ended) ? '播放中' : '';
+      },
+    });
+  }
+  return out;
+}
 
 // ── Floating practice window ──
 // The metronome panel (#st-panel) is homed into #lick-practice-slot by
@@ -776,14 +956,14 @@ const LKW_KEY = 'lick_practice_win';
 function lkwLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(LKW_KEY));
-    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: v?.collapsed === true, open: v?.open !== false,
+    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: false, open: v?.open !== false,
       w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null, more: v?.more === true };
   } catch (_) { return { x: null, y: null, collapsed: false, open: true, w: null, h: null, more: false }; }
 }
 function lkwSave(st) { try { localStorage.setItem(LKW_KEY, JSON.stringify(st)); } catch (_) {} }
 
 // The live window state of the lick currently on screen (null when no lick page is mounted);
-// the tools menu toggles open/closed through it so drag/resize saves never write a stale flag.
+// the edge dock (dock.js) toggles open/closed through it so drag/resize saves never write a stale flag.
 let lkwCur = null;
 function lkwIsAvailable() { return !!(lkwCur && document.querySelector('#lick-practice-slot.lkw')); }
 function lkwIsOpen() { return lkwIsAvailable() && lkwCur.open; }
@@ -803,7 +983,8 @@ function lkwApply(slot, st) {
   slot.style.height = '';
   const w = slot.offsetWidth || 440;
 
-  const x = st.x == null ? window.innerWidth - w - 24 : st.x;
+  const dockR = typeof dockInset === 'function' ? dockInset('r') : 0;
+  const x = st.x == null ? window.innerWidth - w - 24 - dockR : st.x;
   const y = st.y == null ? 130 : st.y;
   slot.style.left = Math.max(0, Math.min(window.innerWidth - w - 8, x)) + 'px';
   slot.style.top = Math.max(0, Math.min(window.innerHeight - 40, y)) + 'px';
@@ -817,7 +998,7 @@ function lkbInitPracticeWindow() {
   const st = lkwCur = lkwLoad();
   slot.classList.add('lkw');
   slot.insertAdjacentHTML('afterbegin',
-    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-toggle agent-icon-btn" title="收起 / 展开"></button><button class="lkw-close agent-icon-btn" title="关闭">✕</button></div>');
+    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-close agent-icon-btn" title="收起到工具坞">✕</button></div>');
   const head = slot.querySelector('.lkw-h');
   lkwApply(slot, st);
   // "节拍与提速设置" fold: remembered across reloads (reassigning ontoggle keeps this idempotent across lick switches).
@@ -833,7 +1014,6 @@ function lkbInitPracticeWindow() {
   }).observe(slot);
   if (typeof stRefreshLive === 'function') stRefreshLive();
   head.querySelector('.lkw-close').onclick = () => lkwSetOpen(false);
-  head.querySelector('.lkw-toggle').onclick = () => { st.collapsed = !st.collapsed; lkwApply(slot, st); lkwSave(st); };
   head.onpointerdown = e => {
     if (e.button !== 0 || e.target.closest('button')) return;
     e.preventDefault();

@@ -13,6 +13,7 @@
 /* Horizontal inset shared by every full-bleed bar (nav, device bar, status bar)
    so their content lines up with .page content. Token substitution: the % is
    resolved at the point of use, i.e. against that element's own width. */
+:root { --dock-w: 56px; --dock-reserve: max(0px, calc(var(--dock-w) - (100vw - var(--page-max, 100vw)) / 2)); }
 :root { --page-edge: max(20px, calc((100% - var(--page-max, 100%)) / 2 + 24px)); }
 
 body {
@@ -71,6 +72,9 @@ body {
    (forms, stats tables, lick charts) constrains itself via their own
    max-width on the element, not the page. */
 .page { display: none; padding: 16px 24px 60px; max-width: var(--page-max, none); margin-inline: auto; }
+/* Edge dock gutter: only reserve space when the page's own side margin is too narrow to hold the dock. */
+html.dock-r .page { padding-right: calc(24px + var(--dock-reserve)); }
+html.dock-l .page { padding-left: calc(24px + var(--dock-reserve)); }
 .page.active { display: block; }
 
 /* Narrow screens: the nav scrolls sideways instead of wrapping, and the
@@ -1827,17 +1831,9 @@ input[type="number"] { width: 64px; text-align: center; }
    layout (via a body-level padding, see .agent-sidebar-open below), with a
    collapse-to-rail state and a left-edge drag-to-resize handle. Closed by
    default: a round toggle button; open: a resizable panel. */
-.agent-toggle {
-  position: fixed; right: 20px; bottom: 20px; z-index: var(--z-menu);
-  padding: 10px 16px; border-radius: 999px; border: none;
-  background: var(--primary); color: var(--text-inverse); font-size: 13px; font-weight: 600;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.22); cursor: pointer;
-}
-.agent-toggle:hover { background: var(--primary-lt); }
-.agent-toggle.hidden { display: none; }
 
 .agent-panel {
-  position: fixed; right: 20px; bottom: 20px; z-index: var(--z-menu);
+  position: fixed; right: calc(20px + var(--dock-inset-r, 0px)); bottom: 20px; z-index: var(--z-menu);
   display: none; flex-direction: column; overflow: hidden;
   width: 400px; height: 520px; min-width: 320px; min-height: 320px;
   max-width: calc(100vw - 40px); max-height: calc(100vh - 40px);
@@ -2034,34 +2030,6 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
 }
 .agent-send-group { display: flex; gap: 6px; flex-shrink: 0; }
 
-/* ── Tools menu (app.js toolsMenu*) ──────────────────────────────────────
-   Single launcher, bottom-left, for secondary floating helpers — keeps
-   AI 助教's bottom-right corner free so an opened tool panel never covers
-   the agent panel (see the fbiv-toggle collision this replaced). */
-.tools-toggle {
-  position: fixed; left: 20px; bottom: 20px; z-index: 200;
-  padding: 10px 16px; border-radius: 999px; border: none;
-  background: var(--primary); color: var(--text-inverse); font-size: 13px; font-weight: 600;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.22); cursor: pointer;
-}
-.tools-toggle:hover { background: var(--primary-lt); }
-
-.tools-menu {
-  position: fixed; left: 20px; bottom: 68px; z-index: 200;
-  display: none; flex-direction: column; min-width: 180px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-  box-shadow: 0 10px 34px rgba(0,0,0,0.22); overflow: hidden;
-}
-.tools-menu.open { display: flex; }
-.tools-menu-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 9px 14px; border: none; background: none; color: var(--text);
-  font-size: 13px; text-align: left; cursor: pointer;
-}
-.tools-menu-item:hover { background: var(--bg-faint); }
-.tools-menu-item + .tools-menu-item { border-top: 1px solid var(--border-dim); }
-.tools-menu-check { color: var(--primary); font-size: 15px; line-height: 1; width: 12px; text-align: center; }
-
 /* ── Floating fretboard reference panel (fb-iv.js fbIv*) ────────────────
    A small always-available helper — pick a root note, tick degrees (3/5/7
    etc.), see the shape on the neck — usable from any page (e.g. while
@@ -2157,3 +2125,50 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
 .st-bar-note { font-size: 13px; color: var(--text-dim); }
 .st-bpm-current.st-step-flash { animation: st-step-flash 1.5s ease-out; }
 @keyframes st-step-flash { 0% { color: var(--primary); transform: scale(1.12); } 100% { color: var(--text); transform: scale(1); } }
+
+/* ── Edge dock (dock.js) ─────────────────────────────────────────────────
+   Round launcher buttons in the page margin for the floating helpers. Fixed to
+   the viewport edge, never part of page layout (`.page` only gains padding when
+   the margin is too narrow — see --dock-reserve). Dots: filled = window open;
+   pulsing amber ring = running while closed (metronome ticking, AI replying). */
+.dock {
+  position: fixed; z-index: 520; top: calc(var(--dock-top, .5) * 100vh); transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 6px 5px 8px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px; box-shadow: var(--elev-md);
+  opacity: .6; transition: opacity .15s; touch-action: none;
+}
+.dock:empty { display: none; }
+.dock:hover, .dock.active, .dock:focus-within, .dock.moving { opacity: 1; }
+.dock.r { right: calc(10px + var(--dock-off-r, 0px)); }
+.dock.l { left: 10px; }
+.dock-grip { width: 26px; height: 14px; display: grid; place-items: center; color: var(--text-dim); cursor: grab; border: 0; background: none; padding: 0; }
+.dock.moving .dock-grip { cursor: grabbing; }
+.dock-dot {
+  position: relative; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; padding: 0;
+  border: 1px solid var(--border); background: var(--bg-subtle); color: var(--text); cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s;
+}
+.dock-dot svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.dock-dot:hover { border-color: var(--primary); }
+.dock-dot.open { background: var(--primary); color: var(--text-inverse); border-color: var(--primary); }
+.dock-dot.live::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid var(--warn);
+  animation: dock-pulse 1.3s ease-out infinite;
+}
+@keyframes dock-pulse { 0% { transform: scale(.92); opacity: .95; } 100% { transform: scale(1.22); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .dock-dot.live::after { animation: none; } }
+.dock-tip {
+  position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .1s;
+  background: var(--text); color: var(--bg-card); font-size: 12px; padding: 3px 8px; border-radius: 6px;
+}
+.dock.r .dock-tip { right: calc(100% + 10px); }
+.dock.l .dock-tip { left: calc(100% + 10px); }
+.dock-dot:hover .dock-tip { opacity: 1; }
+@media (max-width: 640px) {
+  html.dock-r .page { padding-right: 16px; }
+  html.dock-l .page { padding-left: 16px; }
+}
+.dock-sep { width: 20px; height: 1px; background: var(--border); margin: 2px 0; }
+.dock-ctx { position: fixed; z-index: 700; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--elev-md); padding: 4px; }
+.dock-ctx button { display: block; border: 0; background: none; color: var(--text); font-size: 13px; padding: 6px 12px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+.dock-ctx button:hover { background: var(--bg-subtle); color: var(--primary); }

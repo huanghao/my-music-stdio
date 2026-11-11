@@ -503,7 +503,6 @@ function agentPageContext() {
 
 function agentSetOpenUI(open) {
   document.getElementById('agent-panel')?.classList.toggle('open', open);
-  document.getElementById('agent-toggle')?.classList.toggle('hidden', open);
   agentApplySidebarLayout();
 }
 

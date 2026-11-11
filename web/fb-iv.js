@@ -214,14 +214,14 @@ function fbIvBuild() {
 // ── Interval Shapes: floating-panel chrome ──────────────────────────────
 // Page-independent (like the practice timer pill and the agent panel) — the
 // panel lives outside any .page div in index.html, so this tool works from
-// any page without navigating to Fretboard. Opened from the tools menu
-// (app.js toolsMenu*), not its own fixed toggle button. The panel is both
+// any page without navigating to Fretboard. Opened from the edge dock
+// (dock.js), not its own fixed toggle button. The panel is both
 // draggable (like the transport pill) and resizable (like the agent panel,
 // dragging its top-left handle while keeping the opposite corner fixed).
 
 function fbIvSetOpenUI(open) {
   document.getElementById('fbiv-panel')?.classList.toggle('open', open);
-  fbIvSetCollapsedUI(fbState.iv.collapsed);
+  fbIvSetCollapsedUI(false);  // collapse is gone: the dock dot is the collapsed state
 }
 
 function fbIvSetCollapsedUI(collapsed) {
@@ -254,10 +254,12 @@ function fbIvApplyPos() {
   const w = fbState.iv.width, h = fbState.iv.height;
   let x, y;
   if (fbState.iv.pos) { x = fbState.iv.pos.x; y = fbState.iv.pos.y; }
-  // Default: bottom-left, above the tools-menu launcher that opens it —
-  // deliberately the opposite corner from AI 助教, so an open panel never
-  // covers the agent panel.
-  else { x = 20; y = window.innerHeight - h - 20; }
+  // Default: bottom corner next to the dock that opens it.
+  else {
+    const dockR = typeof dockInset === 'function' ? dockInset('r') : 0;
+    x = dockR ? window.innerWidth - w - dockR - 14 : 14 + (typeof dockInset === 'function' ? dockInset('l') : 0);
+    y = window.innerHeight - h - 20;
+  }
   x = Math.max(4, Math.min(window.innerWidth  - w - 4, x));
   y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
   panel.style.left = x + 'px'; panel.style.top = y + 'px';

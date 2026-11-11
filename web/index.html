@@ -925,7 +925,6 @@
      dock as a right sidebar (agentState.mode) — a page can optionally feed
      it richer context (see agentPageContext() / fbCidAgentContext() for
      Chord ID). -->
-<button id="agent-toggle" class="agent-toggle" title="问助教" onclick="agentOpen()">✦ AI 助教</button>
 <div id="agent-panel" class="agent-panel">
   <div class="agent-resize-handle" id="agent-resize-handle" title="拖拽调整大小"></div>
   <div class="agent-sidebar-resize-handle" id="agent-sidebar-resize-handle" title="拖拽调整宽度"></div>
@@ -977,21 +976,9 @@
             placeholder="写一句你的疑问，⌘/Ctrl+Enter 确定 · Esc 取消"></textarea>
 </div>
 
-<!-- Tools menu: a single launcher (bottom-left, away from AI 助教'/the
-     practice timer's bottom-right corner so an opened tool panel never
-     covers the agent panel) for secondary floating helpers. Only Interval
-     Shapes today; future reference-style tools register a row here too,
-     instead of each claiming their own fixed corner button. AI 助教 keeps
-     its own dedicated button since it's used far more often than these. -->
-<button id="tools-toggle" class="tools-toggle" title="工具" onclick="toolsMenuToggle()">🛠 工具</button>
-<div id="tools-menu" class="tools-menu">
-  <button type="button" class="tools-menu-item" id="tools-menu-speed" onclick="toolsMenuSelectSpeed()">
-    <span>⏱ Speed Trainer</span><span id="tools-menu-speed-check" class="tools-menu-check"></span>
-  </button>
-  <button type="button" class="tools-menu-item" onclick="toolsMenuSelectFretboard()">
-    <span>🎸 指板参考图</span><span id="tools-menu-fretboard-check" class="tools-menu-check"></span>
-  </button>
-</div>
+<!-- Edge dock (dock.js): round launcher buttons in the page margin for the floating helpers
+     (Speed Trainer, 指板参考图, AI 助教). Replaces the old 工具 menu + AI 助教 corner button. -->
+<div id="dock" class="dock r" role="toolbar" aria-label="工具坞"></div>
 
 <!-- Floating fretboard reference (fb-iv.js fbIv*): pick a root note
      (string select + fret input, or just click the board), tick degrees
@@ -999,7 +986,7 @@
      root + those degrees nearby on the neck — pure geometry, no key needed.
      Page-independent like the practice timer pill and the agent panel above,
      so it's usable while looking at a Lick without leaving the page. Opened
-     from the tools menu above (not its own fixed toggle button); the panel
+     from the edge dock (dock.js); the panel
      itself is both draggable (like the transport pill) and resizable (like
      the agent panel). -->
 <div id="fbiv-panel" class="fbiv-panel">
@@ -1007,7 +994,6 @@
   <div class="fbiv-head" id="fbiv-head">
     <span class="fbiv-grip" title="拖动到任意位置（双击复位）">⠿</span>
     <span class="fbiv-title">指板参考图</span>
-    <button type="button" class="agent-icon-btn" id="fbiv-collapse" title="收起 / 展开" onclick="fbIvToggleCollapse()">▾</button>
     <button type="button" class="agent-icon-btn" title="关闭" onclick="fbIvClose()">✕</button>
   </div>
   <div class="fbiv-body">
@@ -1044,6 +1030,7 @@
 <script src="backing-tracks.js"></script>
 <script src="improv.js"></script>
 <script src="agent-assistant.js"></script>
+<script src="dock.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

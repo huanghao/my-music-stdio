@@ -133,50 +133,6 @@ function vampJamApplyVolumeChange(e) {
   api('/api/volume', 'PUT', { volume: e.detail.gain }).catch(() => {});
 }
 
-// ── Tools menu: single launcher for secondary floating helpers ──────────
-// (fbiv-panel today; future page-independent reference tools register a row
-// in index.html's #tools-menu and a toolsMenuSelectXxx() here, instead of
-// each claiming their own fixed corner button.) AI 助教 and the practice
-// timer are NOT routed through this menu — they're used far more often, so
-// they keep their own always-visible entry points.
-function toolsMenuRender() {
-  const check = document.getElementById('tools-menu-fretboard-check');
-  if (check) check.textContent = fbState.iv.open ? '●' : '';
-  // Speed Trainer only exists on a Lick's page; hide its row elsewhere.
-  const speedAvail = typeof lkwIsAvailable === 'function' && lkwIsAvailable();
-  document.getElementById('tools-menu-speed')?.classList.toggle('hidden', !speedAvail);
-  const sc = document.getElementById('tools-menu-speed-check');
-  if (sc) sc.textContent = speedAvail && lkwIsOpen() ? '●' : '';
-}
-function toolsMenuSelectSpeed() {
-  lkwSetOpen(!lkwIsOpen());
-  toolsMenuClose();
-}
-function toolsMenuToggle() {
-  const menu = document.getElementById('tools-menu');
-  if (!menu) return;
-  const opening = !menu.classList.contains('open');
-  menu.classList.toggle('open', opening);
-  if (opening) toolsMenuRender();
-}
-function toolsMenuClose() {
-  document.getElementById('tools-menu')?.classList.remove('open');
-}
-function toolsMenuSelectFretboard() {
-  if (fbState.iv.open) fbIvClose(); else fbIvOpen();
-  toolsMenuClose();
-}
-function initToolsMenu() {
-  // Click anywhere outside the menu/toggle closes it — standard dropdown behavior.
-  document.addEventListener('click', e => {
-    const menu = document.getElementById('tools-menu');
-    const toggle = document.getElementById('tools-toggle');
-    if (!menu || !menu.classList.contains('open')) return;
-    if (menu.contains(e.target) || toggle?.contains(e.target)) return;
-    toolsMenuClose();
-  });
-}
-
 // ── Init ──
 const CURRENT_PAGE_KEY = 'mps_current_page';
 const NAV_PAGES = ['vamp', 'jam', 'backingtracks', 'licks', 'improv', 'tuner', 'fretboard', 'songloop', 'progressions', 'prefs'];
@@ -190,7 +146,7 @@ async function init() {
   ptInit();            // practice timer — page-independent, always available
   agentInit();         // floating agent assistant — page-independent, always available
   fbIvInit();          // floating fretboard reference — page-independent, always available
-  initToolsMenu();     // launcher for the above secondary tools — page-independent, always available
+  dockInit();          // edge dock: launcher for the floating helpers above — page-independent, always available
   await pingServer();
   setTimeout(_pingLoop, _pingDelay());
   if (_connOk) await loadApp();

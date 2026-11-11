@@ -27,7 +27,9 @@
 | Lick 编辑器（编辑/预览模式） | `lick_editor_prefs` | `licks.js` `lickEditorPrefsLoad()` / `lickEditorPrefsSave()` |
 | Lick 笔记 PDF 展开/收起状态 | `lick_pdf_open` | `licks.js` `licksPdfOpenMap()` / `licksPdfSetOpen()`（按 URL 记，最后一次操作为准） |
 | Lick 音频迷你播放器变速 | `lick_audio_speed` | `licks.js` `licksAudioSpeedMap()` / `licksAudioSpeedSet()`（按 URL 记，最后一次操作为准） |
-| Lick 详情浮动练习窗（Speed Trainer）位置/大小/是否收起/是否关闭/“节拍与提速设置”折叠 | `lick_practice_win` | `licks-board.js` `lkwLoad()` / `lkwSave()` |
+| Lick 详情浮动练习窗（Speed Trainer）位置/大小/是否打开/“节拍与提速设置”折叠（收起已并入工具坞圆点） | `lick_practice_win` | `licks-board.js` `lkwLoad()` / `lkwSave()` |
+| 工具坞（Speed Trainer / 指板参考图 / AI 助教 的圆点入口）所在边和高度 | `mps_dock` | `dock.js` `dockLoad()` / `dockSave()`（各窗口自己的位置、开合仍存各自的 key） |
+| Lick 详情里浮动到工具坞的块（音频/视频）：按 lick 记哪些块已浮动、窗口位置/宽度/是否打开 | `lick_floats` | `licks-board.js` `lkfLoad()` / `lkfPersist()`（块本身仍在 `lick.layout` 里，浮动与否只是界面偏好） |
 | Lick 详情 Sessions 列表展开/收起 | `lick_sessions_open` | `licks.js` `licksSessionsOpen()` / `licksSessionsOnToggle()`（全局布尔，默认收起） |
 | Dom Drill（方向、五度圈开关、反应时限） | `dd_prefs` | `dom-drill.js` `ddPrefsLoad()` / `ddPrefsSave()` |
 | Key Drill（方向、聚焦调） | `kd_prefs` | `key-drill.js` `kdPrefsLoad()` / `kdPrefsSave()` |

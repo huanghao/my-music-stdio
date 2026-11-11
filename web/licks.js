@@ -1173,7 +1173,7 @@ const LICK_EDITOR_PREFS_KEY = 'lick_editor_prefs';
 
 function lickEditorPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(LICK_EDITOR_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(LICK_EDITOR_PREFS_KEY, {});
   if (saved.mode === 'edit' || saved.mode === 'preview') licksState.editorMode = saved.mode;
 }
 

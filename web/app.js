@@ -76,7 +76,7 @@ const LAST_SELECTION_KEY = 'mps_last_selection';
 
 function loadLastSelection() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(LAST_SELECTION_KEY)) || {}; } catch (_) { saved = {}; }
+  saved = lsJson(LAST_SELECTION_KEY, {});
   if (saved.vamp) {
     if (typeof saved.vamp.chord === 'string') state.vamp.chord = saved.vamp.chord;
     if (typeof saved.vamp.style === 'string') state.vamp.style = saved.vamp.style;

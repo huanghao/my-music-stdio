@@ -129,7 +129,7 @@ const slState = {
 // is effectively always once that upload succeeds.
 function slPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(SL_STORAGE_KEY)) || {}; } catch (_) {}
+  saved = lsJson(SL_STORAGE_KEY, {});
   if (Number.isFinite(saved.loopFromBar)) slState.loopFromBar = saved.loopFromBar;
   if (Number.isFinite(saved.loopToBar)) slState.loopToBar = saved.loopToBar;
   if (typeof saved.loopOn === 'boolean') slState.loopOn = saved.loopOn;

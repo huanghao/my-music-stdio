@@ -103,7 +103,7 @@ const fbState = {
     degrees: { 4: true, 7: true, 11: true },   // semitone offset from root -> shown; root (0) is always shown
     scrollX: 0,                   // user-controlled horizontal pan of the board — never auto-moved (see fbIvRenderBoard)
     // Floating-panel chrome (page-independent — see fbIvInit/fbIvOpen/fbIvClose):
-    open: false, collapsed: false, pos: null, width: 520, height: 460,
+    open: false, pos: null, width: 520, height: 460,
   },
 };
 

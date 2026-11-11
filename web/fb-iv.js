@@ -216,24 +216,10 @@ function fbIvBuild() {
 // panel lives outside any .page div in index.html, so this tool works from
 // any page without navigating to Fretboard. Opened from the edge dock
 // (dock.js), not its own fixed toggle button. The panel is both
-// draggable (like the transport pill) and resizable (like the agent panel,
-// dragging its top-left handle while keeping the opposite corner fixed).
+// draggable and resizable (shared plumbing in dock-win.js).
 
 function fbIvSetOpenUI(open) {
   document.getElementById('fbiv-panel')?.classList.toggle('open', open);
-  fbIvSetCollapsedUI(false);  // collapse is gone: the dock dot is the collapsed state
-}
-
-function fbIvSetCollapsedUI(collapsed) {
-  document.getElementById('fbiv-panel')?.classList.toggle('collapsed', collapsed);
-  const btn = document.getElementById('fbiv-collapse');
-  if (btn) btn.textContent = collapsed ? '▸' : '▾';
-}
-
-function fbIvToggleCollapse() {
-  fbState.iv.collapsed = !fbState.iv.collapsed;
-  fbIvSetCollapsedUI(fbState.iv.collapsed);
-  fbPrefsSave();
 }
 
 function fbIvOpen() {
@@ -250,87 +236,29 @@ function fbIvClose() {
 
 function fbIvApplyPos() {
   const panel = document.getElementById('fbiv-panel');
-  if (!panel || fbState.iv._dragging) return;
-  const w = fbState.iv.width, h = fbState.iv.height;
-  let x, y;
-  if (fbState.iv.pos) { x = fbState.iv.pos.x; y = fbState.iv.pos.y; }
-  // Default: bottom corner next to the dock that opens it.
-  else {
-    const dockR = typeof dockInset === 'function' ? dockInset('r') : 0;
-    x = dockR ? window.innerWidth - w - dockR - 14 : 14 + (typeof dockInset === 'function' ? dockInset('l') : 0);
-    y = window.innerHeight - h - 20;
+  if (!panel) return;
+  panel.style.width = fbState.iv.width + 'px';
+  panel.style.height = fbState.iv.height + 'px';
+  let p = fbState.iv.pos;
+  if (!p) {   // default: beside the dock dot that opens it
+    p = dockWinBeside('fb', fbState.iv.width, fbState.iv.height);
+    p.y = window.innerHeight - fbState.iv.height - 20;
   }
-  x = Math.max(4, Math.min(window.innerWidth  - w - 4, x));
-  y = Math.max(4, Math.min(window.innerHeight - h - 4, y));
-  panel.style.left = x + 'px'; panel.style.top = y + 'px';
-  panel.style.right = 'auto'; panel.style.bottom = 'auto';
-  panel.style.width = w + 'px'; panel.style.height = h + 'px';
+  dockWinMove(panel, p.x, p.y);
 }
 
-function fbIvInitDrag() {
+// Drag by the header (double-click resets to the default spot); resize with the CSS grip at the bottom-right.
+function fbIvInitWindow() {
   const panel = document.getElementById('fbiv-panel');
   const head = document.getElementById('fbiv-head');
   if (!panel || !head) return;
-  const onButtons = e => e.target.closest('button');
-  let sx, sy, ox, oy, dragging = false;
-  head.addEventListener('pointerdown', e => {
-    if (onButtons(e)) return;
-    dragging = true; fbState.iv._dragging = true; panel.classList.add('dragging');
-    const r = panel.getBoundingClientRect();
-    ox = r.left; oy = r.top; sx = e.clientX; sy = e.clientY;
-    head.setPointerCapture(e.pointerId); e.preventDefault();
+  dockWinDrag(panel, head, {
+    onEnd: (x, y) => { fbState.iv.pos = { x, y }; fbPrefsSave(); },
+    onReset: () => { fbState.iv.pos = null; fbPrefsSave(); fbIvApplyPos(); },
   });
-  head.addEventListener('pointermove', e => {
-    if (!dragging) return;
-    let x = ox + (e.clientX - sx), y = oy + (e.clientY - sy);
-    x = Math.max(4, Math.min(window.innerWidth  - panel.offsetWidth  - 4, x));
-    y = Math.max(4, Math.min(window.innerHeight - panel.offsetHeight - 4, y));
-    panel.style.left = x + 'px'; panel.style.top = y + 'px'; panel.style.right = 'auto'; panel.style.bottom = 'auto';
-  });
-  head.addEventListener('pointerup', () => {
-    if (!dragging) return;
-    dragging = false; fbState.iv._dragging = false; panel.classList.remove('dragging');
-    fbState.iv.pos = { x: parseInt(panel.style.left), y: parseInt(panel.style.top) };
-    fbPrefsSave();
-  });
-  head.addEventListener('pointercancel', () => {
-    dragging = false; fbState.iv._dragging = false; panel.classList.remove('dragging');
-  });
-  head.addEventListener('dblclick', e => { // reset to the default spot
-    if (onButtons(e)) return;
-    fbState.iv.pos = null; fbPrefsSave(); fbIvApplyPos();
-  });
+  dockWinWatchSize(panel, (w, h) => { fbState.iv.width = w; fbState.iv.height = h; fbPrefsSave(); });
+  panel.addEventListener('pointerdown', () => dockWinRaise(panel));
   window.addEventListener('resize', () => fbIvApplyPos());
-}
-
-// Drag the bottom-right corner handle — the standard OS-window resize spot,
-// growing away from the fixed top-left corner (this panel is draggable, so
-// unlike the agent panel there's no "anchored" corner to keep tethered).
-function fbIvInitResize() {
-  const handle = document.getElementById('fbiv-resize-handle');
-  const panel = document.getElementById('fbiv-panel');
-  if (!handle || !panel) return;
-  handle.addEventListener('mousedown', e => {
-    e.preventDefault();
-    const startX = e.clientX, startY = e.clientY;
-    const startRect = panel.getBoundingClientRect();
-    const startW = fbState.iv.width, startH = fbState.iv.height;
-    const maxW = window.innerWidth - startRect.left - 4;
-    const maxH = window.innerHeight - startRect.top - 4;
-    function onMove(ev) {
-      const w = Math.max(360, Math.min(maxW, startW + (ev.clientX - startX)));
-      const h = Math.max(320, Math.min(maxH, startH + (ev.clientY - startY)));
-      fbState.iv.width = w; fbState.iv.height = h;
-      panel.style.width = w + 'px'; panel.style.height = h + 'px';
-    }
-    function onUp() {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      fbPrefsSave();
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
 }
 
 // Page-independent init — called once from app.js's init(), alongside
@@ -338,8 +266,7 @@ function fbIvInitResize() {
 function fbIvInit() {
   fbEnsurePrefsLoaded();
   fbIvApplyPos();
-  fbIvInitDrag();
-  fbIvInitResize();
+  fbIvInitWindow();
   fbIvSetOpenUI(fbState.iv.open);
   fbRenderIvOptions();
   fbIvBuild();
@@ -350,7 +277,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FB_IV_DEGREES, FB_IV_DEGREE_LABEL, FB_IV_DEGREE_ROWS, FB_IV_SPECIAL_DEGREE, FB_IV_PRESETS, FB_IV_MAX_FRET,
     fbIvPositionsForRoot, fbRenderIvOptions, fbIvToggleDegreesMenu, fbIvApplyPreset, fbIvRenderBoard, fbIvBuild,
-    fbIvSetOpenUI, fbIvOpen, fbIvClose, fbIvApplyPos, fbIvInitDrag, fbIvInitResize,
+    fbIvSetOpenUI, fbIvOpen, fbIvClose, fbIvApplyPos, fbIvInitWindow,
     fbIvInit,
   };
 }

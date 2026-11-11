@@ -405,7 +405,7 @@ let plNextId = 1;
 
 function plPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(PL_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(PL_PREFS_KEY, {});
   if (typeof saved.key === 'string' && PL_KEY_OPTIONS.includes(saved.key)) plState.key = saved.key;
   if (Number.isFinite(saved.bpm) && saved.bpm >= 20 && saved.bpm <= 300) plState.bpm = saved.bpm;
   if (Number.isFinite(saved.beatsPerBar) && saved.beatsPerBar >= 1 && saved.beatsPerBar <= 12) plState.beatsPerBar = saved.beatsPerBar;

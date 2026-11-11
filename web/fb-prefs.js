@@ -7,7 +7,7 @@ const FB_PREFS_KEY = 'fb_prefs';
 
 function fbPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(FB_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
+  saved = lsJson(FB_PREFS_KEY, {});
   if (saved.pitch) {
     if (Array.isArray(saved.pitch.strings) && saved.pitch.strings.length === 6) fbState.pitch.strings = saved.pitch.strings;
     if (saved.pitch.practiceMode === 'all' || saved.pitch.practiceMode === 'weak') fbState.pitch.practiceMode = saved.pitch.practiceMode;
@@ -111,7 +111,6 @@ function fbPrefsLoad() {
       fbState.iv.degrees = degrees;
     }
     if (typeof saved.iv.open === 'boolean') fbState.iv.open = saved.iv.open;
-    if (typeof saved.iv.collapsed === 'boolean') fbState.iv.collapsed = saved.iv.collapsed;
     if (Number.isFinite(saved.iv.scrollX) && saved.iv.scrollX >= 0) fbState.iv.scrollX = saved.iv.scrollX;
     if (saved.iv.pos && Number.isFinite(saved.iv.pos.x) && Number.isFinite(saved.iv.pos.y)) fbState.iv.pos = saved.iv.pos;
     if (Number.isFinite(saved.iv.width)) fbState.iv.width = saved.iv.width;
@@ -158,7 +157,7 @@ function fbPrefsSave() {
            showPositionHint: fbState.seq.showPositionHint },
     iv: { rootString: fbState.iv.rootString, rootFret: fbState.iv.rootFret, degrees: fbState.iv.degrees,
           scrollX: fbState.iv.scrollX,
-          open: fbState.iv.open, collapsed: fbState.iv.collapsed, pos: fbState.iv.pos, width: fbState.iv.width, height: fbState.iv.height },
+          open: fbState.iv.open, pos: fbState.iv.pos, width: fbState.iv.width, height: fbState.iv.height },
     activeMode: fbState.activeMode,
   }));
 }

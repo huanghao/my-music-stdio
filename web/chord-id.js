@@ -1240,7 +1240,7 @@ function fbCidLegacyChordsToMeasures(rawChords, rawBreaks) {
 
 function fbCidPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(FB_CID_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
+  saved = lsJson(FB_CID_PREFS_KEY, {});
   const s = fbState.chordId;
   if (fbCidValidInputArr(saved.input)) s.input = saved.input;
   if (Number.isInteger(saved.fretWindowStart) && saved.fretWindowStart >= 0 && saved.fretWindowStart <= FB_CID_MAX_FRET_WINDOW_START) {

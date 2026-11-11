@@ -204,7 +204,7 @@ const DD_PREFS_KEY = 'dd_prefs';
 
 function ddPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(DD_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(DD_PREFS_KEY, {});
   if (['mixed', 'targetToDom', 'domToTarget', 'guideTones'].includes(saved.direction)) ddState.direction = saved.direction;
   if (typeof saved.showCircle === 'boolean') ddState.showCircle = saved.showCircle;
   if (Number.isFinite(saved.timeLimitMs)) {

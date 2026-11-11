@@ -403,8 +403,6 @@ function lkbApplyPos(measure = true, activeId = null) {
   cv.style.height = blocks.length ? Math.max(240, bottom) + 60 + 'px' : '';
 }
 
-function lkbFit() { lkbApplyPos(); }   // kept for the window-resize hook
-
 // ── 排版 mode ──
 
 function lkbHostHtml() {
@@ -819,16 +817,12 @@ function lkfWinHtml(b, src) {
 }
 
 function lkfPlace(el, st, bid) {
-  const w = el.offsetWidth || 380, h = el.offsetHeight || 200;
-  let x = st.x, y = st.y;
+  let { x, y } = st;
   if (x == null || y == null) {
-    const r = typeof dockDotRect === 'function' ? dockDotRect('fl:' + bid) : null;
-    const onRight = typeof dockState === 'undefined' || dockState.side === 'r';
-    x = r ? (onRight ? r.left - w - 14 : r.right + 14) : window.innerWidth - w - 80;
-    y = (r ? r.top - 8 : 120) + 40 * document.querySelectorAll('.dockwin.on').length;   // stagger so new windows don't cover open ones
+    const p = dockWinBeside('fl:' + bid, el.offsetWidth || 380, el.offsetHeight || 200);
+    x = p.x; y = p.y + 40 * document.querySelectorAll('.dockwin.on').length;   // stagger so new windows don't cover open ones
   }
-  el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, x)) + 'px';
-  el.style.top = Math.max(8, Math.min(window.innerHeight - 60, y)) + 'px';
+  dockWinMove(el, x, y);
 }
 
 // Rebuilds every floated window of the current lick (mount / re-render).
@@ -854,26 +848,13 @@ function lkfBind(el, bid) {
     if (act === 'back') lkfUnfloat(bid);
     else if (act === 'close') lkfSetOpen(bid, false);
   });
-  el.addEventListener('pointerdown', () => { el.style.zIndex = 510 + (lkfZ = (lkfZ || 0) % 20 + 1); });
-  const head = el.querySelector('.dw-h');
-  head.onpointerdown = e => {
-    if (e.button !== 0 || e.target.closest('button')) return;
-    e.preventDefault();
-    const x0 = e.clientX, y0 = e.clientY, r = el.getBoundingClientRect();
-    const move = ev => { const s = st(); if (!s) return; s.x = r.left + ev.clientX - x0; s.y = r.top + ev.clientY - y0; lkfPlace(el, s, bid); };
-    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); lkfPersist(); };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
-  };
-  let first = true, t = 0;
-  new ResizeObserver(() => {
-    if (first) { first = false; return; }
-    if (!el.offsetWidth || !st()) return;
-    clearTimeout(t);
-    t = setTimeout(() => { if (st()) { st().w = Math.round(el.offsetWidth); lkfPersist(); } }, 300);
-  }).observe(el);
+  el.addEventListener('pointerdown', () => dockWinRaise(el));
+  dockWinDrag(el, el.querySelector('.dw-h'), {
+    onMove: (x, y) => { const s = st(); if (s) { s.x = x; s.y = y; } },
+    onEnd: lkfPersist,
+  });
+  dockWinWatchSize(el, w => { if (st()) { st().w = w; lkfPersist(); } });
 }
-let lkfZ = 0;
 
 // Shows each window only while its Lick page is on screen and it is open.
 function lkfRefresh() {
@@ -950,15 +931,15 @@ function lkfDockItems() {
 // ── Floating practice window ──
 // The metronome panel (#st-panel) is homed into #lick-practice-slot by
 // licksSyncPracticePanelHome(); on the board page that slot is a free-floating,
-// draggable window that can collapse to a strip. Position/collapsed state is
+// draggable window opened from the edge dock. Position/size/open state is
 // a pure UI convenience → localStorage (lick_practice_win).
 const LKW_KEY = 'lick_practice_win';
 function lkwLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(LKW_KEY));
-    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, collapsed: false, open: v?.open !== false,
+    return { x: Number.isFinite(v?.x) ? v.x : null, y: Number.isFinite(v?.y) ? v.y : null, open: v?.open !== false,
       w: Number.isFinite(v?.w) ? v.w : null, h: Number.isFinite(v?.h) ? v.h : null, more: v?.more === true };
-  } catch (_) { return { x: null, y: null, collapsed: false, open: true, w: null, h: null, more: false }; }
+  } catch (_) { return { x: null, y: null, open: true, w: null, h: null, more: false }; }
 }
 function lkwSave(st) { try { localStorage.setItem(LKW_KEY, JSON.stringify(st)); } catch (_) {} }
 
@@ -977,8 +958,7 @@ function lkwSetOpen(open) {
 
 function lkwApply(slot, st) {
   slot.classList.toggle('closed', !st.open);
-  slot.classList.toggle('collapsed', st.collapsed);
-  slot.style.width = st.w && !st.collapsed ? Math.max(320, Math.min(window.innerWidth - 16, st.w)) + 'px' : '';
+  slot.style.width = st.w ? Math.max(320, Math.min(window.innerWidth - 16, st.w)) + 'px' : '';
   // Height is intentionally not restored: the compact window sizes to its content (a stale saved height would keep it tall).
   slot.style.height = '';
   const w = slot.offsetWidth || 440;
@@ -986,10 +966,7 @@ function lkwApply(slot, st) {
   const dockR = typeof dockInset === 'function' ? dockInset('r') : 0;
   const x = st.x == null ? window.innerWidth - w - 24 - dockR : st.x;
   const y = st.y == null ? 130 : st.y;
-  slot.style.left = Math.max(0, Math.min(window.innerWidth - w - 8, x)) + 'px';
-  slot.style.top = Math.max(0, Math.min(window.innerHeight - 40, y)) + 'px';
-  const btn = slot.querySelector('.lkw-toggle');
-  if (btn) btn.textContent = st.collapsed ? '▸' : '▾';
+  dockWinMove(slot, x, y);
 }
 
 function lkbInitPracticeWindow() {
@@ -998,33 +975,18 @@ function lkbInitPracticeWindow() {
   const st = lkwCur = lkwLoad();
   slot.classList.add('lkw');
   slot.insertAdjacentHTML('afterbegin',
-    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><span class="lkw-live"></span><button class="lkw-close agent-icon-btn" title="收起到工具坞">✕</button></div>');
+    '<div class="lkw-h" title="拖动到任意位置"><span class="lkw-grip">⠿</span><b>Speed Trainer</b><button class="lkw-close agent-icon-btn" title="收起到工具坞">✕</button></div>');
   const head = slot.querySelector('.lkw-h');
   lkwApply(slot, st);
   // "节拍与提速设置" fold: remembered across reloads (reassigning ontoggle keeps this idempotent across lick switches).
   const more = document.getElementById('st-more');
   if (more) { more.open = st.more; more.ontoggle = () => { st.more = more.open; lkwSave(st); }; }
   // Drag the bottom-right corner (CSS resize) to size the window; remember it.
-  let first = true, t = 0;
-  new ResizeObserver(() => {
-    if (first) { first = false; return; }
-    if (slot.classList.contains('collapsed') || !slot.offsetWidth) return;
-    clearTimeout(t);
-    t = setTimeout(() => { st.w = Math.round(slot.offsetWidth); st.h = Math.round(slot.offsetHeight); lkwSave(st); }, 300);
-  }).observe(slot);
-  if (typeof stRefreshLive === 'function') stRefreshLive();
+  dockWinWatchSize(slot, (w, h) => { st.w = w; st.h = h; lkwSave(st); });
   head.querySelector('.lkw-close').onclick = () => lkwSetOpen(false);
-  head.onpointerdown = e => {
-    if (e.button !== 0 || e.target.closest('button')) return;
-    e.preventDefault();
-    const x0 = e.clientX, y0 = e.clientY, r = slot.getBoundingClientRect();
-    const move = ev => { st.x = r.left + ev.clientX - x0; st.y = r.top + ev.clientY - y0; lkwApply(slot, st); };
-    const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); lkwSave(st); };
-    addEventListener('pointermove', move);
-    addEventListener('pointerup', up);
-  };
+  dockWinDrag(slot, head, { onMove: (x, y) => { st.x = x; st.y = y; }, onEnd: () => lkwSave(st) });
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { lkb, lkbNormalizeLayout, lkbReconcile, lkbPlaceNew, lkbDefaultSize, lkbBottom, lkbCompact, lkbDock, lkbHit, lkbShiftRight };
+  module.exports = { lkb, lkfLoad, lkbNormalizeLayout, lkbReconcile, lkbPlaceNew, lkbDefaultSize, lkbBottom, lkbCompact, lkbDock, lkbHit, lkbShiftRight };
 }

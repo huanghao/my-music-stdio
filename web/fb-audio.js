@@ -79,7 +79,7 @@ let fbSoundVolumes = {};
 
 function fbSoundVolumesLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(FB_SOUND_VOLUME_KEY)) || {}; } catch (_) { saved = {}; }
+  saved = lsJson(FB_SOUND_VOLUME_KEY, {});
   fbSoundVolumes = {};
   FB_SOUND_CATEGORIES.forEach(({ id }) => {
     const v = saved[id];

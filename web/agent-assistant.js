@@ -97,7 +97,7 @@ function agentReadSseEvent(raw, fallbackCursor) {
 
 function agentPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(AGENT_PREFS_KEY)) || {}; } catch (_) { saved = {}; }
+  saved = lsJson(AGENT_PREFS_KEY, {});
   if (typeof saved.provider === 'string') agentState.provider = saved.provider;
   if (typeof saved.model === 'string') agentState.model = saved.model;
   if (typeof saved.thinking === 'string') agentState.thinking = saved.thinking;

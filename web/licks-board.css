@@ -102,16 +102,9 @@
 .lkw-h:active { cursor: grabbing; }
 .lkw-grip { color: var(--text-muted); }
 .lkw.closed { display: none; }
-.lkw-toggle { margin-left: auto; border: 0; background: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0 6px; }
-.lkw.collapsed #st-panel { display: none; }
-.lkw.collapsed .lkw-h { border-bottom: 0; }
 .lkw #st-panel { margin: 0; border: 0; box-shadow: none; }
 
-.lkw-live { font-size: 12px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.lkw:not(.collapsed) .lkw-live { display: none; }
 
-.lkw.collapsed { resize: none; width: max-content !important; min-width: 0; min-height: 0; height: auto !important; overflow: hidden; border-radius: 999px; }
-.lkw.collapsed .lkw-h { border-bottom: 0; background: var(--bg-card); padding: 6px 12px; border-radius: 999px; }
 
 .lkw .st-bpm-row, .lkw .st-rhythm-row { flex-wrap: wrap; row-gap: 6px; }
 

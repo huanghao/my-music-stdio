@@ -21,7 +21,7 @@ const imp = {
 
 function impPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(IMP_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(IMP_PREFS_KEY, {});
   if (Number.isFinite(saved.rate) && saved.rate >= 0.4 && saved.rate <= 1.5) imp.prefs.rate = saved.rate;
   if (Number.isFinite(saved.offsetMs)) imp.prefs.offsetMs = Math.max(-1000, Math.min(1000, saved.offsetMs));
   if ([1, 2, 3].includes(saved.every)) imp.prefs.every = saved.every;

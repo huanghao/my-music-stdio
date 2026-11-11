@@ -142,7 +142,7 @@ const KD_PREFS_KEY = 'kd_prefs';
 
 function kdPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(KD_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(KD_PREFS_KEY, {});
   if (['mixed', 'chordToDegree', 'degreeToChord'].includes(saved.direction)) kdState.direction = saved.direction;
   if (typeof saved.focusKey === 'string' && (saved.focusKey === '' || KD_KEY_WEIGHTS[saved.focusKey])) {
     kdState.focusKey = saved.focusKey;

@@ -2045,10 +2045,10 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
   box-shadow: 0 10px 34px rgba(0,0,0,0.22);
 }
 .fbiv-panel.open { display: flex; }
-/* Collapsed: just the title bar as a pill (same idea as the Speed Trainer window, .lkw.collapsed). */
-.fbiv-panel.collapsed { width: max-content !important; height: auto !important; min-width: 0; min-height: 0; border-radius: 999px; }
-.fbiv-panel.collapsed .fbiv-body, .fbiv-panel.collapsed .fbiv-resize-handle { display: none; }
-.fbiv-panel.collapsed .fbiv-head { border-bottom: 0; padding-left: 12px; }
+/* Resize: the browser's own bottom-right grip (same as the Speed Trainer window); size is saved via dock-win.js. */
+.fbiv-panel { resize: both; }
+.fbiv-panel.dragging, .lkw.dragging, .dockwin.dragging { opacity: 0.92; }
+.fbiv-head { border-bottom: 0; padding-left: 12px; }
 .fbiv-panel.dragging { opacity: 0.92; }
 /* Bottom-right corner grip — the standard window-resize spot (this panel is
    draggable, so there's no fixed "anchor corner" the way the agent panel's
@@ -2066,7 +2066,6 @@ body.agent-sidebar-open { padding-right: var(--agent-sidebar-w, 0px); }
   border-bottom: 1px solid var(--border); flex-shrink: 0;
   cursor: grab; touch-action: none; user-select: none;
 }
-.fbiv-panel.dragging .fbiv-head { cursor: grabbing; }
 .fbiv-grip { color: var(--text-muted); font-size: 16px; line-height: 1; padding: 0 2px; }
 .fbiv-title { flex: 1; font-size: 13px; font-weight: 600; color: var(--text); }
 .fbiv-body { flex: 1; overflow-y: auto; padding: 10px 12px; }

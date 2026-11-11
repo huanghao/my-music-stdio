@@ -39,7 +39,7 @@ const ST_PREFS_KEY = 'st_prefs';
 
 function stPrefsLoad() {
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(ST_PREFS_KEY)) || {}; } catch (_) {}
+  saved = lsJson(ST_PREFS_KEY, {});
   if (Number.isFinite(saved.startBpm))        stState.startBpm        = saved.startBpm;
   if (Number.isFinite(saved.targetBpm))       stState.targetBpm       = saved.targetBpm;
   if (Number.isFinite(saved.stepBpm))         stState.stepBpm         = saved.stepBpm;
@@ -183,7 +183,6 @@ function stUpdateDisplay() {
   // it while you're typing in it, or half-typed numbers vanish mid-edit.
   const typing = typeof document.activeElement !== 'undefined' && document.activeElement === input;
   if (!typing) input.value = stState.currentBpm;
-  stRefreshLive();
 }
 
 // Bar counter ("第 3 / 4 小节"), shown big above the beat dots so a long
@@ -198,7 +197,6 @@ function stShowBar(num, cue, note) {
   el.classList.toggle('cue', !!cue);
   const noteEl = document.getElementById('st-bar-note');
   if (noteEl) noteEl.textContent = note || '';
-  stRefreshLive();
 }
 
 function stFlashStep(fromBpm, toBpm) {
@@ -210,13 +208,6 @@ function stFlashStep(fromBpm, toBpm) {
   void input.offsetWidth;
   input.classList.add('st-step-flash');
   setTimeout(() => input.classList.remove('st-step-flash'), 1500);
-}
-
-// One-line live summary for the collapsed floating practice window.
-function stRefreshLive() {
-  const txt = `${stState.running ? '▶' : '■'} ${stState.currentBpm} BPM${stState.running && stBarText ? ' · ' + stBarText : ''}`;
-  if (typeof document.querySelectorAll !== 'function') return;
-  document.querySelectorAll('.lkw-live').forEach(e => { e.textContent = txt; });
 }
 
 function stScheduleClick(tickIndex, time, cue) {

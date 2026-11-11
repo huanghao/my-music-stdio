@@ -5,8 +5,8 @@ import pytest
 def isolated_data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     from importlib import reload
-    import src.data_dir as data_dir
-    import src.user_state as user_state
+
+    from src import data_dir, user_state
     reload(data_dir)
     reload(user_state)
     yield user_state

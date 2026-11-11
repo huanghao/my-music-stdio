@@ -5,8 +5,8 @@ agent providers installed. The tool wrapper lives in src/agent_client.py and
 only injects the materials-store path resolver.
 """
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 try:
     import pypdf

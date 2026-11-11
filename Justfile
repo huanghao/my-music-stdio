@@ -15,6 +15,11 @@ test-js:
 
 lint:
     python -m ruff check src/ tests/
+    just lint-js
+
+# Syntax-check every browser script (no bundler, so a typo only shows up at runtime otherwise).
+lint-js:
+    for f in web/*.js; do node --check "$f" || exit 1; done
 
 lint-fix:
     python -m ruff check --fix src/ tests/

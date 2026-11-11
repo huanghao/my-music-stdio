@@ -30,7 +30,7 @@ except OSError as e:
 if not os.environ.get("HOMEBREW_PREFIX") and Path(_LIB_PATH).exists():
     os.environ["HOMEBREW_PREFIX"] = str(Path(_LIB_PATH).parent.parent)
 
-import fluidsynth  # noqa: E402  (must come after ctypes preload)
+import fluidsynth
 
 
 class Player:

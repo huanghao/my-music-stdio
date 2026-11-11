@@ -1,6 +1,7 @@
+from unittest.mock import MagicMock
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import MagicMock
 
 
 @pytest.fixture
@@ -8,7 +9,8 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / "accompaniments").mkdir()
     from importlib import reload
-    import src.prefs as prefs
+
+    from src import prefs
     reload(prefs)
     prefs.save({
         "bars_per_row": 4,

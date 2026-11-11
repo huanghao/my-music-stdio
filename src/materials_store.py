@@ -6,13 +6,13 @@ entirely happens by swapping the implementation below, not by touching the
 routes.
 """
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
 import hashlib
 import json
 import re
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 
 @dataclass
@@ -83,7 +83,7 @@ def _safe_filename(name: str) -> str:
     directory components an attacker could use for path traversal), restrict
     to a safe charset, and prefix a timestamp so repeat uploads never collide."""
     base = re.sub(r"[^\w.\-]", "_", Path(name).name) or "file"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
     return f"{stamp}_{base}"
 
 
@@ -131,7 +131,7 @@ class LocalFlatMaterialsStore(MaterialsStore):
         record = MaterialRecord(
             id=material_id,
             filename=filename or material_id,
-            uploaded_at=datetime.now(timezone.utc).isoformat(),
+            uploaded_at=datetime.now(UTC).isoformat(),
             size=len(content),
             content_hash=hashlib.sha256(content).hexdigest(),
         )

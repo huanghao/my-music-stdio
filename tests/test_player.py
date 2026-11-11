@@ -11,6 +11,7 @@ def player():
     mock_fs.sfload.return_value = 1
     with patch("fluidsynth.Synth", return_value=mock_fs):
         from importlib import reload
+
         import src.player as pm
         reload(pm)
         p = pm.Player(soundfont="/tmp/test.sf3")
@@ -241,6 +242,7 @@ def test_set_output_device_recreates_synth_on_next_play(tmp_path):
     fs2.sfload.return_value = 1
     with patch("fluidsynth.Synth", side_effect=[fs1, fs2]):
         from importlib import reload
+
         import src.player as pm
         reload(pm)
         p = pm.Player(soundfont="/tmp/test.sf3")
@@ -267,6 +269,7 @@ def test_set_output_device_back_to_default(tmp_path):
     fs2.sfload.return_value = 1
     with patch("fluidsynth.Synth", side_effect=[fs1, fs2]):
         from importlib import reload
+
         import src.player as pm
         reload(pm)
         p = pm.Player(soundfont="/tmp/test.sf3")

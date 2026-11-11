@@ -3,31 +3,29 @@ import logging
 import re
 import shutil
 import tempfile
-from functools import wraps
-from threading import RLock
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from functools import wraps
 from pathlib import Path
+from threading import RLock
+from typing import Any
 
 import httpx
 import mido
-from fastapi import Body, FastAPI, HTTPException, UploadFile, File
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from typing import Any, Optional
 
-from src.lick_models import LickBody, LickTrainingUpdate
-
-import src.prefs as prefs
-import src.audio_devices as audio_devices
-from src.styles import get_all_styles
-from src.player import Player
 import src.gen_accompaniment_midi as gen
-from src.agent_api import cancel_agent_runs, router as agent_router
-from src.roulette import router as roulette_router
+from src import audio_devices, prefs, user_state
+from src.agent_api import cancel_agent_runs
+from src.agent_api import router as agent_router
+from src.lick_models import LickBody, LickTrainingUpdate
 from src.materials_store import LocalFlatMaterialsStore
-import src.user_state as user_state
+from src.player import Player
+from src.roulette import router as roulette_router
+from src.styles import get_all_styles
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 class ChordEntry(BaseModel):
     name: str
-    beats: Optional[int] = None
+    beats: int | None = None
 
 
 class BarEntry(BaseModel):
@@ -62,12 +60,12 @@ class AccompanimentBody(BaseModel):
     volume: float = Field(default=1.0, ge=0.0, le=1.0)
     # CoreAudio output device name from the web UI's output-device picker
     # (browser deviceIds don't map to CoreAudio, but labels do); None = system default.
-    output_device: Optional[str] = None
-    id: Optional[str] = None
+    output_device: str | None = None
+    id: str | None = None
     # Play-only: metronome bars before the track starts (Jam sends 1 or 0).
     countin_bars: int = Field(default=0, ge=0, le=16)
     # Play-only: stop after this many seconds of playback (time-based practice).
-    limit_sec: Optional[float] = Field(default=None, gt=0, le=36000)
+    limit_sec: float | None = Field(default=None, gt=0, le=36000)
 
 
 class VolumeBody(BaseModel):
@@ -129,7 +127,7 @@ def _read_accompaniment(accompaniment_id: str) -> dict:
 def _write_accompaniment(accompaniment_id: str, data: dict) -> None:
     d = _accompaniment_path(accompaniment_id)
     d.mkdir(parents=True, exist_ok=True)
-    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["updated_at"] = datetime.now(UTC).isoformat()
     (d / "song.json").write_text(json.dumps(data, ensure_ascii=False, indent=2))
 
 
@@ -158,7 +156,7 @@ def _attachment_filename(name: str) -> str:
     directory components an attacker could use for path traversal), restrict
     to a safe charset, and prefix a timestamp so repeat uploads never collide."""
     base = re.sub(r"[^\w.\-]", "_", Path(name).name) or "file"
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S%f")
+    stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
     return f"{stamp}_{base}"
 
 def _attachments_dir(lick_id: str) -> Path:
@@ -187,7 +185,7 @@ def _locked_lick_write(func):
 def _write_lick(lick_id: str, data: dict) -> None:
     d = _lick_path(lick_id)
     d.mkdir(parents=True, exist_ok=True)
-    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["updated_at"] = datetime.now(UTC).isoformat()
     # Lists/readers must never see a partly written record.
     with tempfile.NamedTemporaryFile(mode="w", dir=d, delete=False, encoding="utf-8") as f:
         temporary = Path(f.name)
@@ -442,7 +440,7 @@ def api_list_all_lick_sessions():
 def api_create_lick(lick: LickBody):
     data = lick.model_dump()
     data["sessions"] = []
-    data["created_at"] = datetime.now(timezone.utc).isoformat()
+    data["created_at"] = datetime.now(UTC).isoformat()
     lick_id = _slugify(data.get("title", "lick"))
     base = lick_id
     i = 1
@@ -493,7 +491,7 @@ def api_delete_lick(lick_id: str):
 def api_add_lick_session(lick_id: str, session: LickSession):
     data = _read_lick(lick_id)
     data.setdefault("sessions", []).append({
-        "date": datetime.now(timezone.utc).isoformat(),
+        "date": datetime.now(UTC).isoformat(),
         "bpm": session.bpm,
         "duration_min": session.duration_min,
     })

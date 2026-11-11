@@ -22,3 +22,16 @@ dependencies = [
 [tool.ruff]
 target-version = "py312"
 line-length = 88
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's parameter markers are meant to be called in defaults.
+extend-immutable-calls = ["fastapi.File", "fastapi.Body", "fastapi.Form", "fastapi.Query"]
+
+[tool.ruff.lint.per-file-ignores]
+# Request / agent / PDF boundaries deliberately turn any failure into an error response instead of crashing.
+"src/agent_api.py" = ["BLE001"]
+"src/agent_client.py" = ["BLE001"]
+"src/pdf_text.py" = ["BLE001"]
+"src/server.py" = ["BLE001"]
+# Standalone demo script, not part of the app.
+"src/synth_wave_demo.py" = ["EXE001", "SIM115"]

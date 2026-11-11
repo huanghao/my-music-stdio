@@ -20,9 +20,9 @@ from pydantic_ai.messages import (
 
 from src.agent_client import (
     _SUMMARY_PREFIX,
+    _generate_accompaniment_tool,
     _StripNativeToolParts,
     _TrackedSummarizingCompaction,
-    _generate_accompaniment_tool,
     emergency_trim_history,
     history_from_dicts,
     is_context_overflow,

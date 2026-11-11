@@ -3,7 +3,8 @@
 def test_load_defaults(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     from importlib import reload
-    import src.prefs as prefs
+
+    from src import prefs
     reload(prefs)
     p = prefs.load()
     assert p["bars_per_row"] == 4
@@ -14,7 +15,8 @@ def test_load_defaults(tmp_path, monkeypatch):
 def test_save_and_reload(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     from importlib import reload
-    import src.prefs as prefs
+
+    from src import prefs
     reload(prefs)
     prefs.save({"bars_per_row": 8, "soundfont_path": "/tmp/test.sf2", "accompaniments_dir": "/tmp/accompaniments"})
     p = prefs.load()
@@ -25,7 +27,8 @@ def test_save_and_reload(tmp_path, monkeypatch):
 def test_partial_update(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     from importlib import reload
-    import src.prefs as prefs
+
+    from src import prefs
     reload(prefs)
     prefs.save({"bars_per_row": 2})
     p = prefs.load()

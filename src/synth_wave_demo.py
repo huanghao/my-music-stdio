@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """Generate simple synth waveform demos as WAV files and a subplot overview."""
 
-from __future__ import print_function
 
 import argparse
 import math
@@ -288,10 +287,10 @@ def main():
     plot_path = args.plot_path or os.path.join(out_dir, "waveforms.png")
     plot_waveforms(outputs, plot_path)
 
-    print("Generated {0} WAV files in {1}".format(len(outputs), out_dir))
+    print(f"Generated {len(outputs)} WAV files in {out_dir}")
     for filename, _ in outputs:
-        print("- {0}".format(os.path.join(out_dir, filename)))
-    print("- {0}".format(plot_path))
+        print(f"- {os.path.join(out_dir, filename)}")
+    print(f"- {plot_path}")
 
 
 if __name__ == "__main__":

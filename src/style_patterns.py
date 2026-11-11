@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 
-
 DRUM_NOTES = {
     "crash": 49,
     "kick": 36,

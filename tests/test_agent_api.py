@@ -6,8 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import src.agent_api as agent_api
-from src import agent_sessions
+from src import agent_api, agent_sessions
 
 
 @pytest.fixture

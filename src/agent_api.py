@@ -3,15 +3,14 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-import src.agent_client as agent_client
-import src.agent_ledger as agent_ledger
-from src import agent_sessions
+from src import agent_client, agent_ledger, agent_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +35,9 @@ class AgentAskRequest(BaseModel):
     """
 
     question: str = Field(min_length=1, max_length=4000)
-    provider: Optional[str] = None
-    model: Optional[str] = None
-    thinking: Optional[str] = None
+    provider: str | None = None
+    model: str | None = None
+    thinking: str | None = None
     history: list[dict] = Field(default_factory=list)
     context: dict = Field(default_factory=dict)
     session_id: str | None = None

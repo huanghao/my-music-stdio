@@ -21,7 +21,8 @@
 
 .lkb-canvas { position: relative; }
 .lkb-blk { position: absolute; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.08); overflow: hidden; }
-.lkb-blk:not(.lift) { transition: left .16s ease-out, top .16s ease-out, width .16s ease-out, height .16s ease-out; }
+/* Blocks glide only while the user is rearranging them. Content-driven re-packing (an image finishing loading, a resize) must snap, or it reads as a slow, janky settle. */
+.lkb.editing .lkb-blk:not(.lift) { transition: left .16s ease-out, top .16s ease-out, width .16s ease-out, height .16s ease-out; }
 .lkb-blk.lift { z-index: 300; box-shadow: 0 10px 28px rgba(0,0,0,.3); opacity: .96; transition: none !important; }
 .lkb.editing .lkb-blk { outline: 1.5px dashed var(--primary); outline-offset: -1px; cursor: grab; user-select: none; }
 .lkb.editing .lkb-blk.lift { cursor: grabbing; }

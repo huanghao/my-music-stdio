@@ -176,10 +176,10 @@ function licksFilterList() {
   let main = '';
   if (groups.length) main += `<section class="lick-list-section my-6"><h3 class="text-base text-fg-dim mb-3 mt-0">课程集</h3>${groups.map(g => {
     const all = lickCatalog.filter(l => l.collection === g.name);
-    return `<details class="lick-collection group border border-solid border-line rounded-lg my-3 bg-card" data-collection="${htmlEsc(g.name)}" ${licksDetailsAttrs('collection:' + g.name, !!(query || status || tag))}>
-      <summary class="cursor-pointer flex gap-3 items-center p-4 list-none"><span aria-hidden="true" class="text-xl text-fg-muted transition-transform group-open:rotate-90">›</span><span class="lick-collection-name flex-1 text-lg font-semibold">${htmlEsc(g.name)}</span><span class="text-fg-muted text-sm font-normal shrink-0">${all.length} 课</span>
+    return `<details class="lick-collection group border-0 border-b border-solid border-line" data-collection="${htmlEsc(g.name)}" ${licksDetailsAttrs('collection:' + g.name, !!(query || status || tag))}>
+      <summary class="cursor-pointer flex gap-3 items-center px-3 py-3 list-none"><span aria-hidden="true" class="text-xl text-fg-muted transition-transform group-open:rotate-90">›</span><span class="lick-collection-name flex-1 text-lg font-semibold">${htmlEsc(g.name)}</span><span class="text-fg-muted text-sm font-normal shrink-0">${all.length} 课</span>
       </summary>
-      <div class="lick-collection-lessons relative px-3 pb-3 max-h-[min(60vh,420px)] overflow-y-auto">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
+      <div class="lick-collection-lessons relative pb-2 max-h-[min(60vh,420px)] overflow-y-auto">${g.lessons.map(licksRowHtml).join('')}</div></details>`;
   }).join('')}</section>`;
   const single = licksSortByLast(items.filter(l => !l.collection));
   let side = '';

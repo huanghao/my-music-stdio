@@ -232,6 +232,9 @@ async def _run_agent_request(
         effective_model = next(
             (m for m in effective_provider.models if m.name == req.model), None
         ) or (effective_provider.models[0] if effective_provider.models else None)
+    # 请求的模型不在目录里（下线/改名/本机没登录）时 agent_client 会改用该 provider 的第一个模型；
+    # 不能悄悄换，必须让用户看到实际用的是哪个。
+    model_substituted = bool(req.model and effective_model and effective_model.name != req.model)
 
     result_meta: dict = {}
     emitted_text = False
@@ -241,6 +244,9 @@ async def _run_agent_request(
     attempt_error: str | None = None
     overflow_trimmed = False  # 上下文超长的紧急裁剪只做一次，避免无限重试
     try:
+        if model_substituted:
+            logger.warning("agent model %r not offered by provider; using %r", req.model, effective_model.name)
+            await run.append({"type": "notice", "text": f"所选模型 {req.model} 已不可用，本次改用 {effective_model.name}。请在模型下拉框重新选择。"})
         while True:
             attempt += 1
             attempt_error = None

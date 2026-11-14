@@ -911,6 +911,10 @@ function agentApplyRunEvent(msg, assistantMsg, session) {
     assistantMsg.thinking = (assistantMsg.thinking || '') + msg.text;
     agentRenderMessages();
     agentFollowThinkingScroll();
+  } else if (msg.type === 'notice') {
+    // 非致命但用户必须知道的事（例如所选模型已下线、本次自动改用了别的模型）：写进回答正文，不只放状态栏。
+    assistantMsg.content += `（注意：${msg.text}）\n\n`;
+    agentRenderMessages();
   } else if (msg.type === 'retry') {
     agentTickBase = `自动重试中 (${msg.attempt}/${msg.max})…`;
     agentSetStatus(`${agentTickBase} ${msg.reason || ''}`.trim());

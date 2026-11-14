@@ -49,6 +49,7 @@ body {
 /* Thin vertical rule between nav button groups */
 .nav-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; flex-shrink: 0; align-self: center; }
 .conn-indicator { display: flex; align-items: center; gap: 5px; }
+.conn-indicator[hidden] { display: none; }
 .conn-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--border-dim); transition: background 0.3s;
@@ -1118,6 +1119,12 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--warn-bg); color: var(--warn); vertical-align: middle;
 }
 .mt-actions { display: flex; gap: 6px; flex-shrink: 0; }
+/* Row actions are quiet until the row is hovered or focused; delete only turns red on hover. */
+.mt-actions { opacity: 0; transition: opacity .12s; }
+.mt-row:hover .mt-actions, .mt-row:focus-within .mt-actions { opacity: 1; }
+.mt-row .btn-ghost.danger { color: var(--text-muted); border-color: var(--border-dim); }
+.mt-row .btn-ghost.danger:hover { color: var(--danger); border-color: var(--danger-border); }
+#materials-prefs .fb-sound-vol-desc { margin-top: 4px; }
 
 /* ── Page structure ─────────────────────────────────────────────────────── */
 
@@ -1153,9 +1160,9 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card);
   border: 1px solid var(--border); border-left: 4px solid transparent; border-radius: 8px;
   padding: 12px 16px; margin-bottom: 8px; cursor: pointer;
-  transition: box-shadow 0.15s;
+  transition: border-color 0.15s;
 }
-.lick-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.lick-card:hover { border-color: var(--border-dim); }
 .lick-card-title {
   font-size: 15px; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1432,7 +1439,6 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); color: var(--chord-ink); font: 600 11px 'IBM Plex Sans'; cursor: pointer;
 }
 #page-songloop .gp-offset-btn:hover { background: var(--chord-card); }
-#page-songloop .gp-offset-btn.gp-offset-accent { border-color: rgba(168,73,47,.35); color: var(--chord-root); }
 #page-songloop .gp-offset-readout { font: 600 11px var(--font-mono); color: rgba(43,38,33,.55); }
 #page-songloop .gp-offset-mini {
   display: flex; align-items: center; gap: 4px;
@@ -1457,7 +1463,6 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); color: var(--chord-ink); font: 600 11px 'IBM Plex Sans'; cursor: pointer;
 }
 #page-songloop .gp-phrase-btn:hover { background: var(--chord-card); }
-#page-songloop .gp-phrase-btn.gp-phrase-accent { border-color: rgba(76,124,76,.32); color: var(--primary); }
 #page-songloop .gp-phrase-readout { font: 600 11px var(--font-mono); color: rgba(43,38,33,.55); }
 
 #page-songloop .gp-toc-panel { position: relative; }
@@ -1492,7 +1497,6 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); color: var(--chord-ink); font: 600 11px 'IBM Plex Sans'; cursor: pointer;
 }
 #page-songloop .gp-sidecar-btn:hover { background: var(--chord-card); }
-#page-songloop .gp-sidecar-btn.gp-sidecar-accent { border-color: rgba(74,124,74,.32); color: var(--primary); }
 #page-songloop .gp-sidecar-hint { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.45); }
 
 #page-songloop .gp-lyric-import-panel {
@@ -1578,7 +1582,6 @@ input[type="number"] { width: 64px; text-align: center; }
   background: var(--bg-card); color: var(--chord-ink); font: 600 11px 'IBM Plex Sans'; cursor: pointer;
 }
 #page-songloop .gp-tap-btn:hover { background: var(--chord-card); }
-#page-songloop .gp-tap-btn.gp-tap-btn-accent { border-color: rgba(168,73,47,.35); color: var(--chord-root); }
 #page-songloop .gp-flex-spacer { flex: 1; }
 #page-songloop .gp-score-hint { font: 400 10px 'IBM Plex Sans'; color: rgba(43,38,33,.4); }
 #page-songloop .gp-chord-diagram-panel { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 4px 0; }

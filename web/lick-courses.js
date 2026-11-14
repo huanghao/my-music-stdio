@@ -48,9 +48,8 @@ function licksRememberDetails(el) {
 
 function licksStalenessClass(lastDate) {
   const accent = licksStalenessAccent(lastDate);
-  if (accent === 'var(--warn)') return 'border-l-warn!';
-  if (accent === 'transparent') return 'border-l-transparent!';
-  return 'border-l-line-muted!';
+  // Only stale licks carry a mark; fresh and in-between are the quiet default.
+  return accent === 'var(--warn)' ? 'border-l-warn!' : 'border-l-transparent!';
 }
 
 function licksSyncPlanVisibility(active) {

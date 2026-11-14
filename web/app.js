@@ -40,6 +40,8 @@ function setConn(ok) {
   if (!dot) return;
   dot.className = 'conn-dot ' + (ok ? 'ok' : 'err');
   lbl.textContent = ok ? 'connected' : 'disconnected';
+  // The normal state stays quiet: the indicator only shows when the server is unreachable.
+  document.getElementById('conn-indicator').hidden = ok;
   if (!ok) setStatus('Server disconnected');
 }
 

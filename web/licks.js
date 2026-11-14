@@ -260,6 +260,8 @@ function licksRewriteLinkSize(notes, idx, sizes) {
 // (see licksRewriteLinkSize — renderers run in document order, so the counts
 // stay in sync).
 let licksMediaEmbedIdx = 0;
+// Audio links that share one label (e.g. several "示范音频") get a running number, so the rows are tellable apart. Reset per render.
+let licksAudioLabelCount = new Map();
 
 if (typeof marked !== 'undefined') {
   // Any link whose href is a video/PDF/audio URL renders as the normal link
@@ -278,7 +280,12 @@ if (typeof marked !== 'undefined') {
         const isAudio = !ytId && !bili && !isPdf && licksIsAudioUrl(href);
         const isVideoFile = !ytId && !bili && !isPdf && !isAudio && licksIsVideoFileUrl(href);
         if (!ytId && !bili && !isPdf && !isAudio && !isVideoFile) return false;
-        const text = this.parser.parseInline(tokens);
+        let text = this.parser.parseInline(tokens);
+        if (isAudio) {
+          const plain = text.replace(/<[^>]*>/g, ''), n = (licksAudioLabelCount.get(plain) || 0) + 1;
+          licksAudioLabelCount.set(plain, n);
+          if (n > 1) text = `${text} ${n}`;
+        }
         const dir = licksParseLinkDirectives(title);
         const hasDirectives = Object.keys(dir).length > 0;
         const titleAttr = title && !hasDirectives ? ` title="${htmlEsc(title)}"` : '';
@@ -677,6 +684,7 @@ function licksPracticeWithSongLoop(btnEl) {
 function licksRenderNotes(notes) {
   if (typeof marked === 'undefined') return `<p>${htmlEsc(notes)}</p>`; // vendor script missing — plain-text fallback
   licksMediaEmbedIdx = 0; // data-ml-idx ordinals are per-render (see its declaration)
+  licksAudioLabelCount = new Map();
   return marked.parse(notes);
 }
 

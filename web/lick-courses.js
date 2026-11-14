@@ -332,6 +332,7 @@ if (typeof document !== 'undefined') {
 // Type switch under the title: 歌曲 / 练习 (the only tags the UI manages).
 function licksTypeSwitchHtml(lick) {
   const cur = (lick.tags || []).find(t => LICK_TYPES.includes(t)) || '';
+  if (!cur) return '';   // untyped is the quiet default; the type is set in the editor
   return `<div class="pl-lookup-tabs m-0!" id="lick-type-switch" role="group" aria-label="类型">${LICK_TYPES.map(t =>
     `<button type="button" class="pl-lookup-tab${cur === t ? ' active' : ''}" aria-pressed="${cur === t}" onclick="licksSetType('${t}')">${t}</button>`).join('')}</div>`;
 }
@@ -355,6 +356,7 @@ function licksRenderCourseEditor(lick) {
   const p = licksDefaultPlan(lick);
   const input = (key, label, value, type = 'text', attrs = '') => `<label class="flex flex-col gap-1.5 min-w-0">${label}<input class="w-full! box-border" id="lick-field-${key}" type="${type}" value="${htmlEsc(String(value ?? ''))}" ${attrs}></label>`;
   document.getElementById('lick-course-editor').innerHTML = `<details ${licksDetailsAttrs('editor:course')} class="lick-editor-course p-4 border border-solid border-line rounded-lg mb-4 text-base"><summary class="cursor-pointer text-fg-dim">课程归属与训练配置</summary><div class="lick-fields-grid grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-4 my-4">
+    <label class="flex flex-col gap-1.5 min-w-0">类型<select class="w-full! box-border" id="lick-field-type"><option value="">未分类</option>${LICK_TYPES.map(t => `<option value="${t}"${(lick.tags || []).includes(t) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
     ${input('collection', '课程集（留空为独立练习）', lick.collection, 'text', 'list="lick-collections"')}
     <datalist id="lick-collections">${[...new Set(lickCatalog.map(l => l.collection).filter(Boolean))].map(c => `<option value="${htmlEsc(c)}">`).join('')}</datalist>
     ${input('course_order', '课程序号', lick.course_order, 'number', 'min="1" max="9999"')}
@@ -380,7 +382,9 @@ function licksReadCourseEditor(lick) {
   };
   const plan = { ...licksDefaultPlan(lick), start_bpm: number('start_bpm', 20, 300), step_bpm: number('step_bpm', 1, 100),
     loop_bars: number('loop_bars', 1, 128), rounds_per_step: number('rounds_per_step', 1, 32) };
-  return { collection: value('collection'), course_order: number('course_order', 1, 9999, true),
+  const type = value('type');
+  return { tags: [...(lick.tags || []).filter(t => !LICK_TYPES.includes(t)), ...(type ? [type] : [])],
+    collection: value('collection'), course_order: number('course_order', 1, 9999, true),
     practice_plan: plan,
     score_images: value('score_images').split('\n').map(s => s.trim()).filter(Boolean),
     source_url: value('source_url'), demo_url: value('demo_url'), pdf_url: value('pdf_url'),

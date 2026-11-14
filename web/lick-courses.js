@@ -119,7 +119,7 @@ function licksRowHtml(l) {
   const progress = bpm != null ? `${bpm}${l.target_bpm ? ` / ${l.target_bpm}` : ''} BPM` : '尚未开始';
   // ids may be non-Latin slugs. Encode before placing them in an event handler.
   const id = encodeURIComponent(l.id).replace(/'/g, '%27');
-  return `<button type="button" class="lick-card lick-course-row ${licksStalenessClass(l.last_date)} w-full text-left text-fg ${just ? 'bg-primary-bg! lick-just' : 'bg-card!'} font-normal max-sm:items-start! max-sm:gap-2!" data-lick-id="${htmlEsc(l.id)}"
+  return `<button type="button" class="lick-card lick-course-row ${licksStalenessClass(l.last_date)} w-full text-left text-fg ${just ? 'bg-primary-bg! lick-just' : 'bg-transparent!'} font-normal max-sm:items-start! max-sm:gap-2!" data-lick-id="${htmlEsc(l.id)}"
       onclick="licksOpenCourseLick(decodeURIComponent('${id}'))" >
     <span class="lick-row-name flex items-center gap-3 min-w-0">${l.course_order ? `<span class="lick-order text-sm text-fg-muted tabular-nums">${String(l.course_order).padStart(2, '0')}</span>` : ''}
       <span>${htmlEsc(l.title)}</span></span>

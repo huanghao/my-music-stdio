@@ -1035,7 +1035,7 @@ function renderLickDetail(lick) {
   const liveBpm = lick.last_practiced_bpm != null ? lick.last_practiced_bpm : lastLoggedBpm;
   const unlogged = lick.last_practiced_bpm != null && lick.last_practiced_bpm !== lastLoggedBpm;
   const goalTxt = lick.target_bpm ? `目标 ${lick.target_bpm} BPM` : '未设目标';
-  const targetLine = `<span class="lick-target" id="lick-detail-target" title="${liveBpm != null ? `上次练习 ${liveBpm} BPM${unlogged ? '（尚未记为 session）' : ''} · ` : ''}个人${goalTxt}">${liveBpm != null ? `${liveBpm} → ` : ''}${goalTxt}${unlogged ? ' <span class="text-primary">●</span>' : ''}</span>`;
+  const targetLine = `<span class="lick-target" id="lick-detail-target" title="${liveBpm != null ? `上次练习 ${liveBpm} BPM${unlogged ? '（尚未记为 session）' : ''} · ` : ''}个人${goalTxt}">${liveBpm != null && liveBpm !== lick.target_bpm ? `${liveBpm} → ` : ''}${goalTxt}${unlogged ? ' <span class="text-primary">●</span>' : ''}</span>`;
   // Live progress: the tempo auto-saved while practicing (see
   // licksNotifyBpmChange) can be ahead of the last formally logged session —
   // surface that explicitly so "did my 95 BPM actually get saved?" has a
@@ -1226,12 +1226,12 @@ function licksEditorSetMode(mode) {
 // the cursor, leaving only the URL and the numbers to fill in.
 const LICKS_EDITOR_SNIPPETS = [
   { label: '图片', code: '![说明](图片链接)', snippet: '![说明](图片链接)\n' },
-  { label: '视频 — YouTube/Bilibili 自动预览', code: '[说明](视频链接)', snippet: '[说明](视频链接)\n' },
-  { label: '视频改宽度（px）', code: '[说明](链接 "w=300")', snippet: '[说明](视频链接 "w=300")\n' },
-  { label: 'PDF 翻到第 N 页', code: '[谱例](链接 "page=2")', snippet: '[谱例](PDF链接 "page=2")\n' },
-  { label: 'PDF 页内位置（仅 Chrome）', code: '"page=2,y=0.4"', snippet: '[谱例](PDF链接 "page=2,y=0.4")\n' },
-  { label: 'PDF 预览框宽×高（px，默认 640×600）', code: '"page=2,w=900,h=700"', snippet: '[谱例](PDF链接 "page=2,w=900,h=700")\n' },
-  { label: '音频 → 内嵌播放器（+ Song Loop 入口）', code: '[伴奏](音频链接)', snippet: '[伴奏](音频链接)\n' },
+  { label: '视频', code: '[说明](视频链接)', snippet: '[说明](视频链接)\n' },
+  { label: '视频宽度', code: '[说明](链接 "w=300")', snippet: '[说明](视频链接 "w=300")\n' },
+  { label: 'PDF 页码', code: '[谱例](链接 "page=2")', snippet: '[谱例](PDF链接 "page=2")\n' },
+  { label: 'PDF 页内位置', code: '"page=2,y=0.4"', snippet: '[谱例](PDF链接 "page=2,y=0.4")\n' },
+  { label: 'PDF 预览尺寸', code: '"page=2,w=900,h=700"', snippet: '[谱例](PDF链接 "page=2,w=900,h=700")\n' },
+  { label: '音频', code: '[伴奏](音频链接)', snippet: '[伴奏](音频链接)\n' },
 ];
 
 function licksRenderCheatsheet() {
@@ -1241,9 +1241,7 @@ function licksRenderCheatsheet() {
     LICKS_EDITOR_SNIPPETS.map((s, i) => `
       <button type="button" class="lick-snippet-btn" data-snippet-idx="${i}">
         <span class="lick-snippet-label">${htmlEsc(s.label)}</span>
-        <code>${htmlEsc(s.code)}</code>
-      </button>`).join('') +
-    '<div class="lick-editor-cheatsheet-foot">📷/📎 按钮插入的链接已带好语法，只需改数字<br>详情页拖视频/PDF 右下角调整大小，会自动写回 w=/h=</div>';
+      </button>`).join('');
   el.addEventListener('click', e => {
     const btn = e.target.closest('.lick-snippet-btn');
     if (btn) licksInsertAtNotesCursor(LICKS_EDITOR_SNIPPETS[+btn.dataset.snippetIdx].snippet);

@@ -1163,6 +1163,7 @@ input[type="number"] { width: 64px; text-align: center; }
   transition: border-color 0.15s;
 }
 .lick-card:hover { background-color: var(--bg-subtle) !important; }
+.lick-card:last-child { border-bottom: 0; }
 .lick-card-title {
   font-size: 15px; font-weight: 600; color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

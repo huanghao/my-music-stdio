@@ -239,7 +239,7 @@ function impRenderCards(pos) {
   const nowEl = document.getElementById('imp-now'), nextEl = document.getElementById('imp-next');
   if (!nowEl || !nextEl) return;
   if (!imp.running) {
-    nowEl.innerHTML = '<p class="text-fg-muted m-0">点“▶ 开始”：先 2 小节预备拍，然后按“密度”出句，留白的格子你自己接。下一句会提前出现在右边。</p>';
+    nowEl.innerHTML = '';
     nextEl.innerHTML = '';
     return;
   }

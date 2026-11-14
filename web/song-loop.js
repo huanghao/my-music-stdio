@@ -981,12 +981,11 @@ function updateLyricNeteaseLink() {
 function updatePitchLabel() { els.pitchLabel.textContent = slPitchLabelFor(slState.pitch); }
 function updateKeyTag() {
   els.keySelect.classList.remove('invalid');
-  els.keyTag.textContent = slState.keyManual ? '手动指定' : '默认';
+  els.keyTag.textContent = slState.keyManual ? '手动指定' : '';
 }
-function updateBpmTag() { els.bpmTag.textContent = slState.bpmManual ? '已手动校准' : '默认'; }
+function updateBpmTag() { els.bpmTag.textContent = slState.bpmManual ? '已手动校准' : ''; }
 function updateLoopPanelStyle() {
   els.loopPanel.classList.toggle('gp-loop-on', slState.loopOn);
-  els.loopHint.textContent = slState.loopOn ? '在区间内不断循环，直到关闭' : '关闭时正常播放全曲';
 }
 
 function updateTimeReadout() {
@@ -2277,7 +2276,7 @@ function initSongLoopPage() {
     barTickStepInput: $('sl-bar-tick-step'),
     pitchDownBtn: $('sl-pitch-down'), pitchUpBtn: $('sl-pitch-up'), pitchLabel: $('sl-pitch-label'),
     loopPanel: $('sl-loop-panel'), loopToggle: $('sl-loop-toggle'),
-    loopFromInput: $('sl-loop-from'), loopToInput: $('sl-loop-to'), loopHint: $('sl-loop-hint'),
+    loopFromInput: $('sl-loop-from'), loopToInput: $('sl-loop-to'), 
     offsetPanel: $('sl-offset-panel'), offsetMinusBar: $('sl-offset-minus-bar'),
     offsetMinusBeat: $('sl-offset-minus-beat'), offsetSetHere: $('sl-offset-set-here'),
     offsetPlusBeat: $('sl-offset-plus-beat'), offsetPlusBar: $('sl-offset-plus-bar'),
@@ -2521,7 +2520,7 @@ function initSongLoopPage() {
   applySpeed();
   slApplyPlaybackVolume();
   updateOffsetReadout();
-  updateSidecarHint('保存段落 / 歌词 / 简谱 / 偏移到同目录的 .songloop.json');
+  updateSidecarHint('');
   requestAnimationFrame(tick);
 }
 

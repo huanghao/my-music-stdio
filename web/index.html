@@ -161,8 +161,7 @@
 
 <!-- IMPROV ROULETTE (improv.js) -->
 <div class="page" id="page-improv">
-  <div class="page-header"><h2 class="page-title">Improv</h2>
-    <span class="lick-list-summary mb-0!">E 调 12 小节布鲁斯 · 每 2 小节随机一句，下一句提前显示</span></div>
+  <div class="page-header"><h2 class="page-title">Improv</h2></div>
   <div id="imp-root" class="max-w-[1280px]"></div>
 </div>
 
@@ -596,7 +595,6 @@
         选择文件
       </label>
       <button type="button" class="gp-tap-btn" id="sl-browse-library-btn">从资料库选择</button>
-      <span class="gp-sidecar-hint" id="sl-dropzone-text">或把文件拖到这一行（mp3 / m4a / wav）——会自动加入素材库，以便记住你的设置</span>
     </div>
 
     <!-- toolbar -->
@@ -606,7 +604,7 @@
       <div class="gp-sep"></div>
 
       <div class="gp-ctl-group">
-        <div class="gp-ctl-row">
+        <div class="gp-ctl-row" title="音高不变">
           <span class="gp-ctl-lbl">速度</span>
           <input type="range" id="sl-speed-slider" min="50" max="150" step="1" value="100" class="gp-slider">
           <input type="number" id="sl-speed-num" min="50" max="150" value="100" class="gp-num-sm">
@@ -615,43 +613,39 @@
           <input type="number" id="sl-speed-bpm" min="1" max="600" class="gp-num-sm" title="按目标 BPM 直接设定速度">
           <span class="gp-pct">BPM</span>
         </div>
-        <div class="gp-ctl-sub">音高不变</div>
       </div>
 
       <div class="gp-sep"></div>
 
       <div class="gp-ctl-group">
-        <div class="gp-ctl-row">
+        <div class="gp-ctl-row" title="小节网格的横向缩放">
           <span class="gp-ctl-lbl">缩放</span>
           <input type="range" id="sl-zoom-slider" min="40" max="280" step="10" value="140" class="gp-slider">
           <input type="number" id="sl-zoom-num" min="40" max="280" value="140" class="gp-num-sm">
           <button class="gp-tap-btn" id="sl-zoom-fit" title="缩放到能看到整曲">适应整曲</button>
         </div>
-        <div class="gp-ctl-sub">小节网格的横向缩放</div>
       </div>
 
       <div class="gp-sep"></div>
 
       <div class="gp-ctl-group">
-        <div class="gp-ctl-row">
+        <div class="gp-ctl-row" title="波形图上小节号刻度的间隔（默认 4，对应多数歌曲的 4 小节一句）">
           <span class="gp-ctl-lbl">小节标记</span>
           <span class="gp-ctl-lbl">每</span>
           <input type="number" id="sl-bar-tick-step" min="1" max="64" value="4" class="gp-num-sm">
           <span class="gp-ctl-lbl">小节</span>
         </div>
-        <div class="gp-ctl-sub">波形图上小节号刻度的间隔（默认 4，对应多数歌曲的 4 小节一句）</div>
       </div>
 
       <div class="gp-sep"></div>
 
       <div class="gp-ctl-group">
-        <div class="gp-ctl-row">
+        <div class="gp-ctl-row" title="每次 1 个半音（暂不影响实际音高，仅作标记）">
           <span class="gp-ctl-lbl">移调</span>
           <button class="gp-step-btn" id="sl-pitch-down">&minus;</button>
           <span class="gp-pitch-label" id="sl-pitch-label">原调（不移调）</span>
           <button class="gp-step-btn" id="sl-pitch-up">+</button>
         </div>
-        <div class="gp-ctl-sub">每次 1 个半音（暂不影响实际音高，仅作标记）</div>
       </div>
 
       <div class="gp-sep"></div>
@@ -669,7 +663,6 @@
           <span class="gp-ctl-lbl">小节</span>
         </div>
       </div>
-      <div class="gp-loop-hint" id="sl-loop-hint">关闭时正常播放全曲</div>
 
       <div class="gp-offset-panel" id="sl-offset-panel">
         <span class="gp-ctl-lbl">偏移</span>
@@ -719,7 +712,7 @@
         <span class="gp-ctl-lbl">Sidecar</span>
         <button class="gp-sidecar-btn gp-sidecar-accent" id="sl-sidecar-save">保存 sidecar</button>
         <button class="gp-sidecar-btn" id="sl-sidecar-load">载入 sidecar</button>
-        <span class="gp-sidecar-hint" id="sl-sidecar-hint">保存段落 / 歌词 / 简谱 / 偏移到单独的 .json 文件</span>
+        <span class="gp-sidecar-hint" id="sl-sidecar-hint"></span>
       </div>
 
       <div class="gp-lyric-import-panel" id="sl-lyric-import-panel">
@@ -727,13 +720,13 @@
         <input type="text" id="sl-lyric-song-id" class="gp-num-sm w-[9ch]!" placeholder="歌曲ID" inputmode="numeric">
         <button class="gp-sidecar-btn" id="sl-lyric-import-btn">拉取并导入</button>
         <a href="#" target="_blank" rel="noopener" id="sl-lyric-netease-link" class="gp-sidecar-btn hidden">在网易云打开 ↗</a>
-        <span class="gp-sidecar-hint" id="sl-lyric-import-hint">歌曲ID 是网易云网页/APP 分享链接里 id= 后面那串数字 · 按时间戳分配到最近的小节，会覆盖已有歌词</span>
+        <span class="gp-sidecar-hint" id="sl-lyric-import-hint"></span>
       </div>
     </div>
 
     <!-- waveform -->
     <div class="gp-wave" id="sl-wave">
-      <div class="gp-wave-meta" id="sl-wave-meta">加载音频后显示文件信息</div>
+      <div class="gp-wave-meta" id="sl-wave-meta"></div>
       <div class="gp-wave-loop hidden" id="sl-wave-loop"></div>
       <div class="gp-wave-viewport hidden" id="sl-wave-viewport"></div>
       <div class="gp-wave-bars" id="sl-wave-bars"></div>
@@ -759,7 +752,6 @@
       </div>
       <button class="gp-tap-btn" id="sl-tap-btn">打拍子校准</button>
       <div class="gp-flex-spacer"></div>
-      <div class="gp-score-hint">点击可改调 / BPM 手动输入</div>
     </div>
 
     <div class="gp-chord-diagram-panel" id="sl-chord-diagram-panel">
